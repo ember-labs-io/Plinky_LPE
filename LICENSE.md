@@ -1,5 +1,7 @@
 LICENSE
 ==
+*this license was written by mmalex and copied verbatim from [the official firmware repo](https://github.com/plinkysynth/plinky_public)*
+
 Logos & Design
 ---
 The plinky logo and the design of the front panel design and all other graphic elements (both in code and in the documentation and hardware design) are CC BY-SA 4.0. Full text available at https://creativecommons.org/licenses/by-sa/4.0/
@@ -25,3 +27,19 @@ My main concern is that the small plinky community, who are focused on discussio
 
 I would encourage you to follow similar guidelines to those outlined by [Mutable Instruments](https://github.com/pichenettes/eurorack), including the recommendation to not use the plinky name in derived products. Thankyou!
 
+======
+
+Contributing stuff
+--
+
+We welcome and encourage contributions to our open-source project. By submitting a pull request, you agree that your contribution will be licensed under the following licenses:
+
+- **Software:** Portions of the project are licensed under the **MIT License**. By contributing code, you agree that your code will be subject to this license.
+
+- **Hardware:** Portions of the project are licensed under the **CERN Open Hardware License - Permissive Version 2** (CERN-OHL-P v2). By contributing hardware designs or related documentation, you agree that your contribution will be subject to this license.
+
+- **Graphic Elements:** Portions of the project involve graphic design elements and are licensed under the **Creative Commons Attribution-ShareAlike 4.0 International License** (CC BY-SA 4.0). By contributing graphic assets or related materials, you agree that your contribution will be subject to this license.
+
+Please ensure that your contributions comply with these licenses and that you have the necessary rights to license your contributions under these terms. If you have any questions or concerns regarding the licensing of your contributions, please reach out to us for clarification.
+
+By submitting a pull request, you acknowledge and accept that your contribution will be publicly available under these licenses, allowing others to use, modify, and distribute your contributions in accordance with the terms outlined above.

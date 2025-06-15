@@ -116,7 +116,7 @@ static void draw_scope(void) {
 
 // == MAIN == //
 
-static char __attribute__((section(".endsection"))) version_tail[] = VERSION2;
+static char __attribute__((section(".endsection"))) version_tail[] = FIRMWARE_VERSION;
 
 static void draw_startup_visuals(void) {
 	static u8 frame = 3;
@@ -127,7 +127,7 @@ static void draw_startup_visuals(void) {
 	// draw version number
 	gfx_text_color = 3;
 	u8 y = maxi(frame - 255 + 32, 20);
-	fdraw_str(32, y, F_12, VERSION2, version_tail);
+	fdraw_str(47, y, F_12, latch_on() ? "v" FIRMWARE_VERSION : "LPE v" FIRMWARE_VERSION, version_tail);
 	frame += 4;
 	// draw plinky plus
 	if (hw_version == HW_PLINKY_PLUS)
