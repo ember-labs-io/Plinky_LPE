@@ -239,81 +239,95 @@ void seq_tick(void) {
 	}
 }
 
+static void rec_substep(PatternStringStep* string_step, u8 substep, u8 seq_pres, u8 seq_pos) {
+	if (substep < 8) {
+		string_step->pres[substep] = seq_pres;
+		if ((substep & 1) == 0 || string_step->pos[substep / 2] == 0)
+			string_step->pos[substep / 2] = seq_pos;
+	}
+	// recording into the end of the step => move all substeps backwards before writing
+	else {
+		// pressure
+		for (u8 i = 0; i < 7; i++)
+			string_step->pres[i] = string_step->pres[i + 1];
+		string_step->pres[7] = seq_pres;
+		// position
+		if (substep == 9) {
+			for (u8 i = 0; i < 3; i++)
+				string_step->pos[i] = string_step->pos[i + 1];
+			string_step->pos[3] = seq_pos;
+		}
+	}
+	log_ram_edit(SEG_PAT0 + CUR_QUARTER);
+}
+
 // try recording string touch to sequencer
 void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_increasing) {
-	static u8 last_edited_substep_global = 255;
-	static u8 record_to_substep;
-	static u8 last_edited_step[8] = {255, 255, 255, 255, 255, 255, 255, 255};
+	static u8 last_seen_step = 255;
+	static u8 last_seen_substep = 255;
+	static u8 string_recording = 0;           // are we recording on string? bitmask
+	static u8 substep_recorded = 0;           // has string recorded this substep? bitmask
+	static u8 record_to_substep[NUM_STRINGS]; // remembers for each string where they were writing
 
-	// not recording
-	if (!seq_flags.recording || pattern_outdated()) {
-		// clear this for next recording and exit
-		last_edited_step_global = 255;
+	// not recording => exit
+	if (!seq_flags.recording || pattern_outdated())
 		return;
+
+	PatternStringStep* string_step = string_step_ptr(string_id, false);
+	u8 mask = 1 << string_id;
+	u8 substep = seq_substep(8);
+
+	// step record mode
+	if (!seq_flags.playing) {
+		// new step => no string has recorded yet
+		if (cur_seq_step != last_seen_step) {
+			last_seen_step = cur_seq_step;
+			string_recording = 0;
+		}
+		// new substep => increase substep counter and reset recording flags
+		if (substep != last_seen_substep) {
+			last_seen_substep = substep;
+			for (u8 s_id = 0; s_id < NUM_STRINGS; s_id++)
+				if (string_recording & (1 << s_id)) {
+					if (record_to_substep[s_id] < 8)
+						record_to_substep[s_id]++;
+					else
+						record_to_substep[s_id] = 9 - (record_to_substep[s_id] & 1); // toggle between 8 and 9
+				}
+			substep_recorded = 0;
+		}
+	}
+	else {
+		last_seen_step = 255;
+		last_seen_substep = 255;
 	}
 
-	// holding clear sets the pressure to zero, which will effectively clear the sequencer at this point
+	// holding clear sets the pressure to zero, which effectively clears the sequencer at this point
 	u8 seq_pres = shift_state == SS_CLEAR ? 0 : pres_compress(pressure);
 	u8 seq_pos = shift_state == SS_CLEAR ? 0 : pos_compress(position);
 
-	PatternStringStep* string_step = string_step_ptr(string_id, false);
-	bool data_saved = false;
-	u8 substep = seq_substep(8);
-
-	// holding a note or clearing during playback
+	// are we touching something to record?
 	if ((seq_pres > 0 && pres_increasing) || shift_state == SS_CLEAR) {
-		// live recording
-		if (seq_flags.playing) {
-			record_to_substep = substep;
-		}
+		// live recording => just record over whatever substep we are currently on
+		if (seq_flags.playing)
+			rec_substep(string_step, substep, seq_pres, seq_pos);
 		// step recording
 		else {
-			// editing a new step, and waited for substep to reset to zero
-			if (cur_seq_step != last_edited_step_global && substep == 0) {
-				// we have not edited any substep
-				last_edited_substep_global = 255;
-				// we have not edited this step for any finger
-				memset(last_edited_step, 255, sizeof(last_edited_step));
-				// start at substep 0
-				record_to_substep = 0;
-				// this skips the first increment of record_to_substep, right below
-				last_edited_substep_global = 0;
-				// we're now editing the current step
-				last_edited_step_global = cur_seq_step;
-			}
-			// editing a new substep
-			if (substep != last_edited_substep_global) {
-				// move one substep forward
-				record_to_substep++;
-				// are we at the end of the step?
-				if (record_to_substep >= 8) {
-					// push all data one substep backward
-					for (u8 i = 0; i < 7; i++) {
-						string_step->pres[i] = string_step->pres[i + 1];
-						if (record_to_substep == 8 && (i & 1) == 0)
-							string_step->pos[i / 2] = string_step->pos[i / 2 + 1];
-					}
-					if (record_to_substep == 9)
-						record_to_substep -= 2;
-				}
-				last_edited_substep_global = substep;
-			}
-			// first finger edit on this step
-			if (cur_seq_step != last_edited_step[string_id]) {
-				// clear the step for this finger
+			// we weren't recording yet => clear step and write first substep
+			if ((string_recording & mask) == 0) {
 				memset(string_step->pres, 0, sizeof(string_step->pres));
 				memset(string_step->pos, 0, sizeof(string_step->pos));
-				// we're now editing this step with this finger
-				last_edited_step[string_id] = cur_seq_step;
+				string_recording |= mask;
+				record_to_substep[string_id] = 0;
+				rec_substep(string_step, 0, seq_pres, seq_pos);
+			}
+			// we are recording and we havent written this substep yet => record
+			else if ((substep_recorded & mask) == 0) {
+				rec_substep(string_step, record_to_substep[string_id], seq_pres, seq_pos);
+				substep_recorded |= mask;
 			}
 		}
-		// record!
-		string_step->pres[mini(record_to_substep, 7)] = seq_pres;
-		string_step->pos[mini(record_to_substep, 7) / 2] = seq_pos;
-		data_saved = true;
 	}
-	if (data_saved)
-		log_ram_edit(SEG_PAT0 + CUR_QUARTER);
 }
 
 // try receiving touch data from sequencer
