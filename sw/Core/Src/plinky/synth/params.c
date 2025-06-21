@@ -594,7 +594,8 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 			break;
 		case P_TEMPO:
 			v += PARAM_SIZE;
-			if (!using_internal_clock)
+			// when listening to external clocks, we manually calculate the bpm_10x value as the pulses come in
+			if (clock_type != CLK_INTERNAL)
 				v = (bpm_10x * PARAM_SIZE) / 1200;
 			displaymax = 1200;
 			break;

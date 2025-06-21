@@ -1,49 +1,51 @@
 #include "time.h"
-#include "arp.h"
+#include "hardware/cv.h"
+#include "hardware/midi_defs.h"
 #include "params.h"
 #include "sequencer.h"
-
-// cleanup
-#include "hardware/adc_dac.h"
-#include "hardware/cv.h"
-// -- cleanup
-
-typedef enum ExtTrig { EXT_NONE, EXT_MIDI, EXT_CV } ExtTrig;
+#include "ui/oled_viz.h"
 
 #define MAX_BPM_10X 2400
 #define MIN_BPM_10X 300
 
-#define SYNTH_SAMPLE_RATE 32000
-#define AUDIO_SAMPLE_RATE 31250
-// largest amount of ticks between two valid 4ppqn pulses
-#define MAX_CLOCK_GAP_TICKS ((600 * SYNTH_SAMPLE_RATE) / (MIN_BPM_10X * SAMPLES_PER_TICK))
+#define SAMPLE_RATE 31250
+#define SYNC_DIVS_LCM 3840 // Least common multiple of all possible sync divisions
 
+// amount of ticks for one pulse at the lowest allowable bpm
+#define MAX_CLOCK_GAP_TICKS(ppqn) ((600 * SAMPLE_RATE) / (ppqn * MIN_BPM_10X * SAMPLES_PER_TICK))
+#define CUR_PULSE_COUNT(ppqn) ((ppqn * clock_32nds_q21) >> 24)
+
+ClockType clock_type = CLK_INTERNAL;
 u32 synth_tick = 0;     // global synth_tick counter
 u16 bpm_10x = 120 * 10; // bpm with one decimal precision
-bool using_internal_clock = true;
 
-// 32nds timing for arp & sequencer
+bool pulse_32nd = false; // true if this tick is the start of a new 32nd note
+u16 counter_32nds = 0;   // counts 32nd notes, rolls over at SYNC_DIVS_LCM
 
-#define SYNC_DIVS_LCM 3840 // Least common multiple of all possible sync divisions
-bool pulse_32nd = false;   // True if this tick is the start of a new 32nd note
-u16 counter_32nds = 0;     // Counts 32nd notes, rolls over at SYNC_DIVS_LCM
+// global
+static u32 clock_32nds_q21 = 0;
+static ValueSmoother bpm_smoother;
+static bool reset_clock_next_tick = false;
 
-volatile static ExtTrig ext_trig = EXT_NONE;
-static u32 clock_16ths_q21 = 0; // accumulator clock, counts up to 1/16th in Q21
-static u32 ticks_since_16th = 0;
-static u8 midi_clock = 0;
-static bool resync_next_tick = false;
+// midi clock
+static bool midi_pulse = false;
+static u8 midi_pulse_counter = 0;
+static u8 midi_ppqn = 24;
+static u32 ticks_since_midi_pulse = 0;
+static u32 last_midi_pulse_ticks = 0;
+static bool start_seq_from_midi_start = false;
+static bool start_seq_from_midi_continue = false;
+
+// cv clock
+static volatile u8 cv_pulse = 0;
+static u8 cv_pulse_counter = 0;
+static u8 cv_ppqn = 4;
+static u32 ticks_since_cv_pulse = 0;
+static u32 last_cv_pulse_ticks = 0;
+static bool cv_pulse_handled = false;
 
 void trigger_cv_clock(void) {
-	ext_trig = EXT_CV;
-}
-
-void trigger_midi_clock(void) {
-	midi_clock++;
-	if (midi_clock == 6) {
-		ext_trig = EXT_MIDI;
-		midi_clock = 0;
-	}
+	cv_pulse++;
 }
 
 void trigger_tap_tempo(void) {
@@ -51,7 +53,7 @@ void trigger_tap_tempo(void) {
 	static u32 tap_start_tick;
 	static u32 tap_latest_tick;
 	// reset count when the gap is too large
-	if (synth_tick - tap_latest_tick > MAX_CLOCK_GAP_TICKS)
+	if (synth_tick - tap_latest_tick > MAX_CLOCK_GAP_TICKS(1))
 		tap_count = 0;
 	// save the initial tap time
 	if (!tap_count)
@@ -61,92 +63,222 @@ void trigger_tap_tempo(void) {
 	// process taps
 	tap_count++;
 	if (tap_count > 1) {
-		float tap_per_min =
-		    (SYNTH_SAMPLE_RATE * (tap_count - 1) * 60.f) / ((synth_tick - tap_start_tick) * SAMPLES_PER_TICK);
+		float tap_per_min = (SAMPLE_RATE * (tap_count - 1) * 60.f) / ((synth_tick - tap_start_tick) * SAMPLES_PER_TICK);
 		bpm_10x = clampi((int)(tap_per_min * 10.f + 0.5f), MIN_BPM_10X, MAX_BPM_10X);
 		// save result to parameter
 		save_param_raw(P_TEMPO, SRC_BASE, ((bpm_10x - 1200) * PARAM_SIZE) / 1200);
 	}
 }
 
-void cue_clock_resync(void) {
-	resync_next_tick = true;
+static void calc_bmp_from_ext(u32 last_pulse_duration, u32 cur_pulse_duration, u8 ppqn) {
+	smooth_value(&bpm_smoother, (75.f * SAMPLE_RATE) / ((((last_pulse_duration + cur_pulse_duration) * ppqn) << 3)),
+	             MIN_BPM_10X);
+	bpm_10x = (u16)(bpm_smoother.y2 + 0.5f);
 }
 
-void clock_resync(void) {
-	midi_clock = 0;
-	clock_16ths_q21 = 0;
-	ticks_since_16th = 0;
+static void set_clock_type(ClockType new_type) {
+	if (new_type == clock_type)
+		return;
+	switch (new_type) {
+	case CLK_INTERNAL:
+		flash_message(F_16_BOLD, "Internal", "Clock");
+		seq_stop();
+		break;
+	case CLK_MIDI:
+		flash_message(F_20_BOLD, "Midi in", "Clock");
+		midi_pulse_counter = CUR_PULSE_COUNT(midi_ppqn); // sync up with the running clock
+		break;
+	case CLK_CV:
+		flash_message(F_20_BOLD, "CV in", "Clock");
+		// not playing => cv clock start restarts the sequencer
+		if (!seq_playing()) {
+			seq_play_from_start();
+			clock_type = CLK_CV;
+			reset_clock_next_tick = true;
+		}
+		// playing => sync up with the running clock
+		else
+			cv_pulse_counter = CUR_PULSE_COUNT(cv_ppqn);
+		break;
+	}
+	// going from internal to external => set the displayed bpm value
+	if (clock_type == CLK_INTERNAL)
+		set_smoother(&bpm_smoother, bpm_10x);
+	clock_type = new_type;
+}
+
+static void cleanup_clock_flags(void) {
+	if (cv_pulse_handled)
+		cv_pulse--;
+	cv_pulse_handled = false;
+	midi_pulse = false;
+}
+
+void cue_clock_reset(void) {
+	reset_clock_next_tick = true;
+}
+
+void clock_reset(void) {
+	cleanup_clock_flags();
+	cv_pulse_counter = 0;
+	midi_pulse_counter = 0;
+	clock_32nds_q21 = 0;
 	counter_32nds = 0;
-	pulse_32nd = true;
-	send_cv_clock(true);
+	pulse_32nd = true; // this is the start of a 32nd
+	if (seq_playing())
+		send_cv_clock(true); // this is the start of a 16th (4 ppqn)
+	reset_clock_next_tick = false;
 }
 
 void clock_tick(void) {
-	static u32 last_16th_ticks = 0;
-	bool pulse_16th = false;
+	// Clock priority strategy:
+	//
+	// 1. CV clock
+	// 2. Midi clock
+	// 3. Internal clock
+	//
+	// Clock automatically switches to higher priority source when a pulse comes in
+	// Clock automatically switches one priority down when pulses stop coming in
+	// Clock waits for the equivalent of one pulse in MIN_BPM_10X before reverting to a lower priority clock
+	//
+	// When clock switches from cv to midi, the sequencer is not stopped (tempos might be identical)
+	// When clock switches from midi to internal, the sequencer is stopped (tempos are most likely not identical)
+	// When clock falls thru from cv to internal, it technically goes: cv => midi => (sequencer stopped) => internal
 
 	// increase ticks
 	synth_tick++;
-	ticks_since_16th++;
+	ticks_since_cv_pulse++;
+	ticks_since_midi_pulse++;
 
-	// external clock
-	if (ext_trig) {
-		// new cv clock triggers sequencer start
-		if (using_internal_clock && ext_trig == EXT_CV)
-			seq_play_from_start();
-		pulse_16th = true;
-		using_internal_clock = false;
-		ext_trig = EXT_NONE;
+	if (cv_pulse) {
+		// track pulses
+		last_cv_pulse_ticks = ticks_since_cv_pulse;
+		ticks_since_cv_pulse = 0;
+		cv_pulse_counter++;
+		cv_pulse_handled = true;
+		// check clock priority
+		if (clock_type != CLK_CV)
+			set_clock_type(CLK_CV);
 	}
 
-	// revert to internal clock on absence of external clock signal
-	if (!using_internal_clock && ticks_since_16th >= MAX_CLOCK_GAP_TICKS) {
-		using_internal_clock = true;
-		// also stop sequencer
-		seq_stop();
-	}
+	// cv clock timeout
+	if (clock_type == CLK_CV && ticks_since_cv_pulse > MAX_CLOCK_GAP_TICKS(cv_ppqn))
+		set_clock_type(CLK_MIDI);
 
-	// internal clock => get bpm from param
-	if (using_internal_clock) {
-		bpm_10x = ((param_val(P_TEMPO) * 1200) >> 16) + 1200;
-		// accumulator clock: rollover at 1 << 21 siginifies 16th note
-		clock_16ths_q21 += ((u64)1 << 21) * bpm_10x * SAMPLES_PER_TICK / (AUDIO_SAMPLE_RATE * 150);
-		if (clock_16ths_q21 >= 1 << 21) {
-			clock_16ths_q21 &= (1 << 21) - 1;
-			pulse_16th = true;
+	if (midi_pulse) {
+		// track pulses
+		last_midi_pulse_ticks = ticks_since_midi_pulse;
+		ticks_since_midi_pulse = 0;
+		midi_pulse_counter++;
+		// check clock priority
+		if (clock_type == CLK_INTERNAL)
+			set_clock_type(CLK_MIDI);
+		// midi triggers
+		if (start_seq_from_midi_start) {
+			start_seq_from_midi_start = false;
+			// ignore if we're not in midi clock mode
+			if (clock_type == CLK_MIDI) {
+				seq_play_from_start();
+				reset_clock_next_tick = true;
+			}
+		}
+		if (start_seq_from_midi_continue) {
+			start_seq_from_midi_continue = false;
+			// ignore if we're not in midi clock mode
+			if (clock_type == CLK_MIDI) {
+				seq_play();
+				reset_clock_next_tick = true;
+			}
 		}
 	}
-	// external clock => get bpm from last two 16ths
-	else {
-		float ext_bpm_10x =
-		    minf((160.0f * AUDIO_SAMPLE_RATE) / ((ticks_since_16th + last_16th_ticks) * 0.5f * SAMPLES_PER_TICK),
-		         MAX_BPM_10X);
-		ext_bpm_10x += (bpm_10x - ext_bpm_10x) * 0.8f; // smooth it
-		bpm_10x = (u16)(ext_bpm_10x + 0.5f);           // round it, save it
-	}
 
-	// resync requested
-	if (resync_next_tick) {
-		clock_resync();
-		resync_next_tick = false;
+	// midi clock timeout
+	if (clock_type == CLK_MIDI && ticks_since_midi_pulse > MAX_CLOCK_GAP_TICKS(midi_ppqn))
+		set_clock_type(CLK_INTERNAL);
+
+	// up to this point, did we do anything that requires a clock reset? => cleanup, reset and exit
+	if (reset_clock_next_tick) {
+		clock_reset();
 		return;
 	}
 
-	// generate cv clock out
-	send_cv_clock(pulse_16th);
+	// handle global accumulator clock
+	switch (clock_type) {
+	case CLK_CV: {
+		u32 max_gap = MAX_CLOCK_GAP_TICKS(cv_ppqn);
+		// cv pulse => snap the clock to the pulse position
+		if (cv_pulse) {
+			clock_32nds_q21 = (cv_pulse_counter << 24) / cv_ppqn;
+			cv_pulse_counter = cv_pulse_counter % (cv_ppqn << 2);
+			if (last_cv_pulse_ticks <= max_gap && ticks_since_cv_pulse <= max_gap)
+				// we only calculate the bmp to show on the display
+				calc_bmp_from_ext(last_cv_pulse_ticks, ticks_since_cv_pulse, cv_ppqn);
+			break;
+		}
+		// valid last pulse length => calculate clock from previous pulse
+		else if (last_cv_pulse_ticks <= max_gap) {
+			clock_32nds_q21 += (1 << 24) / (cv_ppqn * last_cv_pulse_ticks);
+			break;
+		}
+	} // no valid pulse length => progress by midi clock
+	case CLK_MIDI: {
+		u32 max_gap = MAX_CLOCK_GAP_TICKS(midi_ppqn);
+		// midi pulse => snap the clock to the pulse position
+		if (midi_pulse && clock_type == CLK_MIDI) {
+			clock_32nds_q21 = (midi_pulse_counter << 24) / midi_ppqn;
+			midi_pulse_counter = midi_pulse_counter % (midi_ppqn << 2);
+			if (last_midi_pulse_ticks <= max_gap && ticks_since_midi_pulse <= max_gap)
+				// we only calculate the bmp to show on the display
+				calc_bmp_from_ext(last_midi_pulse_ticks, ticks_since_midi_pulse, midi_ppqn);
+			break;
+		}
+		// valid last pulse length => calculate clock from previous pulse
+		else if (last_midi_pulse_ticks <= max_gap) {
+			clock_32nds_q21 += (1 << 24) / (midi_ppqn * last_midi_pulse_ticks);
+			break;
+		}
+	} // no valid pulse length => progress by internal clock
+	default:
+		// internal clock => calculate clock from bpm param
+		bpm_10x = ((param_val(P_TEMPO) * 1200) >> 16) + 1200;
+		clock_32nds_q21 += ((u64)1 << 27) * bpm_10x / (75.f * SAMPLE_RATE);
+		break;
+	}
+
+	cleanup_clock_flags();
+
+	// check for 32nd note pulse
+	if (clock_32nds_q21 >= ((counter_32nds & 31) + 1) << 21) {
+		pulse_32nd = true;
+		counter_32nds = (counter_32nds + 1) % SYNC_DIVS_LCM;
+
+		// while playing sequencer, send cv clock on 16th pulses (4 ppqn)
+		if (seq_playing())
+			send_cv_clock((counter_32nds & 1) == 0);
+
+		// the clock rolls over at 32 32nd notes
+		if (clock_32nds_q21 >= (1 << 26))
+			clock_32nds_q21 &= (1 << 26) - 1;
+
+		return;
+	}
 
 	pulse_32nd = false;
-	// start of 16th
-	if (pulse_16th) {
-		last_16th_ticks = ticks_since_16th;
-		ticks_since_16th = 0;
-		pulse_32nd = true;
+}
+
+void clock_rcv_midi(u8 midi_status) {
+	switch (midi_status) {
+	case MIDI_START:
+		start_seq_from_midi_start = true;
+		break;
+	case MIDI_CONTINUE:
+		start_seq_from_midi_continue = true;
+		break;
+	case MIDI_STOP:
+		seq_stop();
+		break;
+	case MIDI_TIMING_CLOCK:
+		midi_pulse = true;
+		break;
 	}
-	// halfway 16th
-	else
-		pulse_32nd = (ticks_since_16th == (last_16th_ticks >> 1));
-	// count 32nds
-	if (pulse_32nd)
-		counter_32nds = (counter_32nds + 1) % SYNC_DIVS_LCM;
 }

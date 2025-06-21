@@ -94,10 +94,8 @@ void shift_set_state(ShiftState new_state) {
 	case SS_LEFT:
 		// if playing, jump to start of pattern
 		if (seq_playing()) {
-			seq_jump_to_start();
-			// resync if we're using the internal clock
-			if (using_internal_clock)
-				seq_resync();
+			seq_play_from_start();
+			cue_clock_reset();
 		}
 		// edit start of sequencer pattern
 		ui_mode = UI_PTN_START;
@@ -111,15 +109,17 @@ void shift_set_state(ShiftState new_state) {
 		clear_latch();
 		break;
 	case SS_PLAY:
+		// cued to stop? => stop immediately
 		if (seq_flags.stop_at_next_step)
-			// cued to stop? => stop immediately
 			seq_stop();
-		else if (seq_flags.playing)
-			// playing but not cued to stop? => cue to stop
+		// playing but not cued to stop? => cue to stop
+		else if (seq_playing())
 			seq_cue_to_stop();
-		else
-			// not playing? => initiate preview
+		// not playing? => initiate preview
+		else {
 			seq_start_previewing();
+			cue_clock_reset();
+		}
 		break;
 	default:
 		break;
@@ -185,9 +185,7 @@ void shift_release_state(void) {
 			if (!seq_playing()) {
 				seq_dec_step();
 				seq_force_play_step();
-				// resync if we're using the internal clock
-				if (using_internal_clock)
-					seq_resync();
+				cue_clock_reset();
 			}
 			ui_mode = UI_DEFAULT;
 		}
@@ -198,12 +196,8 @@ void shift_release_state(void) {
 		// short press right steps the sequencer right one step
 		if (!action_pressed_during_shift && short_press) {
 			seq_inc_step();
-			// resync if we're using the internal clock
-			if (using_internal_clock)
-				seq_resync();
-			// sound it out if we're not playing
-			if (!seq_playing())
-				seq_force_play_step();
+			seq_force_play_step();
+			cue_clock_reset();
 			ui_mode = UI_DEFAULT;
 		}
 		if (action_pressed_during_shift || prev_ui_mode == ui_mode)

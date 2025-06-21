@@ -242,9 +242,9 @@ void generate_string_touches(void) {
 		// new (virtual) touch: restart arp
 		if (arp_on() && write_string_touched_copy && !write_string_touched_1back) {
 			arp_reset();
-			// if the sequencer is not playing, resync the clock so the arp gets a trigger immediately
+			// if the sequencer is not playing, reset the clock so the arp gets a trigger on the next tick
 			if (!seq_playing())
-				clock_resync();
+				clock_reset();
 		}
 
 		// processing the strings happens at a significantly higher framerate than reading out the touchstrips

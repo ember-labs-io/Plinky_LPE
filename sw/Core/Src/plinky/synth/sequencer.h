@@ -7,7 +7,7 @@ typedef struct SeqFlags {
 	bool previewing : 1;
 	bool playing_backwards : 1;
 	bool stop_at_next_step : 1;
-	bool suppress_next_advance : 1;
+	bool first_pulse : 1;
 	bool force_next_step : 1;
 	bool unused : 1;
 } SeqFlags;
@@ -50,7 +50,6 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position);
 
 // == SEQ COMMANDS == //
 
-void seq_resync(void);
 void seq_play(void);
 void seq_play_from_start(void);
 void seq_start_previewing(void);
@@ -62,7 +61,6 @@ void seq_stop(void);
 // == SEQ STEP ACTIONS == //
 
 void seq_force_play_step(void);
-void seq_jump_to_start(void);
 bool seq_inc_step(void);
 bool seq_dec_step(void);
 void seq_clear_step(void);

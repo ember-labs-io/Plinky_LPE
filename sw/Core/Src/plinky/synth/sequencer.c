@@ -111,7 +111,8 @@ static void apply_cued_changes(void) {
 
 // perform a sequencer step
 static void seq_step(void) {
-	last_step_ticks = ticks_since_step;
+	if (!seq_flags.first_pulse)
+		last_step_ticks = ticks_since_step;
 	ticks_since_step = 0;
 
 	if (!seq_flags.playing && !seq_flags.force_next_step) {
@@ -120,19 +121,21 @@ static void seq_step(void) {
 	}
 	seq_flags.force_next_step = false;
 
+	// time sync => perform a conditional step
 	if (SEQ_CLOCK_SYNCED) {
 		c_step.euclid_len = param_val(P_SEQ_EUC_LEN);
 		c_step.density = param_val(P_SEQ_CHANCE);
 		do_conditional_step(&c_step, false);
 	}
-	// gate sync is not conditional
+	// gate sync => not conditional
 	else {
 		c_step.play_step = true;
 		c_step.advance_step = true;
 	}
 
-	if (!c_step.advance_step || seq_flags.suppress_next_advance) {
-		seq_flags.suppress_next_advance = false;
+	// the first pulse doesn't advance a step
+	if (!c_step.advance_step || seq_flags.first_pulse) {
+		seq_flags.first_pulse = false;
 		return;
 	}
 
@@ -355,17 +358,10 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 
 // == SEQ COMMANDS == //
 
-void seq_resync(void) {
-	seq_flags.suppress_next_advance = true;
-	ticks_since_step = last_step_ticks - 1;
-	cue_clock_resync();
-}
-
 void seq_play(void) {
 	apply_cued_changes();
-	if (!seq_flags.playing)
-		seq_resync();
 	seq_flags.playing = true;
+	seq_flags.first_pulse = true;
 }
 
 // resets sequencer and calls play function
@@ -374,7 +370,7 @@ void seq_play_from_start(void) {
 	random_steps_avail = 0;
 	c_step.euclid_trigs = 0;
 	seq_flags.playing_backwards = false;
-	seq_jump_to_start();
+	jump_to_step(cur_seq_start);
 	seq_play();
 }
 
@@ -413,10 +409,7 @@ void seq_stop(void) {
 // only allowed when not playing
 void seq_force_play_step(void) {
 	seq_flags.force_next_step = true;
-}
-
-void seq_jump_to_start(void) {
-	jump_to_step(cur_seq_start);
+	seq_flags.first_pulse = true;
 }
 
 // returns whether this wrapped

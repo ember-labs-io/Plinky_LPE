@@ -236,23 +236,10 @@ static void process_midi_msg(u8 status, u8 d1, u8 d2) {
 		}
 		break;
 	}
-	case MIDI_SYSTEM_COMMON_MSG: { // system msgs, use full status
-		switch (status) {
-		case MIDI_START:
-			seq_play_from_start();
-			break;
-		case MIDI_CONTINUE:
-			seq_play();
-			break;
-		case MIDI_STOP:
-			seq_stop();
-			break;
-		case MIDI_TIMING_CLOCK:
-			trigger_midi_clock();
-			break;
-		}
+	// out of the system messages we only implement the time-related ones => forward to clock
+	case MIDI_SYSTEM_COMMON_MSG:
+		clock_rcv_midi(status);
 		break;
-	}
 	}
 }
 
