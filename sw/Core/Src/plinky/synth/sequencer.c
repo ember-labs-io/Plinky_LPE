@@ -121,17 +121,10 @@ static void seq_step(void) {
 	}
 	seq_flags.force_next_step = false;
 
-	// time sync => perform a conditional step
-	if (SEQ_CLOCK_SYNCED) {
-		c_step.euclid_len = param_val(P_SEQ_EUC_LEN);
-		c_step.density = param_val(P_SEQ_CHANCE);
-		do_conditional_step(&c_step, false);
-	}
-	// gate sync => not conditional
-	else {
-		c_step.play_step = true;
-		c_step.advance_step = true;
-	}
+	// perform a conditional step
+	c_step.euclid_len = param_val(P_SEQ_EUC_LEN);
+	c_step.density = param_val(P_SEQ_CHANCE);
+	do_conditional_step(&c_step, false);
 
 	// the first pulse doesn't advance a step
 	if (!c_step.advance_step || seq_flags.first_pulse) {
