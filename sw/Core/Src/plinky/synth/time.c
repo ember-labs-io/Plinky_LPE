@@ -1,6 +1,6 @@
 #include "time.h"
 #include "hardware/cv.h"
-#include "hardware/midi_defs.h"
+#include "hardware/midi.h"
 #include "params.h"
 #include "sequencer.h"
 #include "ui/oled_viz.h"
@@ -98,7 +98,7 @@ static void set_clock_type(ClockType new_type) {
 		flash_message(F_20_BOLD, "CV in", "Clock");
 		// not playing => cv clock start restarts the sequencer
 		if (!seq_playing()) {
-			seq_play_from_start();
+			seq_play();
 			clock_type = CLK_CV;
 			reset_clock_next_tick = true;
 		}
@@ -133,6 +133,7 @@ void clock_reset(void) {
 	pulse_32nd = true; // this is the start of a 32nd
 	if (seq_playing())
 		send_cv_clock(true); // this is the start of a 16th (4 ppqn)
+	midi_send_clock();       // this is the start of a 24 ppqn pulse
 	reset_clock_next_tick = false;
 }
 
@@ -184,7 +185,7 @@ void clock_tick(void) {
 			start_seq_from_midi_start = false;
 			// ignore if we're not in midi clock mode
 			if (clock_type == CLK_MIDI) {
-				seq_play_from_start();
+				seq_play();
 				reset_clock_next_tick = true;
 			}
 		}
@@ -192,7 +193,7 @@ void clock_tick(void) {
 			start_seq_from_midi_continue = false;
 			// ignore if we're not in midi clock mode
 			if (clock_type == CLK_MIDI) {
-				seq_play();
+				seq_continue();
 				reset_clock_next_tick = true;
 			}
 		}
@@ -207,6 +208,8 @@ void clock_tick(void) {
 		clock_reset();
 		return;
 	}
+
+	u32 prev_clock = clock_32nds_q21;
 
 	// handle global accumulator clock
 	switch (clock_type) {
@@ -252,6 +255,11 @@ void clock_tick(void) {
 	}
 
 	cleanup_clock_flags();
+
+	// check for midi pulse
+	const u8 ppqn_out = 24;
+	if (((clock_32nds_q21 & ((1 << 21) - 1)) * ppqn_out >> 24) != ((prev_clock & ((1 << 21) - 1)) * ppqn_out >> 24))
+		midi_send_clock();
 
 	// check for 32nd note pulse
 	if (clock_32nds_q21 >= ((counter_32nds & 31) + 1) << 21) {

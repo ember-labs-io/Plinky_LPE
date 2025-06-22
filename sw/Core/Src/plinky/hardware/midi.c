@@ -1,7 +1,6 @@
 #include "midi.h"
 #include "gfx/gfx.h"
 #include "hardware/ram.h"
-#include "midi_defs.h"
 #include "synth/arp.h"
 #include "synth/params.h"
 #include "synth/sequencer.h"
@@ -26,6 +25,19 @@ u8 midi_goal_note[NUM_STRINGS]; // the string is playing this note
 
 void set_midi_goal_note(u8 string_id, u8 midi_note) {
 	midi_goal_note[string_id] = midi_note;
+}
+
+static u8 clocks_to_send;
+static MidiMessageType send_transport;
+
+void midi_send_clock(void) {
+	clocks_to_send++;
+}
+
+void midi_send_transport(MidiMessageType transport_type) {
+	if (transport_type < MIDI_TIMING_CLOCK)
+		return;
+	send_transport = transport_type;
 }
 
 // buffers
@@ -106,6 +118,16 @@ void process_all_midi_out(void) {
 	// exit if the uart is not ready
 	if (huart3.TxXferCount)
 		return;
+	if (send_transport != MIDI_NONE) {
+		if (!send_midi_msg(send_transport, 0, 0))
+			return;
+		send_transport = MIDI_NONE;
+	}
+	while (clocks_to_send) {
+		if (!send_midi_msg(MIDI_TIMING_CLOCK, 0, 0))
+			return;
+		clocks_to_send--;
+	}
 	// we check for a maximum of eight times (once for each voice)
 	u8 num_loops = 0;
 	while (num_loops < 8) {

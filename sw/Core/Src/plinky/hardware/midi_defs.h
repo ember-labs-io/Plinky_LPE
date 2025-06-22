@@ -32,6 +32,9 @@ typedef enum MidiMessageType {
 	MIDI_SYSTEM_COMMON_MSG = MIDI_SYSTEM_EXCLUSIVE,
 	MIDI_SYSTEM_REAL_TIME_MSG = MIDI_TIMING_CLOCK,
 
+	// Dummy
+	MIDI_NONE = 0,
+
 } MidiMessageType;
 
 // clang-format off

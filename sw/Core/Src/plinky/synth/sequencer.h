@@ -50,8 +50,8 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position);
 
 // == SEQ COMMANDS == //
 
+void seq_continue(void);
 void seq_play(void);
-void seq_play_from_start(void);
 void seq_start_previewing(void);
 void seq_end_previewing(void);
 void seq_toggle_rec(void);

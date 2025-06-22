@@ -4,6 +4,8 @@
 #include "gfx/data/icons.h"
 #include "gfx/gfx.h"
 #include "hardware/cv.h"
+#include "hardware/midi.h"
+#include "hardware/midi_defs.h"
 #include "hardware/ram.h"
 #include "params.h"
 #include "time.h"
@@ -351,26 +353,30 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 
 // == SEQ COMMANDS == //
 
-void seq_play(void) {
+// equivalent to midi continue: start playing from current position
+void seq_continue(void) {
 	apply_cued_changes();
-	seq_flags.playing = true;
 	seq_flags.first_pulse = true;
+	if (!seq_flags.playing) {
+		seq_flags.playing = true;
+		midi_send_transport(cur_seq_step == cur_seq_start ? MIDI_START : MIDI_CONTINUE);
+	}
 }
 
-// resets sequencer and calls play function
-void seq_play_from_start(void) {
+// equivalent to midi start: reset and start playing from beginning
+void seq_play(void) {
 	seq_flags.playing_backwards = false;
 	random_steps_avail = 0;
 	c_step.euclid_trigs = 0;
 	seq_flags.playing_backwards = false;
 	jump_to_step(cur_seq_start);
-	seq_play();
+	seq_continue();
 }
 
 // play sequencer in preview mode
 void seq_start_previewing(void) {
 	seq_flags.previewing = true;
-	seq_play();
+	seq_continue();
 }
 
 // turn off seq_flags.previewing, playing status remains unchanged
@@ -390,6 +396,8 @@ void seq_cue_to_stop(void) {
 
 // stop sequencer immediately
 void seq_stop(void) {
+	// if (seq_flags.playing)
+	midi_send_transport(MIDI_STOP);
 	seq_flags.previewing = false;
 	seq_flags.playing = false;
 	seq_flags.stop_at_next_step = false;

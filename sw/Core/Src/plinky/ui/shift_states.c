@@ -94,7 +94,7 @@ void shift_set_state(ShiftState new_state) {
 	case SS_LEFT:
 		// if playing, jump to start of pattern
 		if (seq_playing()) {
-			seq_play_from_start();
+			seq_play();
 			cue_clock_reset();
 		}
 		// edit start of sequencer pattern
