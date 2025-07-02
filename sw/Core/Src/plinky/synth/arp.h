@@ -23,6 +23,7 @@ typedef enum ArpOrder {
 extern ArpOrder arp_order;
 extern s8 arp_oct_offset;
 
-bool arp_touched(u8 string_id);
+bool string_suppressed_by_arp(u8 string_id);
+
 void arp_tick(void);
 void arp_reset(void);

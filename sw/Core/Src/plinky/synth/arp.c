@@ -19,8 +19,10 @@ static s8 non_pedal_string = -1;     // for keeping track of the moving string i
 static u8 strings_used_by_rand1 = 0; // for keeping tracks of which strings have been used by random ArpOrders
 static u8 strings_used_by_rand2 = 0; // this makes random effectively a shuffle, not a true random
 
-bool arp_touched(u8 string_id) {
-	return arp_touch_mask & (1 << string_id);
+bool string_suppressed_by_arp(u8 string_id) {
+	if (!arp_on())
+		return false;
+	return (arp_touch_mask & (1 << string_id)) == 0;
 }
 
 static u8 get_random_bit(u8 mask) {
@@ -138,7 +140,7 @@ static void step_random(u8 avail_touch_mask, s8 bottom_oct_offset, u8 top_oct_of
 
 static void advance_step() {
 	arp_touch_mask = 0;
-	u8 avail_touch_mask = write_string_touched_copy;
+	u8 avail_touch_mask = string_touched;
 	// 8-step patterns => fake touches on all strings
 	if (arp_order >= ARP_UP8)
 		avail_touch_mask = 0b11111111;
@@ -221,7 +223,7 @@ void arp_tick(void) {
 		return;
 
 	// no touch
-	if (!write_string_touched_copy) {
+	if (!string_touched) {
 		arp_touch_mask = 0;
 		return;
 	}

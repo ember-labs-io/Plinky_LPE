@@ -28,7 +28,7 @@ static u32 last_step_ticks = 0;  // duration
 static u32 ticks_since_step = 0; // current duration
 
 // pattern
-s8 cur_seq_step = 0;         // current step, modulated by step offset
+static s8 cur_seq_step = 0;  // current step, modulated by step offset
 static u8 cur_seq_start = 0; // where we start playing, modulated by step offset
 static u8 cued_ptn_start = 255;
 static u64 random_steps_avail = 0; // bitmask of unplayed steps in random modes
@@ -271,7 +271,7 @@ void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_incre
 	if (!seq_flags.recording || pattern_outdated())
 		return;
 
-	PatternStringStep* string_step = string_step_ptr(string_id, false);
+	PatternStringStep* string_step = string_step_ptr(string_id, false, cur_seq_step);
 	u8 mask = 1 << string_id;
 	u8 substep = seq_substep(8);
 
@@ -333,7 +333,7 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	// exit if we're not playing a sequencer note
 	if (!c_step.play_step || shift_state == SS_CLEAR)
 		return;
-	PatternStringStep* string_step = string_step_ptr(string_id, true);
+	PatternStringStep* string_step = string_step_ptr(string_id, true, cur_seq_step);
 	// exit if there is no data in the step
 	if (!string_step)
 		return;
@@ -455,7 +455,7 @@ void seq_set_end(u8 new_step) {
 void seq_clear_step(void) {
 	// clear pressures from all substeps, from all strings, for the current step
 	bool data_saved = false;
-	PatternStringStep* string_step = string_step_ptr(0, false);
+	PatternStringStep* string_step = string_step_ptr(0, false, cur_seq_step);
 	for (u8 string_id = 0; string_id < 8; ++string_id, ++string_step) {
 		for (u8 substep_id = 0; substep_id < 8; ++substep_id) {
 			if (string_step->pres[substep_id] > 0) {
@@ -506,4 +506,12 @@ u8 seq_led(u8 x, u8 y, u8 sync_pulse) {
 	if (step == cued_ptn_start && seq_playing())
 		k = maxi(k, (sync_pulse * 4) & 255);
 	return k;
+}
+
+u8 seq_press_led(u8 x, u8 y) {
+	PatternStringStep* string_step = string_step_ptr(x, true, cur_seq_step);
+	u8 substep = seq_substep(8);
+	if (string_step && string_step->pos[substep / 2] / 32 == y)
+		return string_step->pres[substep];
+	return 0;
 }

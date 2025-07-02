@@ -32,10 +32,7 @@ u8 string_touched = 0;
 static u8 string_touched_1back = 0;
 u8 string_touch_start = 0;
 
-// bitmasks of touches during the write_frame, used for arp and latch checking
-static u8 write_string_touched;
-u8 write_string_touched_copy = 0; // direct copy of the above
-u8 write_string_touched_1back = 0;
+// physical touch mask during the write_frame, used by latch
 static u8 strings_phys_touched = 0;
 
 // midi
@@ -215,10 +212,6 @@ static void generate_string_touch(u8 string_id) {
 	// save resulting touch to main array
 	s_touch->pres = pressure;
 	s_touch->pos = position;
-	if (s_touch->pres > 0)
-		write_string_touched |= mask;
-	else
-		write_string_touched &= ~mask;
 
 	// sort string's frames by position
 	sort8((int*)string_touch_sorted[string_id], (int*)string_touch[string_id]);
@@ -240,7 +233,7 @@ void generate_string_touches(void) {
 		strings_phys_touch_1back = strings_phys_touched;
 
 		// new (virtual) touch: restart arp
-		if (arp_on() && write_string_touched_copy && !write_string_touched_1back) {
+		if (arp_on() && string_touched && !string_touched_1back) {
 			arp_reset();
 			// if the sequencer is not playing, reset the clock so the arp gets a trigger on the next tick
 			if (!seq_playing())
@@ -278,9 +271,6 @@ void generate_string_touches(void) {
 		}
 	}
 	string_touch_start = (string_touched & ~string_touched_1back);
-
-	write_string_touched_1back = write_string_touched_copy;
-	write_string_touched_copy = write_string_touched;
 }
 
 // == MIDI == //
@@ -348,7 +338,7 @@ static u8 find_free_midi_string(u8 midi_note_number, u16* midi_note_position, u8
 
 	// collect non-pressed, non-sounding strings
 	for (u8 string_id = 0; string_id < 8; string_id++) {
-		if (!(midi_pressure_override & (1 << string_id)) && !(write_string_touched & (1 << string_id))
+		if (!(midi_pressure_override & (1 << string_id)) && !(string_touched & (1 << string_id))
 		    && voices[string_id].env1_lvl < 0.001f) {
 			string_option[num_string_options] = string_id;
 			num_string_options++;
@@ -370,7 +360,7 @@ static u8 find_free_midi_string(u8 midi_note_number, u16* midi_note_position, u8
 	// collect non-pressed strings
 	num_string_options = 0;
 	for (u8 string_id = 0; string_id < 8; string_id++) {
-		if (!(midi_pressure_override & (1 << string_id)) && !(write_string_touched & (1 << string_id))) {
+		if (!(midi_pressure_override & (1 << string_id)) && !(string_touched & (1 << string_id))) {
 			string_option[num_string_options] = string_id;
 			num_string_options++;
 		}

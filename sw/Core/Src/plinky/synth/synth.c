@@ -139,7 +139,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 		low_string_pitch = summed_pitch;
 		got_low_pitch = true;
 	}
-	if (!arp_on() || arp_touched(string_id)) {
+	if (!string_suppressed_by_arp(string_id)) {
 		high_string_pitch = summed_pitch;
 		got_high_pitch = true;
 	}
@@ -164,8 +164,8 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(P_RELEASE1, voice_id)));
 
 	u8 mask = 1 << voice_id;
-	if (arp_on() && !arp_touched(voice_id))
-		goal_lpg = 0.f; // this suppresses touches when arp is active
+	if (string_suppressed_by_arp(voice_id))
+		goal_lpg = 0.f;
 	float env_lvl = voice->env1_lvl;
 
 	// new touch: start new envelope
@@ -449,7 +449,7 @@ void draw_voices(void) {
 			volLineHeight[i] = voices[i].env1_lvl / maxVolume[i] * maxHeight;
 		}
 		// string pressed
-		if (write_string_touched_copy & (1 << i)) {
+		if (string_touched & (1 << i)) {
 			// move touch line
 			if (touchLineHeight[i] < maxHeight)
 				touchLineHeight[i] += moveSpeed;

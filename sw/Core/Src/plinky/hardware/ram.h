@@ -21,7 +21,7 @@ bool latch_on(void);
 void save_latch(bool on);
 
 // main
-PatternStringStep* string_step_ptr(u8 string_id, bool only_filled);
+PatternStringStep* string_step_ptr(u8 string_id, bool only_filled, u8 seq_step);
 
 void init_ram(void);
 void ram_frame(void);

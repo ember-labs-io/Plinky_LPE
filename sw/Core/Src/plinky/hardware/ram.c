@@ -109,10 +109,10 @@ void save_latch(bool on) {
 // == MAIN == //
 
 // only_filled returns 0 if the step doesn't hold any pressure data
-PatternStringStep* string_step_ptr(u8 string_id, bool only_filled) {
+PatternStringStep* string_step_ptr(u8 string_id, bool only_filled, u8 seq_step) {
 	if (preset_outdated() && only_filled)
 		return 0;
-	PatternStringStep* step = &cur_ptn_quarter[(cur_seq_step >> 4) & 3].steps[cur_seq_step & 15][string_id];
+	PatternStringStep* step = &cur_ptn_quarter[(seq_step >> 4) & 3].steps[seq_step & 15][string_id];
 	if (!only_filled)
 		return step;
 	// return pointer if any of its substeps hold pressure
