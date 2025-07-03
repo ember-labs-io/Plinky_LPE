@@ -18,11 +18,10 @@ static s32 free_clock = 0;           // for keeping track of free running steps
 static s8 non_pedal_string = -1;     // for keeping track of the moving string in pedal ArpOrders
 static u8 strings_used_by_rand1 = 0; // for keeping tracks of which strings have been used by random ArpOrders
 static u8 strings_used_by_rand2 = 0; // this makes random effectively a shuffle, not a true random
+static u32 strings_frame_tick = -1;
 
-bool string_suppressed_by_arp(u8 string_id) {
-	if (!arp_on())
-		return false;
-	return (arp_touch_mask & (1 << string_id)) == 0;
+void arp_next_strings_frame_trig(void) {
+	strings_frame_tick = synth_tick;
 }
 
 static u8 get_random_bit(u8 mask) {
@@ -138,9 +137,8 @@ static void step_random(u8 avail_touch_mask, s8 bottom_oct_offset, u8 top_oct_of
 	}
 }
 
-static void advance_step() {
+static void advance_step(u8 avail_touch_mask) {
 	arp_touch_mask = 0;
-	u8 avail_touch_mask = string_touched;
 	// 8-step patterns => fake touches on all strings
 	if (arp_order >= ARP_UP8)
 		avail_touch_mask = 0b11111111;
@@ -212,21 +210,13 @@ static void advance_step() {
 	}
 }
 
-void arp_tick(void) {
+u8 arp_tick(u8 string_touch_mask) {
+	static bool step_next_strings_frame = false;
+
 	// update properties
 	arp_order = param_val(P_ARP_ORDER);
 	c_step.euclid_len = param_val(P_ARP_EUC_LEN);
 	c_step.density = param_val(P_ARP_CHANCE);
-
-	// arp not active
-	if (!arp_on() || ui_mode == UI_SAMPLE_EDIT)
-		return;
-
-	// no touch
-	if (!string_touched) {
-		arp_touch_mask = 0;
-		return;
-	}
 
 	// does this tick generate a step?
 	bool arp_step = false;
@@ -234,8 +224,14 @@ void arp_tick(void) {
 	// clock synced
 	if (arp_div >= 0) {
 		u8 step_32nds = sync_divs_32nds[(clampi(arp_div, 0, 65535) * NUM_SYNC_DIVS) >> 16];
-		if (pulse_32nd && (counter_32nds % step_32nds == 0))
+		if (pulse_32nd && (counter_32nds % step_32nds == 0)) {
+			step_next_strings_frame = true;
+			strings_frame_tick = -1; // u32 max
+		}
+		if (step_next_strings_frame && synth_tick >= strings_frame_tick) {
+			step_next_strings_frame = false;
 			arp_step = true;
+		}
 	}
 	// free running
 	else {
@@ -248,18 +244,32 @@ void arp_tick(void) {
 		}
 	}
 
+	// no touch
+	if (!string_touch_mask) {
+		arp_touch_mask = 0;
+		return arp_touch_mask;
+	}
+
 	// no step
 	if (!arp_step)
-		return;
+		return arp_touch_mask;
 
 	// step
 	do_conditional_step(&c_step, arp_order == ARP_CHORD);
+	// move to the next position, this also fills arp_touch_mask
 	if (c_step.advance_step)
-		advance_step(); // move to the next position, this also fills arp_touch_mask
+		advance_step(string_touch_mask);
+	// suppress touches if required by conditional step
 	if (!c_step.play_step)
-		arp_touch_mask = 0; // suppress touches if required by conditional step
+		arp_touch_mask = 0;
+	// all arp triggers clean the string to make sure no remnants of the previous note are heard
+	for (u8 i = 0; i < NUM_STRINGS; i++)
+		if (arp_touch_mask & (1 << i))
+			clean_string(i);
+	// (re)trigger envelopes
 	if (c_step.advance_step)
-		string_touch_start |= arp_touch_mask; // set bitmask to (re)trigger envelopes
+		env_trig_mask |= arp_touch_mask;
+	return arp_touch_mask;
 }
 
 void arp_reset(void) {
@@ -271,4 +281,5 @@ void arp_reset(void) {
 	arp_oct_offset = 0;
 	cur_string = -1;
 	moving_down = false;
+	strings_frame_tick = -1;
 }

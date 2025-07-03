@@ -55,8 +55,6 @@ static void precalc_waves(float** next_wave_ptr) {
 			target *= life_damping;
 			if (curfinger->pos >> 8 == y) {
 				float pressure = curfinger->pres * (1.f / 2048.f);
-				if (string_suppressed_by_arp(x))
-					pressure = 0.f;
 				target = lerp(target, life_input_power, clampf(pressure * 2.f, 0.f, 1.f));
 			}
 			float pos = prev_wave[i];

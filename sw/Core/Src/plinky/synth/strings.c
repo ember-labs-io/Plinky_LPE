@@ -29,8 +29,9 @@ static Touch string_touch_sorted[NUM_STRINGS][NUM_TOUCH_FRAMES];
 
 // bitmasks that keep track of touches on the read_frame, implements hysteresis
 u8 string_touched = 0;
-static u8 string_touched_1back = 0;
-u8 string_touch_start = 0;
+u8 env_trig_mask = 0;
+static u8 string_touched_no_arp = 0;
+static u8 string_touched_no_arp_1back = 0;
 
 // physical touch mask during the write_frame, used by latch
 static u8 strings_phys_touched = 0;
@@ -71,6 +72,14 @@ Touch* get_string_touch(u8 string_id) {
 
 Touch* sorted_string_touch_ptr(u8 string_id) {
 	return &string_touch_sorted[string_id][0];
+}
+
+void clean_string(u8 string_id) {
+	s16 position = get_string_touch(string_id)->pos;
+	Touch* st = string_touch[string_id];
+	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id, st++)
+		if (string_id != strings_read_frame)
+			st->pos = position ^ (st->pos & 3);
 }
 
 // this combines inputs from touchstrips, latch, arp & sequencer, and saves the resulting Touch in
@@ -231,15 +240,6 @@ void generate_string_touches(void) {
 		if (seq_state() == SEQ_STEP_RECORDING && !strings_phys_touched && strings_phys_touch_1back)
 			seq_inc_step();
 		strings_phys_touch_1back = strings_phys_touched;
-
-		// new (virtual) touch: restart arp
-		if (arp_on() && string_touched && !string_touched_1back) {
-			arp_reset();
-			// if the sequencer is not playing, reset the clock so the arp gets a trigger on the next tick
-			if (!seq_playing())
-				clock_reset();
-		}
-
 		// processing the strings happens at a significantly higher framerate than reading out the touchstrips
 		// u8 touch_frame tracks which frame in the touches array is currently being written to
 		// u8 strings_write_frame tracks which frame in the string_touch array we are writing to
@@ -256,21 +256,43 @@ void generate_string_touches(void) {
 			strings_write_frame = touch_frame;
 			// we update the touch pointers for he new strings_read_frame
 			params_update_touch_pointers();
+			arp_next_strings_frame_trig();
+		}
+
+		// calculate string touches
+		string_touched_no_arp_1back = string_touched_no_arp;
+		string_touched_no_arp = 0;
+		for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
+			Touch* s_touch = get_string_touch(string_id);
+			s8 thresh = (string_touched_no_arp_1back & (1 << string_id)) ? -50 : 1; // hysteresis
+			if (s_touch->pres > thresh)
+				string_touched_no_arp |= 1 << string_id;
+		}
+		env_trig_mask = (string_touched_no_arp & ~string_touched_no_arp_1back);
+
+		// new (virtual) touch: restart arp
+		if (arp_on() && string_touched_no_arp && !string_touched_no_arp_1back) {
+			arp_reset();
+			// if the sequencer is not playing, reset the clock so the arp gets a trigger
+			if (!seq_playing())
+				clock_reset();
 		}
 	}
+
 	// toggle which half we process
 	do_second_half = !do_second_half;
 
-	string_touched_1back = string_touched;
-	string_touched = 0;
-	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
-		Touch* s_touch = get_string_touch(string_id);
-		s8 thresh = (string_touched_1back & (1 << string_id)) ? -50 : 1; // hysteresis
-		if (s_touch->pres > thresh) {
-			string_touched |= 1 << string_id;
-		}
+	// arp
+	if (arp_on() && ui_mode != UI_SAMPLE_EDIT) {
+		string_touched = arp_tick(string_touched_no_arp);
+		// force-remove touches from strings not selected by arp
+		for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+			if ((string_touched & (1 << string_id)) == 0)
+				get_string_touch(string_id)->pres = 0;
 	}
-	string_touch_start = (string_touched & ~string_touched_1back);
+	// no arp
+	else
+		string_touched = string_touched_no_arp;
 }
 
 // == MIDI == //
@@ -338,7 +360,7 @@ static u8 find_free_midi_string(u8 midi_note_number, u16* midi_note_position, u8
 
 	// collect non-pressed, non-sounding strings
 	for (u8 string_id = 0; string_id < 8; string_id++) {
-		if (!(midi_pressure_override & (1 << string_id)) && !(string_touched & (1 << string_id))
+		if (!(midi_pressure_override & (1 << string_id)) && !(string_touched_no_arp & (1 << string_id))
 		    && voices[string_id].env1_lvl < 0.001f) {
 			string_option[num_string_options] = string_id;
 			num_string_options++;
@@ -360,7 +382,7 @@ static u8 find_free_midi_string(u8 midi_note_number, u16* midi_note_position, u8
 	// collect non-pressed strings
 	num_string_options = 0;
 	for (u8 string_id = 0; string_id < 8; string_id++) {
-		if (!(midi_pressure_override & (1 << string_id)) && !(string_touched & (1 << string_id))) {
+		if (!(midi_pressure_override & (1 << string_id)) && !(string_touched_no_arp & (1 << string_id))) {
 			string_option[num_string_options] = string_id;
 			num_string_options++;
 		}

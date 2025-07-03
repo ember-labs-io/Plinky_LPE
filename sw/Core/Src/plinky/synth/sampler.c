@@ -110,7 +110,7 @@ void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noi
 		sizejit = param_val_poly(P_SMP_GRAINSIZE_JIT, voice_id) * (1.f / 65536.f);
 		gratejit = param_val_poly(P_SMP_SPEED_JIT, voice_id) * (1.f / 65536.f);
 	}
-	int trig = string_touch_start & (1 << voice_id);
+	int trig = env_trig_mask & (1 << voice_id);
 
 	int prevsliceidx = voice->slice_id;
 	bool gp = ui_mode == UI_SAMPLE_EDIT;

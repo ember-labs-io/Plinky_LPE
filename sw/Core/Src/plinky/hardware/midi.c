@@ -145,8 +145,6 @@ void process_all_midi_out(void) {
 		// take out some undesired note/pressure values
 		if (!target_note)
 			target_pressure = 0;
-		if (string_suppressed_by_arp(string_id))
-			target_pressure = 0;
 		if (!target_pressure)
 			target_note = 0;
 

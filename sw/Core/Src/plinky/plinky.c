@@ -84,10 +84,8 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 	clock_tick();
 	// sequencer
 	seq_tick();
-	// combine physical, latch and sequencer touches
+	// combine physical, latch, sequencer touches; run arp
 	generate_string_touches();
-	// arpeggiator uses combined touches
-	arp_tick();
 	// evaluate parameters and modulations
 	params_tick();
 	// make sure sample and pattern ram is up to date

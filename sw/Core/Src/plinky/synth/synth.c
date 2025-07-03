@@ -139,10 +139,8 @@ void generate_oscs(u8 string_id, Voice* voice) {
 		low_string_pitch = summed_pitch;
 		got_low_pitch = true;
 	}
-	if (!string_suppressed_by_arp(string_id)) {
-		high_string_pitch = summed_pitch;
-		got_high_pitch = true;
-	}
+	high_string_pitch = summed_pitch;
+	got_high_pitch = true;
 	// the outgoing midi note is generated from oscillator pitch
 	set_midi_goal_note(string_id, quad_pitch_to_midi_note(summed_pitch));
 }
@@ -164,12 +162,10 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(P_RELEASE1, voice_id)));
 
 	u8 mask = 1 << voice_id;
-	if (string_suppressed_by_arp(voice_id))
-		goal_lpg = 0.f;
 	float env_lvl = voice->env1_lvl;
 
 	// new touch: start new envelope
-	if (string_touch_start & mask) {
+	if (env_trig_mask & mask) {
 		env_lvl *= sustain;
 		voice->env1_decaying = false;
 		cv_trig_high = true; // send cv trigger

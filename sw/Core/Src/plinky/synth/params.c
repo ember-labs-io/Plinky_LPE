@@ -120,7 +120,7 @@ void params_tick(void) {
 		u8 mask = 1 << string_id;
 		Voice* v = &voices[string_id];
 		// reset envelope on new touch
-		if (string_touch_start & mask) {
+		if (env_trig_mask & mask) {
 			v->env2_lvl = 0.f;
 			v->env2_decaying = false;
 		}
@@ -159,13 +159,13 @@ void params_tick(void) {
 		// collect range envelope
 		max_env_global = maxf(max_env_global, voices[string_id].env2_lvl16);
 		// generate polyphonic sample & hold random value on new touch
-		if (string_touch_start & mask)
+		if (env_trig_mask & mask)
 			sample_hold_poly[string_id] += 4813;
 	}
 	// scale range pressure to u16 range
 	max_pres_global *= 32;
 	// generate global sample & hold random value on new touch
-	if (string_touch_start)
+	if (env_trig_mask)
 		sample_hold_global += 4813;
 
 	accel_tick();
