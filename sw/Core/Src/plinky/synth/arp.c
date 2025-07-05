@@ -235,11 +235,20 @@ u8 arp_tick(u8 string_touch_mask) {
 	}
 	// free running
 	else {
+		static bool first_swing_note = true;
 		// reuse the pitches table to turn the linear arp_div value into an exponential time duration
 		u32 clock_diff = (u32)(table_interp(pitches, 32768 + (-arp_div >> 2)) * (1 << 24));
+		// swing
+		u32 swing_param = abs(param_val(P_SWING));
+		if (swing_param) {
+			float swing_factor = swing_param * max_swing / (1 << 16);
+			clock_diff *= 1 + (first_swing_note ? swing_factor : -swing_factor);
+		}
+		// accumulator clock
 		free_clock -= clock_diff; // rewrite to positive
 		if (free_clock < 0) {
 			free_clock += 1 << 31;
+			first_swing_note = !first_swing_note;
 			arp_step = true;
 		}
 	}

@@ -10,6 +10,7 @@ typedef enum ClockType {
 	CLK_CV,
 } ClockType;
 
+static float const max_swing = 0.5f; // 0.3333f represents triplet-feel swing
 static u16 const sync_divs_32nds[NUM_SYNC_DIVS] = {1,  2,  3,  4,  5,  6,  8,  10,  12,  16,  20,
                                                    24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256};
 

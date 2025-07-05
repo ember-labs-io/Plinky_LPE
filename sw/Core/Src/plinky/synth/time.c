@@ -44,10 +44,19 @@ static u32 ticks_since_cv_pulse = 0;
 static u32 last_cv_pulse_ticks = 0;
 static bool cv_pulse_handled = false;
 
+// swing
+static u32 const max_swing_q21 = (u32)(max_swing * (1 << 21));
+static s32 cur_32nd_start_q21;
+static u32 length_32nd_q21;
+
 u32 clock_pos_q16(u16 loop_32nds) {
-	u32 cycle_32nds = (counter_32nds % loop_32nds) << 16;
-	u16 fract = (clock_32nds_q21 & ((1 << 21) - 1)) >> 5;
-	return (cycle_32nds + fract) / loop_32nds;
+	u32 loop_32nds_q16 = (counter_32nds % loop_32nds) << 16;
+	u32 fract_q16 = length_32nd_q21 == 1 << 21
+	                    // no swing
+	                    ? (clock_32nds_q21 & ((1 << 21) - 1)) >> 5
+	                    // swing
+	                    : ((u64)(clock_32nds_q21 - cur_32nd_start_q21) << 16) / length_32nd_q21;
+	return (loop_32nds_q16 + fract_q16) / loop_32nds;
 }
 
 void trigger_cv_clock(void) {
@@ -120,6 +129,36 @@ static void cleanup_clock_flags(void) {
 	midi_pulse = false;
 }
 
+static void calculate_swing(bool get_param) {
+	static s32 swing_param;
+	static u32 swing_q21;  // offset caused by swing, per 32nd note
+	static u8 swing_32nds; // number of 32nd notes in a full cycle of two swung notes
+
+	// unswung values
+	cur_32nd_start_q21 = (counter_32nds & 31) << 21;
+	length_32nd_q21 = 1 << 21;
+
+	if (get_param) {
+		swing_param = param_val(P_SWING);
+		if (swing_param != 0) {
+			// scale param by max
+			swing_q21 = (u64)abs(param_val(P_SWING)) * max_swing_q21 >> 16;
+			// negative swing param means 1/16th swing, positive means 1/8th note swing
+			swing_32nds = swing_param < 0 ? 4 : 8;
+		}
+	}
+
+	// no swing
+	if (swing_param == 0)
+		return;
+
+	// apply swing offset
+	u8 cur_32nd = counter_32nds & (swing_32nds - 1);
+	bool first_half = cur_32nd < (swing_32nds >> 1);
+	cur_32nd_start_q21 += (first_half ? cur_32nd : swing_32nds - cur_32nd) * swing_q21;
+	length_32nd_q21 += first_half ? swing_q21 : -swing_q21;
+}
+
 void cue_clock_reset(void) {
 	reset_clock_next_tick = true;
 }
@@ -130,6 +169,7 @@ void clock_reset(void) {
 	midi_pulse_counter = 0;
 	clock_32nds_q21 = 0;
 	counter_32nds = 0;
+	calculate_swing(true);
 	pulse_32nd = true; // this is the start of a 32nd
 	if (seq_playing())
 		send_cv_clock(true); // this is the start of a 16th (4 ppqn)
@@ -261,10 +301,14 @@ void clock_tick(void) {
 	if (((clock_32nds_q21 & ((1 << 21) - 1)) * ppqn_out >> 24) != ((prev_clock & ((1 << 21) - 1)) * ppqn_out >> 24))
 		midi_send_clock();
 
+	// swing
+	calculate_swing(true);
+
 	// check for 32nd note pulse
-	if (clock_32nds_q21 >= ((counter_32nds & 31) + 1) << 21) {
+	if (clock_32nds_q21 >= cur_32nd_start_q21 + length_32nd_q21) {
 		pulse_32nd = true;
 		counter_32nds = (counter_32nds + 1) % SYNC_DIVS_LCM;
+		calculate_swing(false);
 
 		// while playing sequencer, send cv clock on 16th pulses (4 ppqn)
 		if (seq_playing())
