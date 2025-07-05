@@ -35,6 +35,9 @@ typedef struct Voice {
 	float env1_lvl;
 	bool env1_decaying;
 	ValueSmoother lpg_smoother[2];
+	// env 1 visuals
+	float env1_peak;
+	float env1_norm;
 	// env 2
 	float env2_lvl;
 	u16 env2_lvl16;

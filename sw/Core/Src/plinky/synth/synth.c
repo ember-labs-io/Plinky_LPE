@@ -146,13 +146,17 @@ void generate_oscs(u8 string_id, Voice* voice) {
 }
 
 static float update_envelope(u8 voice_id, Voice* voice) {
+	u8 mask = 1 << voice_id;
+	float goal_lpg = 0.f;
+
 	// calc goal lpg
-	float sens = param_val_poly(P_ENV_LVL1, voice_id) * (2.f / 65536.f);
-	float goal_lpg = get_string_touch(voice_id)->pres * 1.f / TOUCH_MAX_POS * sens * sens;
-	if (goal_lpg < 0.f)
-		goal_lpg = 0.f;
-	goal_lpg *= goal_lpg;
-	goal_lpg *= 1.f + ((voice->osc[2].pitch - 43000) * (1.f / 65536.f)); // pitch compensation
+	if (string_touched & mask) {
+		float sens = param_val_poly(P_ENV_LVL1, voice_id) * (2.f / 65536.f);
+		goal_lpg = get_string_touch(voice_id)->pres * 1.f / TOUCH_MAX_POS * sens * sens;
+		if (goal_lpg < 0.f)
+			goal_lpg = 0.f;
+		goal_lpg *= 1.f + ((voice->osc[2].pitch - 43000) * (1.f / 65536.f)); // pitch compensation
+	}
 
 	// retrieve envelope
 	bool is_sample_preview = ui_mode == UI_SAMPLE_EDIT;
@@ -161,29 +165,42 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 	const float sustain = is_sample_preview ? 1.f : squaref(param_val_poly(P_SUSTAIN1, voice_id) * (1.f / 65536.f));
 	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(P_RELEASE1, voice_id)));
 
-	u8 mask = 1 << voice_id;
 	float env_lvl = voice->env1_lvl;
 
 	// new touch: start new envelope
 	if (env_trig_mask & mask) {
 		env_lvl *= sustain;
 		voice->env1_decaying = false;
+		voice->env1_peak = goal_lpg;
 		cv_trig_high = true; // send cv trigger
 	}
 
-	float down_slope = goal_lpg ? decay : release; // pick the correct slope
-	if (goal_lpg <= 0.f)                           // no pressure => release phase (aka not decaying)
+	if (goal_lpg <= 0.f) // no pressure => release phase (aka not decaying)
 		voice->env1_decaying = false;
 	else if (voice->env1_decaying) // in decay phase => aim for sustain level
 		goal_lpg *= sustain;
 
 	// apply envelope
-	float attack_threshvol = goal_lpg;
 	float lpg_diff = goal_lpg - env_lvl;
-	lpg_diff *= (lpg_diff > 0.f) ? attack : down_slope; // scale by envelope slope
-	env_lvl += lpg_diff;                                // calc the new env lvl
+	lpg_diff *= (lpg_diff > 0.f) ? attack : goal_lpg ? decay : release;
+	env_lvl += lpg_diff;
+
+	// release phase
+	if (goal_lpg <= 0.f)
+		voice->env1_norm = voice->env1_peak == 0 ? 0 : env_lvl / voice->env1_peak;
+	// decay/sustain phase
+	else if (voice->env1_decaying) {
+		voice->env1_norm = 1;
+		voice->env1_peak = env_lvl;
+	}
+	// attack phase
+	else {
+		voice->env1_norm = env_lvl / goal_lpg;
+		if (goal_lpg > voice->env1_peak)
+			voice->env1_peak = goal_lpg;
+	}
 	// we hit the peak! time to decay
-	if (env_lvl > attack_threshvol * 0.95f)
+	if (env_lvl > goal_lpg * 0.95f)
 		voice->env1_decaying = true;
 	// constrain to max 1.0
 	if (env_lvl > 1.f) {
@@ -430,51 +447,18 @@ void draw_max_pres(void) {
 }
 
 void draw_voices(void) {
-	const static u8 leftOffset = 44;
-	const static u8 maxHeight = 10;
-	const static u8 barWidth = 3;
-	const static float moveSpeed = 5; // pixels per frame
-	static float touchLineHeight[8];
-	static float maxVolume[8];
-	static float volLineHeight[8];
-	u8 rightOffset = latch_on() ? 38 : 14;
-	// all voices
-	for (u8 i = 0; i < 8; i++) {
-		// string volume
-		if (maxVolume[i] != 0) {
-			volLineHeight[i] = voices[i].env1_lvl / maxVolume[i] * maxHeight;
-		}
-		// string pressed
-		if (string_touched & (1 << i)) {
-			// move touch line
-			if (touchLineHeight[i] < maxHeight)
-				touchLineHeight[i] += moveSpeed;
-			if (touchLineHeight[i] > maxHeight)
-				touchLineHeight[i] = maxHeight;
-			// volume line catches up
-			volLineHeight[i] = maxf(volLineHeight[i], touchLineHeight[i]);
-			// remember peak volume
-			maxVolume[i] = voices[i].env1_lvl;
-		}
-		// string not pressed
-		else {
-			if (touchLineHeight[i] > 0)
-				touchLineHeight[i] -= moveSpeed;
-			if (touchLineHeight[i] < 0)
-				touchLineHeight[i] = 0;
-			// has the sound died out?
-			if (maxVolume[i] != 0 && volLineHeight[i] < 0.25) {
-				// disable volume line
-				maxVolume[i] = 0;
-				volLineHeight[i] = 0;
-			}
-		}
-		// draw bars
-		u8 x = i * (OLED_WIDTH - leftOffset - rightOffset) / 8 + leftOffset;
-		if (touchLineHeight[i] > 0) {
-			for (uint8_t dx = 0; dx < barWidth; dx++)
-				vline(x - barWidth / 2 + dx, OLED_HEIGHT - 1 - touchLineHeight[i], OLED_HEIGHT - 1, 2);
-		}
-		hline(x - barWidth / 2, OLED_HEIGHT - 1 - volLineHeight[i], x - barWidth / 2 + barWidth, 1);
+	const static u8 bar_width = 3;
+	const static u8 max_height = 9;
+
+	u8 left_offset = latch_on() ? 42 : 46;
+	u8 bar_spacing = latch_on() ? 6 : 8;
+	for (u8 voice_id = 0; voice_id < NUM_VOICES; voice_id++) {
+		u8 bar_height = clampi(voices[voice_id].env1_norm * max_height, 0, max_height);
+		u8 x = voice_id * bar_spacing + left_offset;
+		if (string_touched & (1 << voice_id))
+			half_rectangle(x, OLED_HEIGHT - bar_height + 1, x + bar_width, OLED_HEIGHT);
+		hline(x, OLED_HEIGHT - bar_height, x + bar_width, 1);
+		hline(x, OLED_HEIGHT - 1 - bar_height, x + bar_width, 1);
+		hline(x, OLED_HEIGHT - 2 - bar_height, x + bar_width, 0);
 	}
 }
