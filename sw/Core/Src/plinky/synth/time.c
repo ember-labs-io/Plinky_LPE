@@ -44,6 +44,12 @@ static u32 ticks_since_cv_pulse = 0;
 static u32 last_cv_pulse_ticks = 0;
 static bool cv_pulse_handled = false;
 
+u32 clock_pos_q16(u16 loop_32nds) {
+	u32 cycle_32nds = (counter_32nds % loop_32nds) << 16;
+	u16 fract = (clock_32nds_q21 & ((1 << 21) - 1)) >> 5;
+	return (cycle_32nds + fract) / loop_32nds;
+}
+
 void trigger_cv_clock(void) {
 	cv_pulse++;
 }

@@ -58,17 +58,18 @@ static float triggy(float pos) {
 	return pos * pos;
 }
 static float eval_trigs(float pos, u32 half_cycle) {
-	return (half_cycle & 1) ? ((pos < 0.5f) ? 0.f : triggy(1.f - pos)) : ((pos < 0.5f) ? triggy(pos) : 0.f);
+	return (half_cycle & 1) == 0 && pos < 0.5f ? triggy(pos) : 0.f;
 }
 static float eval_bi_trigs(float pos, u32 half_cycle) {
-	return (half_cycle & 1) ? ((pos < 0.5f) ? 0.f : -triggy(1.f - pos)) : ((pos < 0.5f) ? triggy(pos) : 0.f);
+	return (half_cycle & 1) == 0 && pos < 0.5f ? (half_cycle >> 1 & 1) ? -triggy(pos) : triggy(pos) : 0.f;
 }
 static float eval_step_noise(float pos, u32 half_cycle) {
-	return rnd_norm(half_cycle);
+	return rnd_norm(half_cycle >> 1);
 }
 static float eval_smooth_noise(float pos, u32 half_cycle) {
-	float n0 = rnd_norm(half_cycle + (half_cycle & 1)), n1 = rnd_norm(half_cycle | 1);
-	return n0 + (n1 - n0) * pos;
+	float n0 = rnd_norm(half_cycle >> 1);
+	float n1 = rnd_norm((half_cycle >> 1) + 1);
+	return n0 + (n1 - n0) * 0.5f * ((half_cycle & 1) ? 2.f - pos : pos);
 }
 
 static float (*lfo_funcs[NUM_LFO_SHAPES])(float pos, u32 half_cycle) = {
@@ -86,7 +87,7 @@ static float (*lfo_funcs[NUM_LFO_SHAPES])(float pos, u32 half_cycle) = {
 };
 
 void update_lfos(void) {
-	static u64 lfo_clock_q32[NUM_LFOS] = {0}; // lfo phase acculumator clock
+	static u64 lfo_clock_q32[NUM_LFOS] = {0}; // lfo phase acculumator clock, counts half(!) lfo cycles in q32
 	static s8 prev_scope_pos[NUM_LFOS] = {0};
 
 	// every 16 frames, lfo_scope_frame increments and data for that frame is cleared
@@ -109,11 +110,24 @@ void update_lfos(void) {
 		apply_lfo_mods(P_A_OFFSET + lfo_page_offset);
 		apply_lfo_mods(P_A_SCALE + lfo_page_offset);
 
-		// resulting lfo rate of this phase diff calculation is roughly 0.037-4913 Hz
 		s32 lfo_rate = param_val(P_A_RATE + lfo_page_offset);
-		u32 phase_diff_q32 = (u32)(table_interp(pitches, 32768 + (lfo_rate >> 1)) * (1 << 24));
-		u32 lfo_clock_q16 = (u32)((lfo_clock_q32[lfo_id] += phase_diff_q32) >> 16);
+		// free running - resulting lfo rate of this phase diff calculation is roughly 0.037-4913 Hz
+		if (lfo_rate <= 0) {
+			u32 phase_diff_q32 = (u32)(table_interp(pitches, -lfo_rate) * (1 << 24));
+			lfo_clock_q32[lfo_id] += phase_diff_q32;
+		}
+		// synced
+		else {
+			u16 step_32nds = sync_divs_32nds[(clampi(lfo_rate, 0, 65535) * NUM_SYNC_DIVS) >> 16];
+			u16 prev_phase_q16 = (lfo_clock_q32[lfo_id] >> 16) & 0xFFFF;
+			u16 new_phase_q16 = clock_pos_q16(step_32nds);
+			// add cycle if the phase rolls over
+			if (new_phase_q16 < prev_phase_q16)
+				lfo_clock_q32[lfo_id] += ((u64)1 << 32);
+			lfo_clock_q32[lfo_id] = (lfo_clock_q32[lfo_id] & 0xFFFFFFFF00000000) | ((u32)new_phase_q16 << 16);
+		}
 		// calc half cycle & position in cycle
+		u32 lfo_clock_q16 = (u32)(lfo_clock_q32[lfo_id] >> 16);
 		float cycle_center = param_val_float(P_A_SYM + lfo_page_offset) * 0.49f + 0.5f; // range [0.01, 0.99]
 		u32 half_cycle = (lfo_clock_q16 >> 16) << 1;
 		float cycle_pos = (lfo_clock_q16 & 65535) * (1.f / 65536.f);

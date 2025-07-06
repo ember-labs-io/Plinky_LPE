@@ -551,6 +551,10 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 			return val_buf;
 		}
 		case P_ARP_CLK_DIV:
+		case P_A_RATE:
+		case P_B_RATE:
+		case P_X_RATE:
+		case P_Y_RATE:
 			if (v < 0) {
 				v = -v;
 				decimal = true;
