@@ -92,11 +92,6 @@ void shift_set_state(ShiftState new_state) {
 		touch_load_item(sys_params.curpreset);
 		break;
 	case SS_LEFT:
-		// if playing, jump to start of pattern
-		if (seq_playing()) {
-			seq_play();
-			cue_clock_reset();
-		}
 		// edit start of sequencer pattern
 		ui_mode = UI_PTN_START;
 		break;
@@ -180,9 +175,17 @@ void shift_release_state(void) {
 			ui_mode = UI_DEFAULT;
 		break;
 	case SS_LEFT:
+		// short left press
 		if (!action_pressed_during_shift && short_press) {
-			// a short press left only steps left in the sequencer when it's not playing
-			if (!seq_playing()) {
+			// while playing and in default UI => reset and play from start
+			if (seq_playing()) {
+				if (prev_ui_mode == UI_DEFAULT) {
+					seq_play();
+					cue_clock_reset();
+				}
+			}
+			// while not playing => step one step to the left
+			else {
 				seq_dec_step();
 				seq_force_play_step();
 				cue_clock_reset();
@@ -193,7 +196,7 @@ void shift_release_state(void) {
 			ui_mode = UI_DEFAULT;
 		break;
 	case SS_RIGHT:
-		// short press right steps the sequencer right one step
+		// short right press => step one step to the right
 		if (!action_pressed_during_shift && short_press) {
 			seq_inc_step();
 			seq_force_play_step();
