@@ -37,6 +37,7 @@ extern SeqFlags seq_flags;
 
 bool seq_playing(void);
 bool seq_recording(void);
+bool seq_step_being_recorded(void);
 SeqState seq_state(void);
 u32 seq_substep(u32 resolution); // ui & params_tick
 

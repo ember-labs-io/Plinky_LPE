@@ -47,6 +47,10 @@ bool seq_recording(void) {
 	return seq_flags.recording;
 }
 
+bool seq_step_being_recorded(void) {
+	return seq_state() == SEQ_STEP_RECORDING && visuals_substep != 0;
+}
+
 SeqState seq_state(void) {
 	if (seq_flags.recording)
 		return seq_flags.playing ? SEQ_LIVE_RECORDING : SEQ_STEP_RECORDING;
@@ -526,10 +530,6 @@ void seq_draw_step_recording(void) {
 	inverted_rectangle(left_offset - 1, y - 1, left_offset + 8 * spacing + 2, y + 8);
 	for (u8 i = 0; i <= 8; i++)
 		vline(i * spacing + left_offset, y, y + 7 - (i & 1) * 3, 2);
-
-	// not recording
-	if (visuals_substep == 0)
-		return;
 
 	// recording into substeps
 	if (visuals_substep <= 8) {

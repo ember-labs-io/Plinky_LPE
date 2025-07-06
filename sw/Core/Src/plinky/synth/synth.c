@@ -446,12 +446,12 @@ void draw_max_pres(void) {
 	vline(127, 32 - (synth_max_pres >> 6), 32, 1);
 }
 
-void draw_voices(void) {
+void draw_voices(bool show_latch) {
 	const static u8 bar_width = 3;
 	const static u8 max_height = 9;
 
-	u8 left_offset = latch_on() ? 42 : 46;
-	u8 bar_spacing = latch_on() ? 6 : 8;
+	u8 left_offset = show_latch ? 42 : 46;
+	u8 bar_spacing = show_latch ? 6 : 8;
 	for (u8 voice_id = 0; voice_id < NUM_VOICES; voice_id++) {
 		u8 bar_height = clampi(voices[voice_id].env1_norm * max_height, 0, max_height);
 		u8 x = voice_id * bar_spacing + left_offset;

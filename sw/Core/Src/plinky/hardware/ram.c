@@ -509,15 +509,23 @@ void draw_sample_id(void) {
 	fdraw_str(-128, 16, F_20_BOLD, cur_sample_id < NUM_SAMPLES ? I_WAVE "%d" : I_WAVE "Off", cur_sample_id + 1);
 }
 
-void draw_flags(void) {
+void draw_arp_flag(void) {
 	gfx_text_color = 0;
-	if (arp_active()) {
+	if (arp_on()) {
 		fill_rectangle(128 - 32, 0, 128 - 17, 8);
 		draw_str(-(128 - 17), -1, F_8, "arp");
+		if (!arp_active())
+			inverted_rectangle(128 - 32, 0, 128 - 17, 8);
 	}
+}
+
+void draw_latch_flag(void) {
+	gfx_text_color = 0;
 	if (latch_on()) {
 		fill_rectangle(128 - 38, 32 - 8, 128 - 17, 32);
 		draw_str(-(128 - 17), 32 - 7, F_8, "latch");
+		if (seq_state() == SEQ_STEP_RECORDING)
+			inverted_rectangle(128 - 38, 32 - 8, 128 - 17, 32);
 	}
 }
 

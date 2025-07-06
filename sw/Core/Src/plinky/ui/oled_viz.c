@@ -172,16 +172,20 @@ static void draw_visuals(void) {
 			draw_sample_playback(&cur_sample_info);
 		else
 			draw_scope();
-		draw_voices();
-		draw_flags();
 		draw_lfos();
 		draw_max_pres();
-		if (draw_cur_param())
-			// if the param is drawn, we skip drawing the preset info
-			return;
-		if (seq_state() == SEQ_STEP_RECORDING)
-			seq_draw_step_recording();
+		if (draw_cur_param()) {
+			draw_voices(false);
+			return; // this fills the rest of the display
+		}
 		draw_preset_info();
+		draw_voices(latch_on());
+		draw_latch_flag();
+		if (seq_step_being_recorded()) {
+			seq_draw_step_recording();
+			return;
+		}
+		draw_arp_flag();
 		break;
 	case UI_EDITING_A:
 	case UI_EDITING_B:
