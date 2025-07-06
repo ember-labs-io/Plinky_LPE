@@ -271,7 +271,7 @@ void generate_string_touches(void) {
 		env_trig_mask = (string_touched_no_arp & ~string_touched_no_arp_1back);
 
 		// new (virtual) touch: restart arp
-		if (arp_on() && string_touched_no_arp && !string_touched_no_arp_1back) {
+		if (arp_active() && string_touched_no_arp && !string_touched_no_arp_1back) {
 			arp_reset();
 			// if the sequencer is not playing, reset the clock so the arp gets a trigger
 			if (!seq_playing())
@@ -283,7 +283,7 @@ void generate_string_touches(void) {
 	do_second_half = !do_second_half;
 
 	// arp
-	if (arp_on() && ui_mode != UI_SAMPLE_EDIT) {
+	if (arp_active()) {
 		string_touched = arp_tick(string_touched_no_arp);
 		// force-remove touches from strings not selected by arp
 		for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)

@@ -86,10 +86,15 @@ bool pattern_outdated(void) {
 static bool sample_outdated(void) {
 	return cur_sample_id != ram_sample_id;
 }
-
+// is the arp turned on in the preset?
 bool arp_on(void) {
 	return cur_preset.flags & FLAG_ARP;
 }
+// is the arp actively being executed?
+bool arp_active(void) {
+	return arp_on() && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
+}
+
 void save_arp(bool on) {
 	if (on)
 		cur_preset.flags |= FLAG_ARP;
@@ -506,7 +511,7 @@ void draw_sample_id(void) {
 
 void draw_flags(void) {
 	gfx_text_color = 0;
-	if (arp_on()) {
+	if (arp_active()) {
 		fill_rectangle(128 - 32, 0, 128 - 17, 8);
 		draw_str(-(128 - 17), -1, F_8, "arp");
 	}

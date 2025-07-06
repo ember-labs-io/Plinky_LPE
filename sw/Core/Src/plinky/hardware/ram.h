@@ -16,6 +16,7 @@ bool pattern_outdated(void);
 
 // fake params
 bool arp_on(void);
+bool arp_active(void);
 void save_arp(bool on);
 bool latch_on(void);
 void save_latch(bool on);
