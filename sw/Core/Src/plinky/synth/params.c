@@ -282,6 +282,10 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 		}
 		return;
 	}
+	// rj: this is a bit of a hacky way to make sure the tempo is not saved to a value lower than 30bpm
+	// I'm leaving it like this until the parameter system is rewritten to more elegantly support parameter limits
+	if (param_id == P_TEMPO && mod_src == SRC_BASE)
+		data = maxi(data, -768);
 	// edit gets discarded if previous change isn't saved yet
 	if (!update_preset_ram(false))
 		return;

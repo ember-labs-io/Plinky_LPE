@@ -278,7 +278,7 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		k_target_delaytime =
 		    sync_divs_32nds[clampi((-k_target_delaytime * 13) >> 16, 0, 12)]; // results in a number 1-32
 		// figure out how samples we can have, max, in a beat synced scenario
-		int max_delay = (32000 * 600 * 4) / (maxi(150, bpm_10x));
+		int max_delay = 32000 * 600 * 4 / bpm_10x;
 		while (max_delay > DL_SIZE_MASK - 64)
 			max_delay >>= 1;
 		k_target_delaytime = (max_delay * k_target_delaytime) >> 5;
