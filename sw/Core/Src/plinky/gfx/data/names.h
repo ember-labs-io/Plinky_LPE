@@ -29,7 +29,7 @@ const static char* const param_names[NUM_PARAMS] = {
     [P_DECAY2] = I_ADSR_D "Decay2",
     [P_SUSTAIN2] = I_ADSR_S "Sustain2",
     [P_RELEASE2] = I_ADSR_R "Release2",
-    [P_SWING] = I_TEMPO "Swing",
+    [P_SWING] = "Swing",
 
     [P_ENV_LVL1] = I_TOUCH "Sensitivity",
     [P_DISTORTION] = I_DISTORT "Distort",

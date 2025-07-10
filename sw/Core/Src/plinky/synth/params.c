@@ -681,14 +681,15 @@ bool draw_cur_param(void) {
 	// manual page name overrides
 	switch (draw_param) {
 	case P_TEMPO:
-		page_name = I_TEMPO "Tap";
+	case P_SWING:
+		page_name = I_TEMPO "Clock";
 		break;
 	case P_NOISE:
-		page_name = I_WAVE "noise";
+		page_name = I_WAVE "Noise";
 		break;
 	case P_CV_QUANT:
 	case P_VOLUME:
-		page_name = "system";
+		page_name = "System";
 		break;
 	default:
 		break;
