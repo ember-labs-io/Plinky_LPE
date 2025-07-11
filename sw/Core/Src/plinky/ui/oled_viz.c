@@ -141,8 +141,9 @@ static void draw_preset_info(void) {
 		xtab = draw_high_note();
 	if (!xtab)
 		xtab = draw_preset_id();
-	// always draw preset name, to the right of the top-left item
-	draw_preset_name(xtab);
+	// step recording fills the center of the screen
+	if (seq_state() != SEQ_STEP_RECORDING)
+		draw_preset_name(xtab);
 	// bottom left priority: cued pattern, current pattern
 	xtab = draw_cued_pattern_id(arp_on());
 	if (!xtab)
@@ -178,6 +179,8 @@ static void draw_visuals(void) {
 		if (draw_cur_param())
 			// if the param is drawn, we skip drawing the preset info
 			return;
+		if (seq_state() == SEQ_STEP_RECORDING)
+			seq_draw_step_recording();
 		draw_preset_info();
 		break;
 	case UI_EDITING_A:

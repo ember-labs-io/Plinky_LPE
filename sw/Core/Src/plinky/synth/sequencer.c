@@ -35,6 +35,7 @@ static u64 random_steps_avail = 0; // bitmask of unplayed steps in random modes
 
 // recording
 static u8 last_edited_step_global = 255;
+static u8 visuals_substep = 0;
 
 // == SEQ INFO == //
 
@@ -281,6 +282,7 @@ void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_incre
 		if (cur_seq_step != last_seen_step) {
 			last_seen_step = cur_seq_step;
 			string_recording = 0;
+			visuals_substep = 0;
 		}
 		// new substep => increase substep counter and reset recording flags
 		if (substep != last_seen_substep) {
@@ -293,6 +295,12 @@ void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_incre
 						record_to_substep[s_id] = 9 - (record_to_substep[s_id] & 1); // toggle between 8 and 9
 				}
 			substep_recorded = 0;
+			// visuals
+			if (string_recording) {
+				visuals_substep++;
+				if (visuals_substep == 24)
+					visuals_substep = 8;
+			}
 		}
 	}
 	else {
@@ -318,6 +326,9 @@ void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_incre
 				string_recording |= mask;
 				record_to_substep[string_id] = 0;
 				rec_substep(string_step, 0, seq_pres, seq_pos);
+				// align clock
+				clock_reset();
+				ticks_since_step = 0;
 			}
 			// we are recording and we havent written this substep yet => record
 			else if ((substep_recorded & mask) == 0) {
@@ -387,6 +398,7 @@ void seq_end_previewing(void) {
 // toggle recording
 void seq_toggle_rec(void) {
 	seq_flags.recording = !seq_flags.recording;
+	visuals_substep = 0; // a mode change resets the step record visuals
 }
 
 // sequencer will stop playing at the end of the current step
@@ -402,6 +414,7 @@ void seq_stop(void) {
 	seq_flags.playing = false;
 	seq_flags.stop_at_next_step = false;
 	c_step.play_step = false;
+	visuals_substep = 0; // a mode change resets the step record visuals
 	apply_cued_changes();
 }
 
@@ -478,6 +491,66 @@ void seq_ptn_start_visuals(void) {
 void seq_ptn_end_visuals(void) {
 	fdraw_str(0, 0, F_20_BOLD, I_NEXT "End %d", ((cur_seq_start + cur_preset.seq_len) & 63) + 1);
 	fdraw_str(0, 16, F_20_BOLD, I_INTERVAL "Length %d", cur_preset.seq_len);
+}
+
+static void draw_pres_substep(u8 id, u8 y, u8 draw_style) {
+	u8 x = 43 + id * 8 + 2;
+	switch (draw_style) {
+	case 1:
+		fill_rectangle(x, y, x + 5, y + 3);
+		break;
+	case 2:
+		half_rectangle(x, y, x + 5, y + 3);
+		break;
+	}
+}
+
+static void draw_pos_substep(u8 id, u8 y, u8 draw_style) {
+	u8 x = 43 + id * 16 + 2;
+	switch (draw_style) {
+	case 1:
+		fill_rectangle(x, y + 4, x + 13, y + 7);
+		break;
+	case 2:
+		half_rectangle(x, y + 4, x + 13, y + 7);
+		break;
+	}
+}
+
+void seq_draw_step_recording(void) {
+	const static u8 y = 2;
+	const static u8 spacing = 8;
+	const static u8 left_offset = 43;
+
+	fill_rectangle(left_offset - 1, y - 1, left_offset + 8 * spacing + 2, y + 8);
+	inverted_rectangle(left_offset - 1, y - 1, left_offset + 8 * spacing + 2, y + 8);
+	for (u8 i = 0; i <= 8; i++)
+		vline(i * spacing + left_offset, y, y + 7 - (i & 1) * 3, 2);
+
+	// not recording
+	if (visuals_substep == 0)
+		return;
+
+	// recording into substeps
+	if (visuals_substep <= 8) {
+		for (u8 i = 0; i < visuals_substep; i++)
+			draw_pres_substep(i, y, 1);
+		u8 pos_substeps = (visuals_substep + 1) / 2;
+		for (u8 i = 0; i < pos_substeps; i++)
+			draw_pos_substep(i, y, 1);
+		return;
+	}
+
+	// recording into last substep, substeps are being pushed back
+	for (u8 i = 0; i < 8; i++) {
+		u8 draw_style =
+		    (visuals_substep <= 16 && i < 16 - visuals_substep) || (visuals_substep > 16 && i >= 24 - visuals_substep)
+		        ? 1
+		        : 2;
+		draw_pres_substep(i, y, draw_style);
+		if ((i & 1) == 0)
+			draw_pos_substep(i / 2, y, draw_style);
+	}
 }
 
 u8 seq_led(u8 x, u8 y, u8 sync_pulse) {
