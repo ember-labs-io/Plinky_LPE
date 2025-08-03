@@ -8,6 +8,8 @@
 #include "params.h"
 #include "time.h"
 
+#define LFO_SCOPE_FRAMES 16
+
 s32 param_with_lfo[NUM_PARAMS];
 
 static s32 lfo_cur[NUM_LFOS];

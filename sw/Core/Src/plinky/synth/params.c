@@ -1,7 +1,5 @@
 #include "params.h"
 #include "data/tables.h"
-#include "gfx/data/icons.h"
-#include "gfx/data/names.h"
 #include "gfx/gfx.h"
 #include "hardware/accelerometer.h"
 #include "hardware/adc_dac.h"
@@ -9,14 +7,12 @@
 #include "hardware/leds.h"
 #include "hardware/ram.h"
 #include "lfos.h"
-#include "pitch_tools.h"
-#include "sequencer.h"
+#include "param_defs.h"
 #include "strings.h"
 #include "synth.h"
 #include "time.h"
 #include "ui/oled_viz.h"
 #include "ui/pad_actions.h"
-#include "ui/shift_states.h"
 
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
 
@@ -78,6 +74,10 @@ static void toggle_latch(void) {
 }
 
 // == HELPERS == //
+
+const Preset* init_params_ptr() {
+	return &init_params;
+}
 
 Param get_recent_param(void) {
 	return EDITING_PARAM ? selected_param : mem_param;
@@ -337,7 +337,7 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 	if (smoothed_value > 0.f && left_strip_start < 0)
 		smoothed_value = 0.f;
 	// value stops exactly halfway when crossing center
-	bool notch_at_50 = (selected_param == P_SMP_SPEED || selected_param == P_SMP_STRETCH);
+	bool notch_at_50 = (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
 	if (notch_at_50) {
 		if (smoothed_value < HALF_PARAM_SIZE && left_strip_start > HALF_PARAM_SIZE)
 			smoothed_value = HALF_PARAM_SIZE;
@@ -367,10 +367,10 @@ bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 	// parameters that do something the moment they are pressed
 	if (is_press_start) {
 		switch (selected_param) {
-		case P_ARP_TOGGLE:
+		case P_ARP_TGL:
 			toggle_arp();
 			break;
-		case P_LATCH_TOGGLE:
+		case P_LATCH_TGL:
 			toggle_latch();
 			break;
 		case P_TEMPO:
@@ -411,7 +411,7 @@ void enter_param_edit_mode(bool mode_a) {
 // this gets triggered when an A / B shift state pad gets released
 void try_exit_param_edit_mode(bool param_select) {
 	// arp & latch are fake params => exit on shift state release and don't remember the param
-	if (selected_param == P_ARP_TOGGLE || selected_param == P_LATCH_TOGGLE) {
+	if (selected_param == P_ARP_TGL || selected_param == P_LATCH_TGL) {
 		selected_param = NUM_PARAMS;
 		selected_mod_src = 0;
 		return;
@@ -491,9 +491,9 @@ void hold_encoder_for_params(u16 duration) {
 }
 
 void check_param_toggles(Param param_id) {
-	if (param_id == P_ARP_TOGGLE)
+	if (param_id == P_ARP_TGL)
 		toggle_arp();
-	else if (param_id == P_LATCH_TOGGLE)
+	else if (param_id == P_LATCH_TGL)
 		toggle_latch();
 }
 
@@ -501,11 +501,11 @@ void check_param_toggles(Param param_id) {
 
 void set_param_from_cc(Param param_id, u16 value) {
 	// toggles
-	if (param_id == P_ARP_TOGGLE) {
+	if (param_id == P_ARP_TGL) {
 		set_arp((bool)(value & (1 << 14)));
 		return;
 	}
-	if (param_id == P_LATCH_TOGGLE) {
+	if (param_id == P_LATCH_TGL) {
 		set_latch((bool)(value & (1 << 14)));
 		return;
 	}
@@ -529,14 +529,14 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 	if (mod == SRC_BASE)
 		switch (p) {
 		case P_SMP_STRETCH:
-		case P_SMP_SPEED:
+		case P_PLAY_SPD:
 			displaymax = 2000;
 			break;
-		case P_ARP_TOGGLE:
+		case P_ARP_TGL:
 			if (mod)
 				return "";
 			return arp_on() ? "On" : "Off";
-		case P_LATCH_TOGGLE:
+		case P_LATCH_TGL:
 			if (mod)
 				return "";
 			return latch_on() ? "On" : "Off";
@@ -584,18 +584,18 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 			return val_buf;
 		}
 		case P_ARP_ORDER:
-			return arp_modenames[clampi(vscale, 0, NUM_ARP_ORDERS - 1)];
+			return arm_mode_name[clampi(vscale, 0, NUM_ARP_ORDERS - 1)];
 		case P_SEQ_ORDER:
-			return seqmodenames[clampi(vscale, 0, NUM_SEQ_ORDERS - 1)];
+			return seq_mode_name[clampi(vscale, 0, NUM_SEQ_ORDERS - 1)];
 		case P_CV_QUANT:
-			return cvquantnames[clampi(vscale, 0, CVQ_LAST - 1)];
+			return cv_quant_name[clampi(vscale, 0, NUM_CV_QUANT_TYPES - 1)];
 		case P_SCALE:
-			return scalenames[clampi(vscale, 0, NUM_SCALES - 1)];
+			return scale_name[clampi(vscale, 0, NUM_SCALES - 1)];
 		case P_A_SHAPE:
 		case P_B_SHAPE:
 		case P_X_SHAPE:
 		case P_Y_SHAPE:
-			return lfo_names[clampi(vscale, 0, NUM_LFO_SHAPES - 1)];
+			return lfo_shape_name[clampi(vscale, 0, NUM_LFO_SHAPES - 1)];
 		case P_PITCH:
 		case P_INTERVAL:
 			displaymax = 120;
@@ -667,7 +667,7 @@ bool draw_cur_param(void) {
 			draw_param = param_snap;
 		else {
 			// not editing => ask for param
-			draw_str(0, 0, F_20_BOLD, mod_names[src_snap]);
+			draw_str(0, 0, F_20_BOLD, mod_src_name[src_snap]);
 			draw_str(0, 16, F_16, "select parameter");
 			return true;
 		}
@@ -681,7 +681,7 @@ bool draw_cur_param(void) {
 	// draw with upper shadow
 	gfx_text_color = 2;
 
-	const char* page_name = param_page_names[draw_param / 6];
+	const char* page_name = param_row_name[draw_param / 6];
 	// manual page name overrides
 	switch (draw_param) {
 	case P_TEMPO:
@@ -700,13 +700,13 @@ bool draw_cur_param(void) {
 	}
 
 	// draw page name, or mod source if one is selected
-	draw_str(0, 0, F_12, src_snap == SRC_BASE ? page_name : mod_names[src_snap]);
+	draw_str(0, 0, F_12, src_snap == SRC_BASE ? page_name : mod_src_name[src_snap]);
 	// draw param name
-	const char* param_name = param_names[draw_param];
-	if (str_width(F_16_BOLD, param_name) > 64)
-		draw_str(0, 20, F_12_BOLD, param_name);
+	const char* p_name = param_name[draw_param];
+	if (str_width(F_16_BOLD, p_name) > 64)
+		draw_str(0, 20, F_12_BOLD, p_name);
 	else
-		draw_str(0, 16, F_16_BOLD, param_name);
+		draw_str(0, 16, F_16_BOLD, p_name);
 
 	char val_buf[32];
 	u8 width = 0;
@@ -788,9 +788,9 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 		if (pAorB == param_snap)
 			k = pulse;
 		// fake params
-		if (pAorB == P_ARP_TOGGLE)
+		if (pAorB == P_ARP_TGL)
 			k = arp_on() ? 255 : 0;
-		else if (pAorB == P_LATCH_TOGGLE)
+		else if (pAorB == P_LATCH_TGL)
 			k = latch_on() ? 255 : 0;
 	}
 	else {

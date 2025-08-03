@@ -1,21 +1,13 @@
 #include "synth.h"
-#include "audio.h"
+#include "arp.h"
 #include "audio_tools.h"
 #include "data/tables.h"
 #include "gfx/gfx.h"
 #include "hardware/adc_dac.h"
-#include "hardware/midi.h"
-#include "hardware/midi_defs.h"
 #include "hardware/ram.h"
-#include "hardware/touchstrips.h"
-#include "params.h"
 #include "pitch_tools.h"
 #include "sampler.h"
 #include "strings.h"
-#include "synth/arp.h"
-#include "testing/tick_counter.h"
-#include "time.h"
-#include "ui/oled_viz.h"
 
 Voice voices[NUM_VOICES];
 

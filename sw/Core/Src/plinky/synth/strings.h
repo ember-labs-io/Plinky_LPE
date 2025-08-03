@@ -1,5 +1,4 @@
 #pragma once
-#include "synth.h"
 #include "utils.h"
 
 // Strings in plinky are the virtual equivalent of touchstrips. Touchstrips can only register physical touches from the

@@ -1,10 +1,7 @@
 #pragma once
-#include "gfx/gfx.h"
 #include "utils.h"
 
 // this manages drawing visuals on the oled display
-
-const char* note_name(int note);
 
 void flash_message(Font fnt, const char* msg, const char* submsg);
 void flash_parameter(u8 param_id);

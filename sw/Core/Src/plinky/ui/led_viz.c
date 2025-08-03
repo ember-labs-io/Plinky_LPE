@@ -2,11 +2,10 @@
 #include "hardware/adc_dac.h"
 #include "hardware/leds.h"
 #include "hardware/ram.h"
-#include "synth/arp.h"
-#include "synth/params.h"
 #include "synth/pitch_tools.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
+#include "synth/strings.h"
 #include "ui/shift_states.h"
 
 static u8 pulse_half;

@@ -1,9 +1,6 @@
 #include "arp.h"
 #include "conditional_step.h"
 #include "data/tables.h"
-#include "hardware/ram.h"
-#include "params.h"
-#include "sequencer.h"
 #include "strings.h"
 #include "time.h"
 
@@ -241,7 +238,7 @@ u8 arp_tick(u8 string_touch_mask) {
 		// swing
 		u32 swing_param = abs(param_val(P_SWING));
 		if (swing_param) {
-			float swing_factor = swing_param * max_swing / (1 << 16);
+			float swing_factor = swing_param * MAX_SWING / (1 << 16);
 			clock_diff *= 1 + (first_swing_note ? swing_factor : -swing_factor);
 		}
 		// accumulator clock

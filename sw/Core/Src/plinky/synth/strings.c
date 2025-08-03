@@ -1,18 +1,14 @@
 #include "strings.h"
-#include "data/tables.h"
-#include "gfx/gfx.h"
+#include "arp.h"
 #include "hardware/adc_dac.h"
 #include "hardware/midi.h"
-#include "hardware/midi_defs.h"
 #include "hardware/ram.h"
 #include "hardware/touchstrips.h"
+#include "params.h"
 #include "pitch_tools.h"
 #include "sequencer.h"
-#include "synth/arp.h"
-#include "synth/sequencer.h"
-#include "synth/time.h"
-#include "ui/pad_actions.h"
-#include "ui/shift_states.h"
+#include "synth.h"
+#include "time.h"
 
 // current frame in string_touch
 static u8 strings_write_frame;

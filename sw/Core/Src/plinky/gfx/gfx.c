@@ -1,7 +1,4 @@
 #include "gfx.h"
-#include "data/fonts.h"
-#include "data/icons.h"
-#include "data/names.h"
 
 u8 gfx_text_color = 1;
 
@@ -157,7 +154,7 @@ void inverted_rectangle(int x1, int y1, int x2, int y2) {
 // ICONS
 
 int draw_icon(int x, int y, unsigned char c, int text_color) {
-	if (x <= -16 || x >= 128 || y <= -16 || y >= 32 || c >= num_icons)
+	if (x <= -16 || x >= 128 || y <= -16 || y >= 32 || c >= NUM_ICONS)
 		return 20;
 	const u16* data = icons[c];
 	u8* dst = oled_buffer() + x;

@@ -3,8 +3,32 @@
 #include "gfx/gfx.h"
 #include "ram.h"
 #include "synth/audio.h"
-#include "synth/param_defs.h"
+#include "synth/params.h"
 #include "touchstrips.h"
+
+typedef struct PageFooter {
+	u8 idx; // preset 0-31, pattern (quarters!) 32-127, sample 128-136, blank=0xff
+	u8 version;
+	u16 crc;
+	u32 seq;
+} PageFooter;
+static_assert(sizeof(Preset) + sizeof(SysParams) + sizeof(PageFooter) <= 2048, "?");
+static_assert(sizeof(PatternQuarter) + sizeof(SysParams) + sizeof(PageFooter) <= 2048, "?");
+static_assert(sizeof(SampleInfo) + sizeof(SysParams) + sizeof(PageFooter) <= 2048, "?");
+
+typedef struct FlashPage {
+	union {
+		u8 raw[FLASH_PAGE_SIZE - sizeof(SysParams) - sizeof(PageFooter)];
+		Preset preset;
+		PatternQuarter pattern_quarter;
+		SampleInfo sample_info;
+	};
+	SysParams sys_params;
+	PageFooter footer;
+} FlashPage;
+static_assert(sizeof(FlashPage) == 2048, "?");
+
+#define FLASH_ADDR_256 (0x08000000 + 256 * FLASH_PAGE_SIZE)
 
 const static u64 MAGIC = 0xf00dcafe473ff02a;
 const static u8 CALIB_PAGE = 255;
@@ -30,12 +54,12 @@ static FlashPage* flash_page_ptr(u8 page) {
 	return (FlashPage*)(FLASH_ADDR_256 + page * FLASH_PAGE_SIZE);
 }
 
-Preset* preset_flash_ptr(u8 preset_id) {
+const Preset* preset_flash_ptr(u8 preset_id) {
 	if (preset_id >= NUM_PRESETS)
-		return (Preset*)&init_params;
+		return init_params_ptr();
 	FlashPage* fp = flash_page_ptr(latest_page_id[preset_id]);
 	if (fp->footer.idx != preset_id || fp->footer.version != CUR_PRESET_VERSION)
-		return (Preset*)&init_params;
+		return init_params_ptr();
 	return (Preset*)fp;
 }
 
@@ -230,7 +254,7 @@ void flash_erase_page(u8 page) {
 	CLEAR_BIT(FLASH->CR, (FLASH_CR_PER | FLASH_CR_PNB));
 }
 
-void flash_write_block(void* dst, void* src, int size) {
+void flash_write_block(void* dst, const void* src, int size) {
 	u64* s = (u64*)src;
 	volatile u64* d = (volatile u64*)dst;
 	while (size >= 8) {
@@ -239,7 +263,7 @@ void flash_write_block(void* dst, void* src, int size) {
 	}
 }
 
-void flash_write_page(void* src, u32 size, u8 page_id) {
+void flash_write_page(const void* src, u32 size, u8 page_id) {
 	flash_busy = true;
 	HAL_FLASH_Unlock();
 	bool in_use;

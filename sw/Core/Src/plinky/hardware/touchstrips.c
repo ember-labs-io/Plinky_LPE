@@ -1,11 +1,9 @@
 #include "touchstrips.h"
-#include "encoder.h"
+#include "flash.h"
 #include "gfx/gfx.h"
 #include "leds.h"
 #include "sensor_defs.h"
 #include "synth/audio.h"
-#include "synth/sampler.h"
-#include "synth/time.h"
 #include "ui/pad_actions.h"
 #include "ui/shift_states.h"
 

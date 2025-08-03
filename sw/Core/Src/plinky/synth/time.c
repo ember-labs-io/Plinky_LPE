@@ -1,11 +1,9 @@
 #include "time.h"
+#include "hardware/adc_dac.h"
 #include "hardware/midi.h"
 #include "params.h"
 #include "sequencer.h"
 #include "ui/oled_viz.h"
-
-#define MAX_BPM_10X 2400
-#define MIN_BPM_10X 300
 
 #define SAMPLE_RATE 31250
 #define SYNC_DIVS_LCM 3840 // Least common multiple of all possible sync divisions
@@ -44,7 +42,7 @@ static u32 last_cv_pulse_ticks = 0;
 static bool cv_pulse_handled = false;
 
 // swing
-static u32 const max_swing_q21 = (u32)(max_swing * (1 << 21));
+static u32 const max_swing_q21 = (u32)(MAX_SWING * (1 << 21));
 static s32 cur_32nd_start_q21;
 static u32 length_32nd_q21;
 

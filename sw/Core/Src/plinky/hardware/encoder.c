@@ -1,11 +1,7 @@
 #include "encoder.h"
-#include "gfx/data/icons.h"
-#include "gfx/gfx.h"
 #include "hardware/ram.h"
 #include "synth/params.h"
 #include "synth/sampler.h"
-#include "ui/oled_viz.h"
-#include "ui/pad_actions.h"
 
 volatile s8 encoder_value = 0;
 volatile bool encoder_pressed = false;

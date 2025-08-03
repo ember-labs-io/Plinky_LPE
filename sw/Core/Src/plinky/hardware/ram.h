@@ -1,5 +1,4 @@
 #pragma once
-#include "mem_defs.h"
 #include "utils.h"
 
 // this module manages the preset, pattern quarters, SampleInfo and SysParams that are curently loaded into ram
@@ -41,7 +40,7 @@ void touch_load_item(u8 item_id);
 void clear_load_item(void);
 void copy_load_item(u8 item_id);
 bool apply_cued_load_items(void);
-void cue_ram_item(u8 item_id);
+void cue_ram_item(u8 item_id, u8 long_press_pad);
 void try_apply_cued_ram_item(u8 item_id);
 
 // visuals

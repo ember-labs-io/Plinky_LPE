@@ -3,6 +3,8 @@
 
 extern I2C_HandleTypeDef hi2c2;
 
+#define OLED_BUFFER_SIZE OLED_HEIGHT / 8 * OLED_WIDTH + 1 // first byte is always 0x40
+
 // SSD130x display utilities
 
 #define SSD130X_SETLOWCOLUMN 0x00

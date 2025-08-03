@@ -1,9 +1,10 @@
 #pragma once
-#include "param_defs.h"
+#include "utils.h"
 
 // this module deals with selecting parameters, editing their values, and applying mod-source modulations to them
 
 // helpers
+const Preset* init_params_ptr();
 Param get_recent_param(void);
 bool strip_available_for_synth(u8 strip_id);
 void params_update_touch_pointers(void);

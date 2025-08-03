@@ -1,25 +1,15 @@
 #include "oled_viz.h"
-#include "gfx/data/logo.h"
-#include "gfx/data/names.h"
+#include "gfx/gfx.h"
 #include "hardware/ram.h"
+#include "pad_actions.h"
+#include "shift_states.h"
+#include "synth/lfos.h"
+#include "synth/params.h"
 #include "synth/sampler.h"
-#include "ui/pad_actions.h"
-#include "ui/shift_states.h"
+#include "synth/sequencer.h"
+#include "synth/synth.h"
 
 // == TOOLS == //
-
-const char* note_name(int note) {
-	note += 12;
-	if (note < 0 || note > 8 * 12)
-		return "";
-	static char buf[4];
-	int octave = note / 12;
-	note -= octave * 12;
-	buf[0] = "CCDDEFFGGAAB"[note];
-	buf[1] = " + +  + + + "[note];
-	buf[2] = '0' + octave;
-	return buf;
-}
 
 #define RND(y) dither[(i & 3) + ((i / 128 + y) & 3) * 4]
 
@@ -69,7 +59,7 @@ void flash_message(Font fnt, const char* msg, const char* submsg) {
 }
 
 void flash_parameter(u8 param_id) {
-	flash_message(F_20_BOLD, param_names[param_id], param_page_names[param_id / 6]);
+	flash_message(F_20_BOLD, param_name[param_id], param_row_name[param_id / 6]);
 }
 
 static bool draw_message(void) {

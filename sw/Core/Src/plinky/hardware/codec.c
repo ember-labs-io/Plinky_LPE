@@ -1,5 +1,4 @@
 #include "codec.h"
-#include "synth/time.h"
 
 extern I2C_HandleTypeDef hi2c2;
 extern SAI_HandleTypeDef hsai_BlockB1;

@@ -1,36 +1,6 @@
 #pragma once
 #include "utils.h"
 
-typedef struct SeqFlags {
-	bool playing : 1;
-	bool recording : 1;
-	bool previewing : 1;
-	bool playing_backwards : 1;
-	bool stop_at_next_step : 1;
-	bool first_pulse : 1;
-	bool force_next_step : 1;
-	bool unused : 1;
-} SeqFlags;
-
-typedef enum SeqState {
-	SEQ_IDLE,
-	SEQ_PLAYING,
-	SEQ_FINISHING_STEP,
-	SEQ_PREVIEWING,
-	SEQ_LIVE_RECORDING,
-	SEQ_STEP_RECORDING,
-} SeqState;
-
-typedef enum SeqOrder {
-	SEQ_ORD_PAUSE,
-	SEQ_ORD_FWD,
-	SEQ_ORD_BACK,
-	SEQ_ORD_PINGPONG,
-	SEQ_ORD_PINGPONG_REP,
-	SEQ_ORD_RANDOM,
-	NUM_SEQ_ORDERS,
-} SeqOrder;
-
 extern SeqFlags seq_flags;
 
 // == SEQ INFO == //

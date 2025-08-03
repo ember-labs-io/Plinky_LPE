@@ -1,5 +1,4 @@
 #pragma once
-#include "synth/params.h"
 #include "utils.h"
 
 // Any non-synth functionality on the main 8 x 8 grid of pads is called a pad action. This includes selecting parameters

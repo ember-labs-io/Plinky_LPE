@@ -7,6 +7,7 @@
 #endif
 
 // core libraries
+#include <assert.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -33,22 +34,8 @@ typedef char bool;
 #endif
 
 // basic plinky info
+#include "defs.h"
 #include "plinky.h"
-
-// basic defines
-#define NUM_STRINGS 8
-
-// custom typedefs
-
-typedef struct Touch {
-	s16 pres;
-	u16 pos;
-} Touch;
-
-typedef struct ValueSmoother {
-	float y1;
-	float y2;
-} ValueSmoother;
 
 // time
 #define RDTSC() (DWT->CYCCNT)

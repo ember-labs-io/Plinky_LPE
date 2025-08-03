@@ -1,9 +1,5 @@
 #pragma once
-#include "midi_defs.h"
-#include "synth/params.h"
 #include "utils.h"
-
-#define NUM_MIDI_CHANNELS 16
 
 extern u8 midi_chan_pressure[NUM_MIDI_CHANNELS];
 extern s16 midi_chan_pitchbend[NUM_MIDI_CHANNELS];

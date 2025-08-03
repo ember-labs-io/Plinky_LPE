@@ -1,26 +1,7 @@
 #pragma once
-#include "param_defs.h"
 #include "utils.h"
 
 // mod sources A, B, X and Y are referred to as (complex) lfos
-
-#define NUM_LFOS 4
-#define LFO_SCOPE_FRAMES 16
-
-typedef enum LfoShape {
-	LFO_TRI,
-	LFO_SIN,
-	LFO_SMOOTH_RAND,
-	LFO_STEP_RAND,
-	LFO_BI_SQUARE,
-	LFO_SQUARE,
-	LFO_CASTLE,
-	LFO_SAW,
-	LFO_BI_TRIGS,
-	LFO_TRIGS,
-	LFO_ENV,
-	NUM_LFO_SHAPES,
-} LfoShape;
 
 extern s32 param_with_lfo[NUM_PARAMS];
 

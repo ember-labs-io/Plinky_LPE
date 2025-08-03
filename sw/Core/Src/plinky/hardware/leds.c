@@ -31,7 +31,7 @@ const static u32 OutputEnableBits[5] = {(1 << (N4 * 2)), (1 << (N3 * 2)), (1 << 
 #define SET_ALL_PINS_BITS ((1 << N1) | (1 << N2) | (1 << N3) | (1 << N4) | (1 << N5))
 #define RESET_ALL_PINS_BITS (((1 << N1) | (1 << N2) | (1 << N3) | (1 << N4) | (1 << N5)) << 16)
 
-u8 leds[LED_COLS][LED_COL_HEIGHT];
+u8 leds[NUM_TOUCHSTRIPS][PADS_PER_STRIP];
 static u8 active_column = 0;
 
 void leds_init(void) {

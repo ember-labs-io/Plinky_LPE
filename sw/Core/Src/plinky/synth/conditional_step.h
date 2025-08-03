@@ -1,19 +1,10 @@
 #pragma once
-#include "arp.h"
 #include "params.h"
 #include "utils.h"
 
 // conditional steps are used by the arpeggiator and the sequencer
 // a conditional step can either advance or not advance in the sequence, and can either play or not play, based on the
 // chance and euclid len parameters
-
-typedef struct ConditionalStep {
-	s8 euclid_len;
-	u8 euclid_trigs;
-	s32 density;
-	bool play_step;
-	bool advance_step;
-} ConditionalStep;
 
 static void do_conditional_step(ConditionalStep* c_step, bool chord_mode) {
 	u8 len_abs = abs(c_step->euclid_len);                            // max 64

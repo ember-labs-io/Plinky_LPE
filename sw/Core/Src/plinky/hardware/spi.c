@@ -4,6 +4,7 @@
 
 extern SPI_HandleTypeDef hspi2;
 
+#define MAX_SPI_STATE 32
 #define CHECK_RV(spi_rv, msg)                                                                                          \
 	if (spi_rv != 0)                                                                                                   \
 		DebugLog("SPI ERROR %d " msg "\r\n", spi_rv);
@@ -151,7 +152,7 @@ again:
 	spi_set_chip(addr);
 	spi_assert_cs();
 
-	setup_spi_alex_dma((u32)spi_bit_tx, (u32)(grain_buf + start), len * 2);
+	setup_spi_alex_dma((u32)spi_bit_tx, (u32)(grain_buf_ptr() + start), len * 2);
 
 	return 0;
 }

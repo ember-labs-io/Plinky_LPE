@@ -2,24 +2,28 @@
 #include "audio.h"
 #include "audio_tools.h"
 #include "data/tables.h"
-#include "gfx/data/icons.h"
 #include "gfx/gfx.h"
-#include "hardware/adc_dac.h"
-#include "hardware/flash.h"
 #include "hardware/leds.h"
 #include "hardware/ram.h"
 #include "hardware/spi.h"
 #include "params.h"
 #include "strings.h"
-#include "time.h"
-#include "ui/oled_viz.h"
-#include "ui/pad_actions.h"
+#include "synth.h"
+
+#define MAX_SAMPLE_VOICES 6
+#define MAX_SAMPLE_LEN (1024 * 1024 * 2)  // max sample length in samples
+#define AVG_GRAINBUF_SAMPLE_SIZE (64 + 4) // 2 extra for interpolation, 2 extra for SPI address at the start
+#define GRAINBUF_BUDGET (AVG_GRAINBUF_SAMPLE_SIZE * NUM_GRAINS)
 
 SamplerMode sampler_mode = SM_PREVIEW;
 
-int grain_pos[32];
-s16 grain_buf[GRAINBUF_BUDGET];
-s16 grain_buf_end[32]; // for each of the 32 grain fetches, where does it end in the grain_buf?
+int grain_pos[NUM_GRAINS];
+static s16 grain_buf[GRAINBUF_BUDGET];
+s16 grain_buf_end[NUM_GRAINS]; // for each of the 32 grain fetches, where does it end in the grain_buf?
+
+s16* grain_buf_ptr(void) {
+	return grain_buf;
+}
 
 static u8 cur_slice_id = 0; // active slice id
 static u32 record_flashaddr_base = 0;
@@ -30,7 +34,7 @@ static u32 buf_write_pos = 0;
 static u32 buf_read_pos = 0;
 
 // for leds drawing
-static u8 peak_hist[32];
+static u8 peak_hist[NUM_GRAINS];
 static u8 peak_hist_pos = 0;
 
 // static float smooth_lpg(ValueSmoother* s, s32 out, float drive, float noise, float env1_lvl) {
@@ -103,12 +107,12 @@ void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noi
 	int smppos = 0;
 	if (ui_mode != UI_SAMPLE_EDIT) {
 		timestretch = param_val_poly(P_SMP_STRETCH, voice_id) * (2.f / 65536.f);
-		gsize = param_val_poly(P_SMP_GRAINSIZE, voice_id) * (1.414f / 65536.f);
-		grate = param_val_poly(P_SMP_SPEED, voice_id) * (2.f / 65536.f);
-		smppos = (param_val_poly(P_SMP_SCRUB, voice_id) * cur_sample_info.samplelen) >> 16;
-		posjit = param_val_poly(P_SMP_SCRUB_JIT, voice_id) * (1.f / 65536.f);
-		sizejit = param_val_poly(P_SMP_GRAINSIZE_JIT, voice_id) * (1.f / 65536.f);
-		gratejit = param_val_poly(P_SMP_SPEED_JIT, voice_id) * (1.f / 65536.f);
+		gsize = param_val_poly(P_GR_SIZE, voice_id) * (1.414f / 65536.f);
+		grate = param_val_poly(P_PLAY_SPD, voice_id) * (2.f / 65536.f);
+		smppos = (param_val_poly(P_SCRUB, voice_id) * cur_sample_info.samplelen) >> 16;
+		posjit = param_val_poly(P_SCRUB_JIT, voice_id) * (1.f / 65536.f);
+		sizejit = param_val_poly(P_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
+		gratejit = param_val_poly(P_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
 	}
 	int trig = env_trig_mask & (1 << voice_id);
 
@@ -385,7 +389,7 @@ void sampler_playing_tick(void) {
 	}
 	// cumulative sum
 	pos = 0;
-	for (int i = 0; i < 32; ++i) {
+	for (int i = 0; i < NUM_GRAINS; ++i) {
 		pos += lengths[i / 4];
 		grain_buf_end[i] = pos;
 	}

@@ -1,19 +1,6 @@
 #pragma once
 #include "utils.h"
 
-#define SAMPLES_PER_TICK 64
-#define NUM_SYNC_DIVS 22
-
-typedef enum ClockType {
-	CLK_INTERNAL,
-	CLK_MIDI,
-	CLK_CV,
-} ClockType;
-
-static float const max_swing = 0.5f; // 0.3333f represents triplet-feel swing
-static u16 const sync_divs_32nds[NUM_SYNC_DIVS] = {1,  2,  3,  4,  5,  6,  8,  10,  12,  16,  20,
-                                                   24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256};
-
 extern ClockType clock_type;
 extern u32 synth_tick;
 extern u16 bpm_10x;

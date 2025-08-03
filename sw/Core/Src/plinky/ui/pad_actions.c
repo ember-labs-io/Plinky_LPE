@@ -1,12 +1,11 @@
 #include "pad_actions.h"
-#include "gfx/data/names.h"
 #include "gfx/gfx.h"
 #include "hardware/ram.h"
 #include "hardware/touchstrips.h"
 #include "shift_states.h"
 #include "synth/params.h"
 #include "synth/sampler.h"
-#include "synth/time.h"
+#include "synth/sequencer.h"
 
 #define LONGPRESS_THRESH 160 // full read cycles
 
@@ -116,7 +115,7 @@ void handle_pad_actions(u8 strip_id, Touch* strip_cur) {
 		case UI_LOAD:
 			if (is_press_start) {
 				touch_load_item(pad_id);
-				cue_ram_item(pad_id);
+				cue_ram_item(pad_id, long_press_pad);
 			}
 			break;
 		} // mode

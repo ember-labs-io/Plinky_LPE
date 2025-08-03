@@ -1,18 +1,12 @@
 #include "ram.h"
 #include "flash.h"
-#include "gfx/data/icons.h"
-#include "gfx/data/names.h"
 #include "gfx/gfx.h"
-#include "hardware/codec.h"
-#include "synth/param_defs.h"
-#include "ui/oled_viz.h"
+#include "synth/params.h"
 
 // cleanup
-#include "synth/lfos.h"
-#include "synth/sampler.h"   // cur_sample_info should live in ram.c
-#include "synth/sequencer.h" // (?)
+#include "hardware/codec.h"
+#include "synth/sequencer.h"
 #include "synth/strings.h"
-#include "ui/pad_actions.h"
 // -- cleanup
 
 #define NUM_RAM_ITEMS (NUM_PRESETS + NUM_PATTERNS + NUM_SAMPLES)
@@ -193,7 +187,7 @@ void ram_frame(void) {
 			edit_item_id &= 63;
 			switch (item_type) {
 			case RAM_PRESET:
-				memcpy(&cur_preset, &init_params, sizeof(cur_preset));
+				memcpy(&cur_preset, init_params_ptr(), sizeof(cur_preset));
 				last_ram_write[SEG_PRESET] = now;
 				break;
 			case RAM_PATTERN:
@@ -409,7 +403,7 @@ bool apply_cued_load_items(void) {
 	return possible_seq_changes;
 }
 
-void cue_ram_item(u8 item_id) {
+void cue_ram_item(u8 item_id, u8 long_press_pad) {
 	// triggered on touch start:
 	// - save currently active item as source for copying
 	// - save what was cued into prev_cued, if they end up the same this is a double press
@@ -489,8 +483,8 @@ void draw_preset_name(u8 xtab) {
 	xtab += 2;
 	draw_str(xtab, 0, F_8_BOLD, preset_name);
 	// category
-	if (cur_preset.category > 0 && cur_preset.category < CAT_LAST)
-		draw_str(xtab, 8, F_8, preset_cats[cur_preset.category]);
+	if (cur_preset.category > 0 && cur_preset.category < NUM_PST_CATS)
+		draw_str(xtab, 8, F_8, preset_category_name[cur_preset.category]);
 }
 
 u8 draw_cued_pattern_id(bool with_arp_icon) {

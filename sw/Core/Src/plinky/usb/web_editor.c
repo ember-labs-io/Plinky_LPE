@@ -1,6 +1,5 @@
 #include "web_editor.h"
 #include "hardware/flash.h"
-#include "hardware/mem_defs.h"
 #include "hardware/ram.h"
 #include "tusb.h"
 

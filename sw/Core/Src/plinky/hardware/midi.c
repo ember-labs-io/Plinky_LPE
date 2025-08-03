@@ -1,12 +1,8 @@
 #include "midi.h"
-#include "gfx/gfx.h"
-#include "hardware/ram.h"
-#include "synth/arp.h"
+#include "ram.h"
 #include "synth/params.h"
-#include "synth/sequencer.h"
 #include "synth/strings.h"
 #include "synth/time.h"
-#include "touchstrips.h"
 #include "tusb.h"
 
 // midi uart, lives in main.c

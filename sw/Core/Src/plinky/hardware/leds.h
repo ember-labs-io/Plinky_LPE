@@ -7,10 +7,7 @@
 // Shift-pads are on column 8
 // Shift-pads are numbered 0-7, left-to-right (Plinky) or top-to-bottom (Plinky+)
 
-#define LED_COLS 9
-#define LED_COL_HEIGHT 8
-
-extern u8 leds[LED_COLS][LED_COL_HEIGHT];
+extern u8 leds[NUM_TOUCHSTRIPS][PADS_PER_STRIP];
 
 void leds_init(void);
 void leds_update(void);

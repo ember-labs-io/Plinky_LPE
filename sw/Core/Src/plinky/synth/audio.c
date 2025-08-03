@@ -1,5 +1,8 @@
 #include "audio.h"
 #include "audio_tools.h"
+#include "hardware/adc_dac.h"
+#include "params.h"
+#include "sampler.h"
 #include "time.h"
 #include "ui/oled_viz.h"
 
@@ -48,6 +51,10 @@ void reverb_clear(void) {
 }
 void delay_clear(void) {
 	memset(delay_ram_buf, 0, (DL_SIZE_MASK + 1) * 2);
+}
+
+void init_ext_gain_for_recording(void) {
+	set_smoother(&ext_gain_smoother, 65535 - adc_get_raw(ADC_A_KNOB));
 }
 
 void audio_init(void) {
@@ -256,7 +263,7 @@ void audio_pre(u32* audio_out, u32* audio_in) {
 			ext_gain_goal = gain_knob_value;
 	}
 	else
-		ext_gain_goal = param_val(P_INPUT_LVL);
+		ext_gain_goal = param_val(P_IN_LVL);
 	smooth_value(&ext_gain_smoother, ext_gain_goal, 65536.f);
 }
 
@@ -349,14 +356,14 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	f *= f;
 	f *= f;
 	k_reverb_fade = (int)(250 * (1.f - f));
-	k_reverb_shim = (param_val(P_RVB_SHIMMER) >> 9);
+	k_reverb_shim = (param_val(P_SHIMMER) >> 9);
 	k_reverb_wob = (param_val_float(P_RVB_WOBBLE));
 	// k_reverb_color=(param_val_float(P_RVCOLOR));
 	k_reverbsend = (param_val(P_RVB_SEND));
 
 	// mixer params
 
-	int synthlvl_ = param_val(P_SYNTH_LVL);
+	int synthlvl_ = param_val(P_SYN_LVL);
 	int synthwidth = param_val(P_MIX_WIDTH);
 	int asynthwidth = abs(synthwidth);
 	int synthlvl_mid;
@@ -371,12 +378,12 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		synthlvl_mid = (asynthwidth * synthlvl_) >> 15;
 	}
 
-	int ainwetdry = param_val(P_INPUT_WET_DRY);
-	int wetdry = param_val(P_SYNTH_WET_DRY);
+	int ainwetdry = param_val(P_IN_WET_DRY);
+	int wetdry = param_val(P_SYN_WET_DRY);
 	int wetlvl = 65536 - maxi(-wetdry, 0);
 	int drylvl = 65536 - maxi(wetdry, 0);
 
-	int a_in_lvl = param_val(P_INPUT_LVL);
+	int a_in_lvl = param_val(P_IN_LVL);
 	int ainwetlvl = 65536 - maxi(-ainwetdry, 0);
 	int aindrylvl = 65536 - maxi(ainwetdry, 0);
 
@@ -385,7 +392,7 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	a_in_lvl = ((a_in_lvl >> 4) * (drylvl >> 4)) >> 8;    // prescale by dry level
 	a_in_lvl = ((a_in_lvl >> 4) * (aindrylvl >> 4)) >> 8; // prescale by fx dry level
 
-	int delayratio = param_val(P_DLY_PINGPONG) >> 8;
+	int delayratio = param_val(P_PING_PONG) >> 8;
 	static int delaytime = SAMPLES_PER_TICK << 12;
 	int scopescale = (65536 * 24) / maxi(16384, (int)peak);
 
