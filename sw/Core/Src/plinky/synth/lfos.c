@@ -10,11 +10,10 @@
 
 #define LFO_SCOPE_FRAMES 16
 
-s32 param_with_lfo[NUM_PARAMS];
-
-static s32 lfo_cur[NUM_LFOS];
+s32 lfo_cur[NUM_LFOS];
 static u8 lfo_scope_frame = 0;
 static u8 lfo_scope_data[LFO_SCOPE_FRAMES][NUM_LFOS];
+static bool new_scope_frame;
 
 // random float value normalized to [-1, 1)
 static float rnd_norm(u16 half_cycle) {
@@ -94,12 +93,9 @@ static float (*lfo_funcs[NUM_LFO_SHAPES])(float pos, u32 half_cycle) = {
     [LFO_SAW] = eval_saw,
 };
 
-void update_lfos(void) {
-	static u64 lfo_clock_q32[NUM_LFOS] = {0}; // lfo phase acculumator clock, counts half(!) lfo cycles in q32
-	static s8 prev_scope_pos[NUM_LFOS] = {0};
-
+void update_lfo_scope(void) {
 	// every 16 frames, lfo_scope_frame increments and data for that frame is cleared
-	bool new_scope_frame = (synth_tick & 15) == 0;
+	new_scope_frame = (synth_tick & 15) == 0;
 	if (new_scope_frame) {
 		lfo_scope_frame = (synth_tick >> 4) & 15;
 		lfo_scope_data[lfo_scope_frame][0] = 0;
@@ -107,117 +103,101 @@ void update_lfos(void) {
 		lfo_scope_data[lfo_scope_frame][2] = 0;
 		lfo_scope_data[lfo_scope_frame][3] = 0;
 	}
-
-	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; ++lfo_id) {
-		u8 lfo_page_offset = lfo_id * 6;
-		// apply lfo modulation to the parameters of the lfo itself
-		apply_lfo_mods(P_A_RATE + lfo_page_offset);
-		apply_lfo_mods(P_A_SYM + lfo_page_offset);
-		apply_lfo_mods(P_A_SHAPE + lfo_page_offset);
-		apply_lfo_mods(P_A_DEPTH + lfo_page_offset);
-		apply_lfo_mods(P_A_OFFSET + lfo_page_offset);
-		apply_lfo_mods(P_A_SCALE + lfo_page_offset);
-
-		s32 lfo_rate = param_val(P_A_RATE + lfo_page_offset);
-		// free running - resulting lfo rate of this phase diff calculation is roughly 0.037-4913 Hz
-		if (lfo_rate <= 0) {
-			u32 phase_diff_q32 = (u32)(table_interp(pitches, -lfo_rate) * (1 << 24));
-			lfo_clock_q32[lfo_id] += phase_diff_q32;
-		}
-		// synced
-		else {
-			u16 step_32nds = sync_divs_32nds[(clampi(lfo_rate, 0, 65535) * NUM_SYNC_DIVS) >> 16];
-			u16 prev_phase_q16 = (lfo_clock_q32[lfo_id] >> 16) & 0xFFFF;
-			u16 new_phase_q16 = clock_pos_q16(step_32nds);
-			// add cycle if the phase rolls over
-			if (new_phase_q16 < prev_phase_q16)
-				lfo_clock_q32[lfo_id] += ((u64)1 << 32);
-			lfo_clock_q32[lfo_id] = (lfo_clock_q32[lfo_id] & 0xFFFFFFFF00000000) | ((u32)new_phase_q16 << 16);
-		}
-		// calc half cycle & position in cycle
-		LfoShape lfo_shape = param_val(P_A_SHAPE + lfo_page_offset);
-		u32 lfo_clock_q16 = (u32)(lfo_clock_q32[lfo_id] >> 16);
-		float cycle_center =
-		    param_val(P_A_SYM + lfo_page_offset) * (1.f / 65535.f) * 0.49f + 0.5f; // range [0.01, 0.99]
-		u32 half_cycle;
-		float cycle_pos;
-		switch (lfo_shape) {
-		case LFO_SMOOTH_RAND:
-		case LFO_STEP_RAND:
-		case LFO_BI_TRIGS:
-		case LFO_TRIGS:
-			half_cycle = (lfo_clock_q16 >> 17) << 1;                 // first half of two cycles
-			cycle_pos = (lfo_clock_q16 & 131071) * (1.f / 131071.f); // position in two cycles
-			if (cycle_pos < cycle_center)
-				cycle_pos /= cycle_center;
-			else {
-				half_cycle++; // second half of two cycles
-				cycle_pos = (1.f - cycle_pos) / (1.f - cycle_center);
-			}
-			break;
-		default:
-			half_cycle = (lfo_clock_q16 >> 16) << 1;
-			cycle_pos = (lfo_clock_q16 & 65535) * (1.f / 65536.f);
-			if (cycle_pos < cycle_center)
-				cycle_pos /= cycle_center;
-			else {
-				half_cycle++;
-				cycle_pos = (1.f - cycle_pos) / (1.f - cycle_center);
-			}
-			// gfx_debug(0, "%d", (u32)(cycle_pos * 1000));
-			break;
-		}
-
-		s32 lfo_val = (s32)(
-		    // call the appropriate evaluation function based on lfo_shape
-		    (*lfo_funcs[lfo_shape])(cycle_pos, half_cycle)
-		    // multiply by lfo depth param
-		    * param_val(P_A_DEPTH + lfo_page_offset));
-
-		// cv offset (cv scale param at 100% equals actual scale by 200%)
-		lfo_val += (s32)(adc_get_smooth(ADC_S_A_CV + lfo_id) * (param_val(P_A_SCALE + lfo_page_offset) << 1));
-		// offset by potentiometers and accelerometer
-		lfo_val += (s32)(((lfo_id < 2)
-		                      // knob A and B
-		                      ? adc_get_smooth(ADC_S_A_KNOB + lfo_id)
-		                      // accel X and Y
-		                      : accel_get_axis(lfo_id - 2))
-		                 // scale to 16fp
-		                 * 65536.f);
-		// offset from offset param
-		lfo_val += param_val(P_A_OFFSET + lfo_page_offset);
-
-		// save lfo positions for oled scope
-		s8 old_scope_pos = prev_scope_pos[lfo_id];
-		s8 scope_pos = clampi((-(lfo_val * 7 + (1 << 16)) >> 17) + 4, 0, 7);
-		bool moving_up = scope_pos > old_scope_pos;
-		// a new scope frame always needs to write at least one pixel
-		if (new_scope_frame && old_scope_pos == scope_pos)
-			lfo_scope_data[lfo_scope_frame][lfo_id] |= 1 << scope_pos;
-		// draw line towards the new position
-		while (old_scope_pos != scope_pos) {
-			old_scope_pos += moving_up ? 1 : -1;
-			lfo_scope_data[lfo_scope_frame][lfo_id] |= 1 << old_scope_pos;
-		}
-		// save position
-		prev_scope_pos[lfo_id] = scope_pos;
-
-		// send to expander
-		set_expander_lfo_data(lfo_id, lfo_val);
-
-		// save to array for later use
-		lfo_cur[lfo_id] = lfo_val;
-	}
 }
 
-void apply_lfo_mods(Param param_id) {
-	if (param_id == P_VOLUME)
-		return;
-	s16* param = cur_preset.params[param_id];
-	s32 new_val = param[SRC_BASE] << 16;
-	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++)
-		new_val += (lfo_cur[lfo_id] * param[SRC_LFO_A + lfo_id]);
-	param_with_lfo[param_id] = new_val;
+void update_lfo(u8 lfo_id) {
+	static u64 lfo_clock_q32[NUM_LFOS] = {0}; // lfo phase acculumator clock, counts half(!) lfo cycles in q32
+	static s8 prev_scope_pos[NUM_LFOS] = {0};
+
+	u8 lfo_page_offset = lfo_id * 6;
+	s32 lfo_rate = param_val(P_A_RATE + lfo_page_offset);
+	// free running - resulting lfo rate of this phase diff calculation is roughly 0.037-4913 Hz
+	if (lfo_rate <= 0) {
+		u32 phase_diff_q32 = (u32)(table_interp(pitches, -lfo_rate) * (1 << 24));
+		lfo_clock_q32[lfo_id] += phase_diff_q32;
+	}
+	// synced
+	else {
+		u16 step_32nds = sync_divs_32nds[(clampi(lfo_rate, 0, 65535) * NUM_SYNC_DIVS) >> 16];
+		u16 prev_phase_q16 = (lfo_clock_q32[lfo_id] >> 16) & 0xFFFF;
+		u16 new_phase_q16 = clock_pos_q16(step_32nds);
+		// add cycle if the phase rolls over
+		if (new_phase_q16 < prev_phase_q16)
+			lfo_clock_q32[lfo_id] += ((u64)1 << 32);
+		lfo_clock_q32[lfo_id] = (lfo_clock_q32[lfo_id] & 0xFFFFFFFF00000000) | ((u32)new_phase_q16 << 16);
+	}
+	// calc half cycle & position in cycle
+	LfoShape lfo_shape = param_val(P_A_SHAPE + lfo_page_offset);
+	u32 lfo_clock_q16 = (u32)(lfo_clock_q32[lfo_id] >> 16);
+	float cycle_center = param_val(P_A_SYM + lfo_page_offset) * (1.f / 65535.f) * 0.49f + 0.5f; // range [0.01, 0.99]
+	u32 half_cycle;
+	float cycle_pos;
+	switch (lfo_shape) {
+	case LFO_SMOOTH_RAND:
+	case LFO_STEP_RAND:
+	case LFO_BI_TRIGS:
+	case LFO_TRIGS:
+		half_cycle = (lfo_clock_q16 >> 17) << 1;                 // first half of two cycles
+		cycle_pos = (lfo_clock_q16 & 131071) * (1.f / 131071.f); // position in two cycles
+		if (cycle_pos < cycle_center)
+			cycle_pos /= cycle_center;
+		else {
+			half_cycle++; // second half of two cycles
+			cycle_pos = (1.f - cycle_pos) / (1.f - cycle_center);
+		}
+		break;
+	default:
+		half_cycle = (lfo_clock_q16 >> 16) << 1;
+		cycle_pos = (lfo_clock_q16 & 65535) * (1.f / 65536.f);
+		if (cycle_pos < cycle_center)
+			cycle_pos /= cycle_center;
+		else {
+			half_cycle++;
+			cycle_pos = (1.f - cycle_pos) / (1.f - cycle_center);
+		}
+		// gfx_debug(0, "%d", (u32)(cycle_pos * 1000));
+		break;
+	}
+
+	s32 lfo_val = (s32)(
+	    // call the appropriate evaluation function based on lfo_shape
+	    (*lfo_funcs[lfo_shape])(cycle_pos, half_cycle)
+	    // multiply by lfo depth param
+	    * param_val(P_A_DEPTH + lfo_page_offset));
+
+	// cv offset (cv scale param at 100% equals actual scale by 200%)
+	lfo_val += (s32)(adc_get_smooth(ADC_S_A_CV + lfo_id) * (param_val(P_A_SCALE + lfo_page_offset) << 1));
+	// offset by potentiometers and accelerometer
+	lfo_val += (s32)(((lfo_id < 2)
+	                      // knob A and B
+	                      ? adc_get_smooth(ADC_S_A_KNOB + lfo_id)
+	                      // accel X and Y
+	                      : accel_get_axis(lfo_id - 2))
+	                 // scale to 16fp
+	                 * 65536.f);
+	// offset from offset param
+	lfo_val += param_val(P_A_OFFSET + lfo_page_offset);
+
+	// save lfo positions for oled scope
+	s8 old_scope_pos = prev_scope_pos[lfo_id];
+	s8 scope_pos = clampi((-(lfo_val * 7 + (1 << 16)) >> 17) + 4, 0, 7);
+	bool moving_up = scope_pos > old_scope_pos;
+	// a new scope frame always needs to write at least one pixel
+	if (new_scope_frame && old_scope_pos == scope_pos)
+		lfo_scope_data[lfo_scope_frame][lfo_id] |= 1 << scope_pos;
+	// draw line towards the new position
+	while (old_scope_pos != scope_pos) {
+		old_scope_pos += moving_up ? 1 : -1;
+		lfo_scope_data[lfo_scope_frame][lfo_id] |= 1 << old_scope_pos;
+	}
+	// save position
+	prev_scope_pos[lfo_id] = scope_pos;
+
+	// send to expander
+	set_expander_lfo_data(lfo_id, lfo_val);
+
+	// save to array for later use
+	lfo_cur[lfo_id] = lfo_val;
 }
 
 void draw_lfos(void) {

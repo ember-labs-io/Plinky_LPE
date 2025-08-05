@@ -24,6 +24,7 @@ static Param param_snap;
 static ModSource src_snap;
 
 // modulation values
+static s32 param_with_lfo[NUM_PARAMS];
 static u16 max_env_global = 0;
 static u16 max_pres_global = 0;
 static u16 sample_hold_global = {8 << 12};
@@ -99,16 +100,20 @@ void params_update_touch_pointers(void) {
 
 // == MAIN == //
 
+static void apply_lfo_mods(Param param_id) {
+	if (param_id == P_VOLUME)
+		return;
+	s16* param = cur_preset.params[param_id];
+	s32 new_val = param[SRC_BASE] << 16;
+	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++)
+		new_val += lfo_cur[lfo_id] * param[SRC_LFO_A + lfo_id];
+	param_with_lfo[param_id] = new_val;
+}
+
 void params_tick(void) {
-
-	// == envelope 2 == //
-
-	apply_lfo_mods(P_ENV_LVL2);
-	apply_lfo_mods(P_ATTACK2);
-	apply_lfo_mods(P_DECAY2);
-	apply_lfo_mods(P_SUSTAIN2);
-	apply_lfo_mods(P_RELEASE2);
-
+	// envelope 2
+	for (Param param_id = P_ENV_LVL2; param_id <= P_RELEASE2; param_id++)
+		apply_lfo_mods(param_id);
 	max_pres_global = 0;
 	max_env_global = 0;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
@@ -168,7 +173,15 @@ void params_tick(void) {
 
 	adc_update_inputs();
 
-	update_lfos();
+	// lfos
+	update_lfo_scope();
+	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++) {
+		u8 lfo_row_offset = lfo_id * 6;
+		// apply lfo modulation to the parameters of the lfo itself
+		for (Param param_id = P_A_SCALE; param_id <= P_A_SYM; param_id++)
+			apply_lfo_mods(param_id + lfo_row_offset);
+		update_lfo(lfo_id);
+	}
 
 	// apply lfo modulation to al other params
 	for (Param param_id = 0; param_id < NUM_PARAMS; ++param_id) {
@@ -752,7 +765,7 @@ s16 value_editor_column_led(u8 y) {
 		else {
 			k = ((-v - (y - 4) * (PARAM_SIZE / 4)) * (192 * 4)) / PARAM_SIZE;
 			k = (8 - y) * 2 * kontrast + clampi(k, 0, 191);
- 			if (y == 4 && v > 0)
+			if (y == 4 && v > 0)
 				k = 255;
 		}
 	}

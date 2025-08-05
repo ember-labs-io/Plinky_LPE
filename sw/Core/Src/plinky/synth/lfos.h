@@ -3,8 +3,8 @@
 
 // mod sources A, B, X and Y are referred to as (complex) lfos
 
-extern s32 param_with_lfo[NUM_PARAMS];
+extern s32 lfo_cur[NUM_LFOS];
 
-void update_lfos(void);
-void apply_lfo_mods(Param param_id);
+void update_lfo_scope(void);
+void update_lfo(u8 lfo_id);
 void draw_lfos(void);
