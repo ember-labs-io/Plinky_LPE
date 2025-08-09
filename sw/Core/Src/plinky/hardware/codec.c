@@ -393,8 +393,8 @@ void codec_init(void) {
 	//		wmcodec_write(RINPGAVOL, invol + RINPGAVOL_INPGAVU);
 }
 
-void codec_set_volume(u16 vol) {
-	vol = clampi(vol, 0, 63);
+void codec_set_volume(u8 vol) {
+	vol = clampi(vol >> 2, 0, 63);
 	if (vol == cur_volume)
 		return;
 	cur_volume = vol;

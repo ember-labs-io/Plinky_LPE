@@ -204,7 +204,7 @@ void params_tick(void) {
 // raw parameter value
 static s16 param_val_raw(Param param_id, ModSource mod_src) {
 	if (param_id == P_VOLUME)
-		return mod_src == SRC_BASE ? (sys_params.headphonevol + 45) * (PARAM_SIZE / 64) : 0;
+		return mod_src == SRC_BASE ? sys_params.headphonevol << 2 : 0;
 	return cur_preset.params[param_id][mod_src];
 }
 
@@ -277,7 +277,7 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	// special headphone case
 	if (param_id == P_VOLUME) {
 		if (mod_src == SRC_BASE) {
-			data = clampi(-45, ((data + (PARAM_SIZE / 128)) / (PARAM_SIZE / 64)) - 45, 18);
+			data = clampi(data >> 2, 0, 255);
 			if (data == sys_params.headphonevol)
 				return;
 			sys_params.headphonevol = data;

@@ -160,7 +160,7 @@ typedef struct SysParams {
 	u8 curpreset;
 	u8 paddy;
 	u8 systemflags;
-	s8 headphonevol;
+	u8 headphonevol;
 	u8 pad[16 - 4];
 } SysParams;
 
