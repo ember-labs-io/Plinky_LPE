@@ -363,10 +363,6 @@ bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 	u8 prev_param = selected_param;
 	selected_param = pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
 
-	// largely show the new param on screen when it changes
-	if (EDITING_PARAM && selected_param != prev_param)
-		flash_parameter(selected_param);
-
 	// parameters that do something the moment they are pressed
 	if (is_press_start) {
 		switch (selected_param) {

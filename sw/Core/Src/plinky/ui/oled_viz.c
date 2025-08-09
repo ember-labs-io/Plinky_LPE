@@ -58,10 +58,6 @@ void flash_message(Font fnt, const char* msg, const char* submsg) {
 	message_time = millis() + 500;
 }
 
-void flash_parameter(u8 param_id) {
-	flash_message(F_20_BOLD, param_name[param_id], param_row_name[param_id / 6]);
-}
-
 static bool draw_message(void) {
 	if (!message)
 		return false;
