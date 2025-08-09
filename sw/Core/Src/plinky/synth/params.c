@@ -13,6 +13,7 @@
 #include "time.h"
 #include "ui/oled_viz.h"
 #include "ui/pad_actions.h"
+#include "ui/shift_states.h"
 
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
 
@@ -428,6 +429,10 @@ void try_exit_param_edit_mode(bool param_select) {
 // == ENCODER == //
 
 void edit_param_from_encoder(Param param_id, s8 enc_diff, float enc_acc) {
+	// if this is a precision-edit, keep the param selected
+	if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
+		param_from_mem = true;
+
 	// retrieve parameters
 	s16 cur_val = param_val_raw(param_id, selected_mod_src);
 	s16 new_val = cur_val;
@@ -443,6 +448,8 @@ void edit_param_from_encoder(Param param_id, s8 enc_diff, float enc_acc) {
 	// for all other values, the encoder input is scaled by an acceleration value
 	else {
 		u8 enc_sens = (param_id == P_VOLUME) ? 4 : 1;
+		if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
+			enc_acc = 1;
 		new_val += (s16)floorf(0.5f + enc_diff * enc_sens * maxf(1.f, enc_acc * enc_acc));
 	}
 	new_val = clampi(new_val, is_signed ? -PARAM_SIZE : 0, PARAM_SIZE);
