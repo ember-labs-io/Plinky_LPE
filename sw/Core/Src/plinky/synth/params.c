@@ -322,12 +322,15 @@ void save_param(Param param_id, ModSource mod_src, s16 data) {
 // == PAD ACTION == //
 
 void try_left_strip_for_params(u16 position, bool is_press_start) {
+	static const u16 STRIP_DEADZONE = 256;
 	// only if editing a parameter
 	if (!EDITING_PARAM)
 		return;
 
 	// scale the press position to a param size value
-	float press_value = clampf((2048 - 256 - position) * (PARAM_SIZE / (2048.f - 512.f)), 0.f, PARAM_SIZE);
+	float press_value =
+	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (PARAM_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
+	           PARAM_SIZE);
 	bool is_signed = (param_range[selected_param] & RANGE_SIGNED) || (selected_mod_src != SRC_BASE);
 	if (is_signed)
 		press_value = press_value * 2 - PARAM_SIZE;
@@ -347,7 +350,7 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 			smoothed_value = -HALF_PARAM_SIZE;
 	}
 	// save the value to the parameter
-	save_param_raw(selected_param, selected_mod_src, (s16)smoothed_value);
+	save_param_raw(selected_param, selected_mod_src, (s16)(smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f)));
 }
 
 // returns whether this activated a different param
