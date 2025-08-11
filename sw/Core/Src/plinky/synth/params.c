@@ -45,10 +45,6 @@ static s32 SATURATE17(s32 a) {
 	return tmp;
 }
 
-static int get_volume_as_param(void) {
-	return (sys_params.headphonevol + 45) * (PARAM_SIZE / 64);
-}
-
 static void set_arp(bool on) {
 	if (on == arp_on())
 		return;
@@ -192,77 +188,71 @@ void params_tick(void) {
 
 // == RETRIEVAL == //
 
-// get the raw, unmodulated parameter from the preset
-s16 param_val_raw(Param param_id, ModSource mod_src) {
+// raw parameter value
+static s16 param_val_raw(Param param_id, ModSource mod_src) {
 	if (param_id == P_VOLUME)
-		return mod_src == SRC_BASE ? get_volume_as_param() : 0;
+		return mod_src == SRC_BASE ? (sys_params.headphonevol + 45) * (PARAM_SIZE / 64) : 0;
 	return cur_preset.params[param_id][mod_src];
 }
 
-// rj: the only reason the unscaled functions exist is because of one single call in ui.h - rewriting that so this
-// doesn't need a global unscaled function would allow this to look a lot cleaner
-static s32 param_val_unscaled_local(Param param_id, u16 rnd, u16 env, u16 pres) {
+// modulated and scaled parameter value
+static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 	s16* param = cur_preset.params[param_id];
-	// param_with_lfo has already applied the four lfos
-	s32 new_val = param_with_lfo[param_id];
+	u8 range = param_range[param_id] & RANGE_MASK;
 
-	// apply sample & hold mod source
+	// pre-modulated with lfos, has 16 precision bits
+	s32 mod_val = param_with_lfo[param_id];
+
+	// apply envelope modulation
+	mod_val += env * param[SRC_ENV2];
+
+	// apply pressure modulation
+	mod_val += pres * param[SRC_PRES];
+
+	// apply sample & hold modulation
 	if (param[SRC_RND]) {
 		u16 rnd_id = (u16)(rnd + param_id);
 		// positive => uniform distribution
 		if (param[SRC_RND] > 0)
-			new_val += (rndtab[rnd_id] * param[SRC_RND]) << 8;
+			mod_val += (rndtab[rnd_id] * param[SRC_RND]) << 8;
 		// negative => triangular distribution
 		else {
 			rnd_id += rnd_id;
-			new_val += (((s32)rndtab[rnd_id] - (s32)rndtab[rnd_id - 1]) * param[SRC_RND]) << 8;
+			mod_val += ((rndtab[rnd_id] - rndtab[rnd_id - 1]) * param[SRC_RND]) << 8;
 		}
 	}
 
-	// apply envelope mod source
-	new_val += env * param[SRC_ENV2];
+	// all 7 mod sources have now been applied, scale and clamp to 16 bit
+	mod_val = clampi(mod_val >> 10, (param_range[param_id] & RANGE_SIGNED) ? -65536 : 0, range ? 65535 : 65536);
 
-	// apply pressure mod source
-	new_val += pres * param[SRC_PRES];
-
-	// all 7 mod sources have now been applied, clamp value and return
-	return clampi(new_val >> 10, (param_range[param_id] & RANGE_SIGNED) ? -65536 : 0,
-	              (param_range[param_id] & RANGE_MASK) ? 65535 : 65536);
-}
-
-// get unscaled modulated parameter value
-s32 param_val_unscaled(Param param_id) {
-	return param_val_unscaled_local(param_id, sample_hold_global, max_env_global, max_pres_global);
-}
-
-// ranged params
-static s32 param_val_local(Param param_id, u16 rnd, u16 env, u16 pres) {
-	u8 flags = param_range[param_id];
-	u8 range = flags & RANGE_MASK;
-	int new_val = param_val_unscaled_local(param_id, rnd, env, pres);
+	// bring value to appropriate range
 	if (range)
-		new_val = (new_val * range) >> 16;
-	if (param_id == P_SAMPLE)
+		mod_val = (mod_val * range) >> 16;
+
+	// special cases
+	switch (param_id) {
+	case P_MIDI_CH_IN:
+	case P_MIDI_CH_OUT:
+		// return scaled but unmodulated
+		mod_val = clampi(cur_preset.params[param_id][SRC_BASE] / PARAM_SIZE, 0, 15);
+		break;
+	case P_SAMPLE:
 		// sample_id is stored 1-based, revert before returning
-		new_val = (new_val - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
-	return new_val;
+		mod_val = (mod_val - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
+		break;
+	default:
+		break;
+	}
+	return mod_val;
 }
 
-// modulated and scaled parameter value
 s32 param_val(Param param_id) {
-	return param_val_local(param_id, sample_hold_global, max_env_global, max_pres_global);
+	return param_val_mod(param_id, sample_hold_global, max_env_global, max_pres_global);
 }
 
-// modulated and scaled parameter value in float format, range [-1.0, 1.0)
-float param_val_float(Param param_id) {
-	return param_val(param_id) * (1.f / 65536.f);
-}
-
-// modulated and scaled parameter value, polyphonic
 s32 param_val_poly(Param param_id, u8 string_id) {
-	// string pressure is scaled to u16 range before passing on
-	return param_val_local(param_id, sample_hold_poly[string_id], voices[string_id].env2_lvl16,
-	                       maxi(touch_pointer[string_id]->pres, 0) * 32);
+	return param_val_mod(param_id, sample_hold_poly[string_id], voices[string_id].env2_lvl16,
+	                     clampi(touch_pointer[string_id]->pres << 5, 0, 65535));
 }
 
 // == SAVING == //
@@ -711,16 +701,16 @@ bool draw_cur_param(void) {
 	char val_buf[32];
 	u8 width = 0;
 	s16 val = param_val_raw(draw_param, src_snap);
-	s32 vbase = val;
-	if (src_snap == SRC_BASE && draw_param != P_VOLUME) {
-		val = (param_val_unscaled(draw_param) * PARAM_SIZE) >> 16;
-		if (val != vbase) {
-			// if there is modulation going on, show the base value below
-			const char* val_str = get_param_str(draw_param, src_snap, vbase, val_buf, NULL);
-			width = str_width(F_8, val_str);
-			draw_str(OLED_WIDTH - 16 - width, 32 - 8, F_8, val_str);
-		}
-	}
+	// s32 vbase = val;
+	// if (src_snap == SRC_BASE && draw_param != P_VOLUME) {
+	// 	val = (param_val_unscaled(draw_param) * PARAM_SIZE) >> 16;
+	// 	if (val != vbase) {
+	// 		// if there is modulation going on, show the base value below
+	// 		const char* val_str = get_param_str(draw_param, src_snap, vbase, val_buf, NULL);
+	// 		width = str_width(F_8, val_str);
+	// 		draw_str(OLED_WIDTH - 16 - width, 32 - 8, F_8, val_str);
+	// 	}
+	// }
 
 	char dec_buf[16];
 	const char* val_str = get_param_str(draw_param, src_snap, val, val_buf, dec_buf);
@@ -762,7 +752,7 @@ s16 value_editor_column_led(u8 y) {
 		else {
 			k = ((-v - (y - 4) * (PARAM_SIZE / 4)) * (192 * 4)) / PARAM_SIZE;
 			k = (8 - y) * 2 * kontrast + clampi(k, 0, 191);
-			if (y == 4 && v > 0)
+ 			if (y == 4 && v > 0)
 				k = 255;
 		}
 	}

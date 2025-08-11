@@ -84,9 +84,8 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	u8 num_bytes = 3;
 	if (status == MIDI_PROGRAM_CHANGE || status == MIDI_CHANNEL_PRESSURE)
 		num_bytes = 2;
-	int midi_ch_out = clampi((mini(param_val_raw(P_MIDI_CH_OUT, 0), PARAM_SIZE - 1) * 16) / PARAM_SIZE, 0, 15);
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
-		status += midi_ch_out; // set output channel
+		status += param_val(P_MIDI_CH_OUT);
 	u8 buf[4] = {status >> 4, status, data1, data2};
 	// send to serial
 	if (!send_midi_serial(buf + 1, num_bytes)) {
@@ -209,10 +208,9 @@ static void process_midi_msg(u8 status, u8 d1, u8 d2) {
 
 	u8 chan = status & 0x0F; // save the channel
 	u8 type = status & 0xF0; // take the channel out
-	u8 midi_ch_in = clampi((mini(param_val_raw(P_MIDI_CH_IN, 0), PARAM_SIZE - 1) * 16) / PARAM_SIZE, 0, 15);
 
 	// allow only selected channel and system msgs
-	if ((chan != midi_ch_in) && (type != MIDI_SYSTEM_COMMON_MSG))
+	if ((chan != param_val(P_MIDI_CH_IN)) && (type != MIDI_SYSTEM_COMMON_MSG))
 		return;
 
 	// turn silent note ons into note offs

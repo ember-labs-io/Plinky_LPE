@@ -13,10 +13,7 @@ void params_update_touch_pointers(void);
 void params_tick(void);
 
 // param retrieval calls
-s16 param_val_raw(Param param_id, ModSource mod_src);
-s32 param_val_unscaled(Param param_id);
 s32 param_val(Param param_id);
-float param_val_float(Param param_id);
 s32 param_val_poly(Param param_id, u8 string_id);
 
 // save param calls

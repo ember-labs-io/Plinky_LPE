@@ -137,7 +137,8 @@ void update_lfos(void) {
 		// calc half cycle & position in cycle
 		LfoShape lfo_shape = param_val(P_A_SHAPE + lfo_page_offset);
 		u32 lfo_clock_q16 = (u32)(lfo_clock_q32[lfo_id] >> 16);
-		float cycle_center = param_val_float(P_A_SYM + lfo_page_offset) * 0.49f + 0.5f; // range [0.01, 0.99]
+		float cycle_center =
+		    param_val(P_A_SYM + lfo_page_offset) * (1.f / 65535.f) * 0.49f + 0.5f; // range [0.01, 0.99]
 		u32 half_cycle;
 		float cycle_pos;
 		switch (lfo_shape) {
@@ -171,9 +172,7 @@ void update_lfos(void) {
 		    // call the appropriate evaluation function based on lfo_shape
 		    (*lfo_funcs[lfo_shape])(cycle_pos, half_cycle)
 		    // multiply by lfo depth param
-		    * param_val_float(P_A_DEPTH + lfo_page_offset)
-		    // scale to 16fp
-		    * 65536.f);
+		    * param_val(P_A_DEPTH + lfo_page_offset));
 
 		// cv offset (cv scale param at 100% equals actual scale by 200%)
 		lfo_val += (s32)(adc_get_smooth(ADC_S_A_CV + lfo_id) * (param_val(P_A_SCALE + lfo_page_offset) << 1));

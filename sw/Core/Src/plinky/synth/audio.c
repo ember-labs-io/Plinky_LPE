@@ -273,7 +273,7 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 	static u16 delaypos = 0;
 	static u32 wetlr;
-	const float k_target_fb = param_val_float(P_DLY_FEEDBACK) * (0.35f); // 3/4
+	const float k_target_fb = param_val(P_DLY_FEEDBACK) * (1.f / 65535.f) * (0.35f); // 3/4
 	static float k_fb = 0.f;
 	int k_target_delaytime = param_val(P_DLY_TIME);
 	if (k_target_delaytime > 0) {
@@ -314,7 +314,8 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	// at sample rate, lpf k 0.002 takes 10ms to go to half; .0006 takes 40ms; k=.0002 takes 100ms;
 	// at buffer rate, k=0.13 goes to half in 10ms; 0.013 goes to half in 100ms; 0.005 is 280ms
 
-	float g = param_val_float(P_HPF); // tanf(3.141592f * 8000.f / 32000.f); // highpass constant // TODO PARAM 0 -1
+	float g = param_val(P_HPF) * (1.f / 65535.f);
+	// tanf(3.141592f * 8000.f / 32000.f); // highpass constant // TODO PARAM 0 -1
 	g *= g;
 	g *= g;
 	g += (10.f / 32000.f);
@@ -352,13 +353,12 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 	// reverb params
 
-	float f = 1.f - clampf(param_val_float(P_RVB_TIME), 0.f, 1.f);
+	float f = 1.f - clampf(param_val(P_RVB_TIME) * (1.f / 65535.f), 0.f, 1.f);
 	f *= f;
 	f *= f;
 	k_reverb_fade = (int)(250 * (1.f - f));
 	k_reverb_shim = (param_val(P_SHIMMER) >> 9);
-	k_reverb_wob = (param_val_float(P_RVB_WOBBLE));
-	// k_reverb_color=(param_val_float(P_RVCOLOR));
+	k_reverb_wob = param_val(P_RVB_WOBBLE) * (1.f / 65535.f);
 	k_reverbsend = (param_val(P_RVB_SEND));
 
 	// mixer params

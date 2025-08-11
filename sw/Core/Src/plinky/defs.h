@@ -315,7 +315,7 @@ typedef enum SeqOrder {
 
 typedef enum CVQuantType {
 	CVQ_OFF,
-	CVQ_ON,
+	CVQ_CHROMATIC,
 	CVQ_SCALE,
 	NUM_CV_QUANT_TYPES,
 } CVQuantType;
@@ -875,7 +875,7 @@ const static char* const seq_mode_name[NUM_SEQ_ORDERS] = {
 
 static const char* const cv_quant_name[NUM_CV_QUANT_TYPES] = {
     [CVQ_OFF] = "Off",
-    [CVQ_ON] = "On",
+    [CVQ_CHROMATIC] = "On",
     [CVQ_SCALE] = "Scale",
 };
 
