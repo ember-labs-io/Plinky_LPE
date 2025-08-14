@@ -73,7 +73,7 @@ void encoder_tick(void) {
 			break;
 		// encoder turned
 		if (enc_diff)
-			edit_param_from_encoder(param_id, enc_diff, encoder_acc);
+			edit_param_from_encoder(enc_diff, encoder_acc);
 		// start of an encoder press
 		if (encoder_pressed && !prev_encoder_pressed)
 			check_param_toggles(param_id);

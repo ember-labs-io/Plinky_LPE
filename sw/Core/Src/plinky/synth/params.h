@@ -33,7 +33,7 @@ void enter_param_edit_mode(bool mode_a);
 void try_exit_param_edit_mode(bool param_select);
 
 // encoder calls
-void edit_param_from_encoder(Param param_id, s8 enc_diff, float enc_acc);
+void edit_param_from_encoder(s8 enc_diff, float enc_acc);
 void params_toggle_default_value(Param param_id);
 void hold_encoder_for_params(u16 duration);
 void check_param_toggles(Param param_id);

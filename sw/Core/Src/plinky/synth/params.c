@@ -69,6 +69,10 @@ static s8 value_to_index(s32 value, u8 range) {
 	return clampi(value, -65535, 65535) * range >> 16;
 }
 
+static s8 raw_to_index(s16 raw, u8 range) {
+	return value_to_index(raw << 6, range);
+}
+
 static u8 param_range(Param param_id) {
 	return param_info[range_type[param_id]] & RANGE_MASK;
 }
@@ -462,35 +466,54 @@ void try_exit_param_edit_mode(bool param_select) {
 
 // == ENCODER == //
 
-void edit_param_from_encoder(Param param_id, s8 enc_diff, float enc_acc) {
+void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
+	Param param_id = get_recent_param();
+	if (param_id >= NUM_PARAMS)
+		return;
+
 	// if this is a precision-edit, keep the param selected
 	if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
 		param_from_mem = true;
 
-	// retrieve parameters
-	s16 cur_val = param_val_raw(param_id, selected_mod_src);
-	s16 new_val = cur_val;
+	s16 raw = param_val_raw(param_id, selected_mod_src);
 	u8 range = param_range(param_id);
-	// mod sources are always signed
-	bool is_signed = param_signed_or_mod(param_id, selected_mod_src);
 
-	// base values of params that have a constrained range change with 1 per encoder-notch (non-scaled)
-	if ((range & RANGE_MASK) && (selected_mod_src == SRC_BASE)) {
-		u8 maxi = range & RANGE_MASK;
-		new_val += enc_diff * (PARAM_SIZE / maxi);
+	// special case
+	if (range_type[param_id] == R_CLOCK2 && raw < 0)
+		range = 0;
+
+	// indeces: just add/subtract 1 per encoder tick
+	if (range && selected_mod_src == SRC_BASE) {
+		s16 index = raw_to_index(raw, range);
+
+		// retrieve 1-based
+		if (param_id == P_SAMPLE)
+			index = (index - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
+
+		index += enc_diff;
+
+		// smooth transition between synced and free timing
+		if (range_type[param_id] == R_CLOCK2 && index < 0) {
+			save_param_raw(param_id, SRC_BASE, -1);
+			return;
+		}
+
+		save_param_index(param_id, index);
+		return;
 	}
-	// for all other values, the encoder input is scaled by an acceleration value
-	else {
-		u8 enc_sens = (param_id == P_VOLUME) ? 4 : 1;
-		if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
-			enc_acc = 1;
-		new_val += (s16)floorf(0.5f + enc_diff * enc_sens * maxf(1.f, enc_acc * enc_acc));
-	}
-	new_val = clampi(new_val, is_signed ? -PARAM_SIZE : 0, PARAM_SIZE);
-	// save new_val if it has changed
-	if (cur_val != new_val) {
-		save_param_raw(param_id, selected_mod_src, new_val);
-	}
+
+	// full range values, add/subtract 0.1 per encoder tick with acceleration
+	if (param_id == P_VOLUME)
+		enc_diff *= 4;
+	// holding shift disables acceleration
+	enc_acc = shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B ? 1.f : maxf(1.f, enc_acc * enc_acc);
+	raw += floorf(enc_diff * enc_acc + 0.5f);
+	// make encoder steps of size 0.1 map to 1024 parameter values exactly
+	s8 pos = raw & 127;
+	if (pos == 1 || pos == 43 || pos == 86 || pos == -42 || pos == -85 || pos == -127)
+		raw += enc_diff > 0 ? 1 : -1;
+	raw = clampi(raw, param_signed_or_mod(param_id, selected_mod_src) ? -PARAM_SIZE : 0, PARAM_SIZE);
+	save_param_raw(param_id, selected_mod_src, raw);
 }
 
 // rj: it looks like the intention here was to toggle between the saved value and the default value, but in reality the
