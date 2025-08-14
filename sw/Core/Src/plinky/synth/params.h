@@ -5,7 +5,6 @@
 
 // helpers
 const Preset* init_params_ptr();
-Param get_recent_param(void);
 bool strip_available_for_synth(u8 strip_id);
 void params_update_touch_pointers(void);
 
@@ -34,7 +33,7 @@ void try_exit_param_edit_mode(bool param_select);
 
 // encoder calls
 void edit_param_from_encoder(s8 enc_diff, float enc_acc);
-void params_toggle_default_value(Param param_id);
+void params_toggle_default_value(void);
 void hold_encoder_for_params(u16 duration);
 
 // midi cc

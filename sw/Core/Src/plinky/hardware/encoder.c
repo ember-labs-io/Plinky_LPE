@@ -66,17 +66,11 @@ void encoder_tick(void) {
 	case UI_DEFAULT:
 	case UI_EDITING_A:
 	case UI_EDITING_B:
-		// get current or last edited param
-		Param param_id = get_recent_param();
-		// exit if no valid param
-		if (param_id >= NUM_PARAMS)
-			break;
-		// encoder turned
 		if (enc_diff)
 			edit_param_from_encoder(enc_diff, encoder_acc);
 		// release of a short encoder press
 		else if (!encoder_pressed && prev_encoder_pressed && encoder_press_duration <= 50)
-			params_toggle_default_value(param_id);
+			params_toggle_default_value();
 		// hold encoder (not during reboot sequence)
 		if (encoder_press_duration <= 250)
 			hold_encoder_for_params(encoder_press_duration);

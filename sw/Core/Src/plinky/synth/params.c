@@ -91,7 +91,7 @@ const Preset* init_params_ptr() {
 	return &init_params;
 }
 
-Param get_recent_param(void) {
+static Param get_recent_param(void) {
 	return EDITING_PARAM ? selected_param : mem_param;
 }
 
@@ -479,27 +479,31 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	save_param_raw(param_id, selected_mod_src, raw);
 }
 
-// rj: it looks like the intention here was to toggle between the saved value and the default value, but in reality the
-// first press switches from the saved value to the default value, which from that point toggles between the default
-// value and zero, or between 100% and zero
-void params_toggle_default_value(Param param_id) {
-	s16 saved_val = param_val_raw(param_id, selected_mod_src);
+void params_toggle_default_value(void) {
+	static u16 param_hash = NUM_PARAMS * NUM_MOD_SOURCES;
+	static s16 saved_val = INT16_MAX;
+
+	Param param_id = get_recent_param();
+	if (param_id >= NUM_PARAMS)
+		return;
+
+	// clear saved value when we're seeing a new parameter
+	u16 new_hash = param_id * NUM_MOD_SOURCES + selected_mod_src;
+	if (new_hash != param_hash) {
+		saved_val = INT16_MAX;
+		param_hash = new_hash;
+	}
+
+	s16 cur_val = param_val_raw(param_id, selected_mod_src);
 	s16 init_val = selected_mod_src ? 0 : init_params.params[param_id][0];
-	s16 new_val = saved_val;
-	if (init_val != 0) {
-		if (new_val != init_val)
-			new_val = init_val;
-		else
-			new_val = 0;
+	// first press: save current value and set init value
+	if (cur_val != init_val || saved_val == INT16_MAX) {
+		saved_val = param_val_raw(param_id, selected_mod_src);
+		save_param_raw(param_id, selected_mod_src, init_val);
 	}
-	else {
-		if (new_val != 0)
-			new_val = 0;
-		else
-			new_val = PARAM_SIZE;
-	}
-	if (new_val != saved_val)
-		save_param_raw(param_id, selected_mod_src, new_val);
+	// second press: restore saved value
+	else
+		save_param_raw(param_id, selected_mod_src, saved_val);
 }
 
 void hold_encoder_for_params(u16 duration) {
