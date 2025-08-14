@@ -18,11 +18,6 @@ typedef enum RamItemType {
 	NUM_ITEM_TYPES,
 } RamItemType;
 
-typedef enum PresetFlag {
-	FLAG_ARP = 1,
-	FLAG_LATCH = 2,
-} PresetFlag;
-
 SysParams sys_params;
 
 // item we are (or want to be) editing
@@ -79,30 +74,6 @@ bool pattern_outdated(void) {
 }
 static bool sample_outdated(void) {
 	return cur_sample_id != ram_sample_id;
-}
-// is the arp turned on in the preset?
-bool arp_on(void) {
-	return cur_preset.flags & FLAG_ARP;
-}
-// is the arp actively being executed?
-bool arp_active(void) {
-	return arp_on() && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
-}
-
-void save_arp(bool on) {
-	if (on)
-		cur_preset.flags |= FLAG_ARP;
-	else
-		cur_preset.flags &= ~FLAG_ARP;
-}
-bool latch_on(void) {
-	return cur_preset.flags & FLAG_LATCH;
-}
-void save_latch(bool on) {
-	if (on)
-		cur_preset.flags |= FLAG_LATCH;
-	else
-		cur_preset.flags &= ~FLAG_LATCH;
 }
 
 // == MAIN == //
@@ -503,19 +474,9 @@ void draw_sample_id(void) {
 	fdraw_str(-128, 16, F_20_BOLD, cur_sample_id < NUM_SAMPLES ? I_WAVE "%d" : I_WAVE "Off", cur_sample_id + 1);
 }
 
-void draw_arp_flag(void) {
-	gfx_text_color = 0;
-	if (arp_on()) {
-		fill_rectangle(128 - 32, 0, 128 - 17, 8);
-		draw_str(-(128 - 17), -1, F_8, "arp");
-		if (!arp_active())
-			inverted_rectangle(128 - 32, 0, 128 - 17, 8);
-	}
-}
-
 void draw_latch_flag(void) {
 	gfx_text_color = 0;
-	if (latch_on()) {
+	if (param_index(P_LATCH_TGL)) {
 		fill_rectangle(128 - 38, 32 - 8, 128 - 17, 32);
 		draw_str(-(128 - 17), 32 - 7, F_8, "latch");
 		if (seq_state() == SEQ_STEP_RECORDING)

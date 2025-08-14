@@ -13,13 +13,6 @@ extern SampleInfo cur_sample_info; // possibly give sampler its own copy
 // get ram state
 bool pattern_outdated(void);
 
-// fake params
-bool arp_on(void);
-bool arp_active(void);
-void save_arp(bool on);
-bool latch_on(void);
-void save_latch(bool on);
-
 // main
 PatternStringStep* string_step_ptr(u8 string_id, bool only_filled, u8 seq_step);
 
@@ -51,7 +44,6 @@ u8 draw_cued_pattern_id(bool with_arp_icon);
 void draw_pattern_id(bool with_arp_icon);
 void draw_preset_name(u8 xtab);
 void draw_sample_id(void);
-void draw_arp_flag(void);
 void draw_latch_flag(void);
 void draw_select_load_item(u8 item_id, bool done);
 void draw_clear_load_item(u8 item_id, bool done);

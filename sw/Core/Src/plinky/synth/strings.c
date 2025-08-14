@@ -1,5 +1,6 @@
 #include "strings.h"
 #include "arp.h"
+#include "gfx/gfx.h"
 #include "hardware/adc_dac.h"
 #include "hardware/midi.h"
 #include "hardware/ram.h"
@@ -43,6 +44,11 @@ u8 midi_pressure_override = 0; // true if midi note is pressed
 u8 midi_pitch_override = 0;    // true if midi note is sounded out, includes release phase
 u8 midi_suppress = 0;          // true if midi is suppressed by touch / latch / seq
 u8 midi_held_by_sustain = 0;   // true is midi note is only held because sustain is pressed
+
+// is the arp actively being executed?
+static bool arp_active(void) {
+	return param_index(P_ARP_TGL) && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
+}
 
 // latching
 
@@ -113,7 +119,7 @@ static void generate_string_touch(u8 string_id) {
 		// === LATCH WRITE === //
 
 		// finger touching and pressure increasing
-		if (latch_on() && pressure > 0 && pres_increasing) {
+		if (param_index(P_LATCH_TGL) && pressure > 0 && pres_increasing) {
 			// is this a new touch after no fingers where touching?
 			if (pres_2back <= 0 && strings_phys_touched == mask) {
 				// start a new latch, clear all previous latch values
@@ -156,7 +162,7 @@ static void generate_string_touch(u8 string_id) {
 	// === LATCH RECALL === //
 
 	// latch pressure larger than touch pressure
-	if (latch_on() && latch_touch[string_id].pres > 0 && latch_touch[string_id].pres * 24 > pressure) {
+	if (param_index(P_LATCH_TGL) && latch_touch[string_id].pres > 0 && latch_touch[string_id].pres * 24 > pressure) {
 		// recall latch values
 		pressure = pres_decompress(latch_touch[string_id].pres);
 		position = pos_decompress(latch_touch[string_id].pos);
@@ -472,4 +478,14 @@ void strings_clear_midi(void) {
 	memset(midi_velocity, 0, sizeof(midi_velocity));
 	memset(midi_poly_pressure, 0, sizeof(midi_poly_pressure));
 	memset(midi_channel, 255, sizeof(midi_channel));
+}
+
+void draw_arp_flag(void) {
+	gfx_text_color = 0;
+	if (param_index(P_ARP_TGL)) {
+		fill_rectangle(128 - 32, 0, 128 - 17, 8);
+		draw_str(-(128 - 17), -1, F_8, "arp");
+		if (!arp_active())
+			inverted_rectangle(128 - 32, 0, 128 - 17, 8);
+	}
 }

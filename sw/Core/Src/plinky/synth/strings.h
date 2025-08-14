@@ -26,3 +26,5 @@ void strings_rcv_midi(u8 status, u8 d1, u8 d2);
 void strings_clear_midi(void);
 // this only exists for midi output - remove after midi cleanup
 Touch* get_string_touch_prev(u8 string_id, u8 frames_back);
+
+void draw_arp_flag(void);

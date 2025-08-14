@@ -166,7 +166,7 @@ typedef struct SysParams {
 
 typedef struct Preset {
 	s16 params[96][8];
-	u8 flags;
+	u8 pad;
 	u8 seq_start;
 	u8 seq_len;
 	u8 paddy[3];

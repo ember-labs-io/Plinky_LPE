@@ -74,9 +74,6 @@ void encoder_tick(void) {
 		// encoder turned
 		if (enc_diff)
 			edit_param_from_encoder(enc_diff, encoder_acc);
-		// start of an encoder press
-		if (encoder_pressed && !prev_encoder_pressed)
-			check_param_toggles(param_id);
 		// release of a short encoder press
 		else if (!encoder_pressed && prev_encoder_pressed && encoder_press_duration <= 50)
 			params_toggle_default_value(param_id);

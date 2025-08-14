@@ -7,6 +7,7 @@
 #include "synth/params.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
+#include "synth/strings.h"
 #include "synth/synth.h"
 
 // == TOOLS == //
@@ -113,7 +114,7 @@ static void draw_startup_visuals(void) {
 	// draw version number
 	gfx_text_color = 3;
 	u8 y = maxi(frame - 255 + 32, 20);
-	fdraw_str(47, y, F_12, latch_on() ? "v" FIRMWARE_VERSION : "LPE v" FIRMWARE_VERSION, version_tail);
+	fdraw_str(47, y, F_12, param_index(P_LATCH_TGL) ? "v" FIRMWARE_VERSION : "LPE v" FIRMWARE_VERSION, version_tail);
 	frame += 4;
 	// draw plinky plus
 	if (hw_version == HW_PLINKY_PLUS)
@@ -131,9 +132,9 @@ static void draw_preset_info(void) {
 	if (seq_state() != SEQ_STEP_RECORDING)
 		draw_preset_name(xtab);
 	// bottom left priority: cued pattern, current pattern
-	xtab = draw_cued_pattern_id(arp_on());
+	xtab = draw_cued_pattern_id(param_index(P_ARP_TGL));
 	if (!xtab)
-		draw_pattern_id(arp_on());
+		draw_pattern_id(param_index(P_ARP_TGL));
 }
 
 static void draw_visuals(void) {
@@ -165,7 +166,7 @@ static void draw_visuals(void) {
 			return; // this fills the rest of the display
 		}
 		draw_preset_info();
-		draw_voices(latch_on());
+		draw_voices(param_index(P_LATCH_TGL));
 		draw_latch_flag();
 		if (seq_state() == SEQ_STEP_RECORDING) {
 			seq_draw_step_recording();

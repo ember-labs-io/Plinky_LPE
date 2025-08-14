@@ -85,30 +85,6 @@ static bool param_signed_or_mod(Param param_id, ModSource mod_src) {
 	return param_signed(param_id) || mod_src != SRC_BASE;
 }
 
-static void set_arp(bool on) {
-	if (on == arp_on())
-		return;
-	save_arp(on);
-	flash_message(F_32_BOLD, on ? "arp on" : "arp off", 0);
-	log_ram_edit(SEG_SYS);
-}
-
-static void toggle_arp(void) {
-	set_arp(!arp_on());
-}
-
-static void set_latch(bool on) {
-	if (on == latch_on())
-		return;
-	save_latch(on);
-	flash_message(F_32_BOLD, on ? "latch on" : "latch off", 0);
-	log_ram_edit(SEG_SYS);
-}
-
-static void toggle_latch(void) {
-	set_latch(!latch_on());
-}
-
 // == HELPERS == //
 
 const Preset* init_params_ptr() {
@@ -315,19 +291,28 @@ s8 param_index_poly(Param param_id, u8 string_id) {
 // == SAVING == //
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
-	// special case
-	if (param_id == P_VOLUME) {
+	// special cases
+	switch (param_id) {
+	case P_VOLUME:
 		data = clampi(data >> 2, 0, 255);
 		if (data == sys_params.headphonevol)
 			return;
 		sys_params.headphonevol = data;
 		log_ram_edit(SEG_SYS);
 		return;
+	case P_TEMPO:
+		// rj: this is a bit of a hacky way to make sure the tempo is not saved to a value lower than 30bpm
+		// I'm leaving it like this until the parameter system is rewritten to more elegantly support parameter limits
+		if (mod_src == SRC_BASE)
+			data = maxi(data, -768);
+		break;
+	case P_LATCH_TGL:
+		if (data >> 9 == 0)
+			clear_latch();
+		break;
+	default:
+		break;
 	}
-	// rj: this is a bit of a hacky way to make sure the tempo is not saved to a value lower than 30bpm
-	// I'm leaving it like this until the parameter system is rewritten to more elegantly support parameter limits
-	if (param_id == P_TEMPO && mod_src == SRC_BASE)
-		data = maxi(data, -768);
 	// don't save if no change
 	if (data == cur_preset.params[param_id][mod_src])
 		return;
@@ -390,24 +375,8 @@ bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 	// select param based on pressed pad
 	u8 prev_param = selected_param;
 	selected_param = pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
-
-	// parameters that do something the moment they are pressed
-	if (is_press_start) {
-		switch (selected_param) {
-		case P_ARP_TGL:
-			toggle_arp();
-			break;
-		case P_LATCH_TGL:
-			toggle_latch();
-			break;
-		case P_TEMPO:
-			trigger_tap_tempo();
-			break;
-		default:
-			break;
-		}
-	}
-
+	if (is_press_start && selected_param == P_TEMPO)
+		trigger_tap_tempo();
 	return selected_param != prev_param;
 }
 
@@ -446,12 +415,6 @@ void enter_param_edit_mode(bool mode_a) {
 
 // this gets triggered when an A / B shift state pad gets released
 void try_exit_param_edit_mode(bool param_select) {
-	// arp & latch are fake params => exit on shift state release and don't remember the param
-	if (selected_param == P_ARP_TGL || selected_param == P_LATCH_TGL) {
-		selected_param = NUM_PARAMS;
-		selected_mod_src = 0;
-		return;
-	}
 	// we don't exit if a parameter was retrieved from memory when we entered edit mode
 	if (param_from_mem)
 		return;
@@ -551,25 +514,9 @@ void hold_encoder_for_params(u16 duration) {
 		flash_message(F_20_BOLD, I_CROSS "Clear Mod?", "");
 }
 
-void check_param_toggles(Param param_id) {
-	if (param_id == P_ARP_TGL)
-		toggle_arp();
-	else if (param_id == P_LATCH_TGL)
-		toggle_latch();
-}
-
 // == MIDI == //
 
 void set_param_from_cc(Param param_id, u16 value) {
-	// toggles
-	if (param_id == P_ARP_TGL) {
-		set_arp((bool)(value & (1 << 14)));
-		return;
-	}
-	if (param_id == P_LATCH_TGL) {
-		set_latch((bool)(value & (1 << 14)));
-		return;
-	}
 	// scale from 14 bit to PARAM_SIZE
 	value = (value * PARAM_SIZE) / 16383;
 	// scale from unsigned to signed
@@ -594,13 +541,9 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 			displaymax = 2000;
 			break;
 		case P_ARP_TGL:
-			if (mod)
-				return "";
-			return arp_on() ? "On" : "Off";
+			return param_index(P_ARP_TGL) ? "On" : "Off";
 		case P_LATCH_TGL:
-			if (mod)
-				return "";
-			return latch_on() ? "On" : "Off";
+			return param_index(P_LATCH_TGL) ? "On" : "Off";
 		case P_SAMPLE:
 			if (vscale == 0) {
 				return "Off";
@@ -847,11 +790,6 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 		// pulse selected param
 		if (pAorB == param_snap)
 			k = pulse;
-		// fake params
-		if (pAorB == P_ARP_TGL)
-			k = arp_on() ? 255 : 0;
-		else if (pAorB == P_LATCH_TGL)
-			k = latch_on() ? 255 : 0;
 	}
 	else {
 		// pulse active mod source
