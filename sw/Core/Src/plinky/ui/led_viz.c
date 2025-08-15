@@ -86,11 +86,11 @@ static void draw_main_leds(void) {
 			int sp1 = (x < 7) ? cur_sample_info.splitpoints[x + 1] : cur_sample_info.samplelen;
 
 			// root pitch calcs
-			s8 root = param_val_poly(P_DEGREE, x);
-			u32 scale = param_val_poly(P_SCALE, x);
+			s8 root = param_index_poly(P_DEGREE, x);
+			Scale scale = param_index_poly(P_SCALE, x);
 			if (scale >= NUM_SCALES)
 				scale = 0;
-			if (param_val(P_CV_QUANT) == CVQ_SCALE) {
+			if (param_index(P_CV_QUANT) == CVQ_SCALE) {
 				int steps = ((cv_pitch / 512) * scale_table[scale][0] + 1) / 12;
 				root += steps;
 			}

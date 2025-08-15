@@ -15,10 +15,12 @@ void params_tick(void);
 // param retrieval calls
 s32 param_val(Param param_id);
 s32 param_val_poly(Param param_id, u8 string_id);
+s8 param_index(Param param_id);
+s8 param_index_poly(Param param_id, u8 string_id);
 
 // save param calls
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);
-void save_param(Param param_id, ModSource mod_src, s16 data);
+void save_param_index(Param param_id, s8 index);
 
 // pad action calls
 void try_left_strip_for_params(u16 position, bool is_press_start);

@@ -140,7 +140,7 @@ static void advance_step(u8 avail_touch_mask) {
 	if (arp_order >= ARP_UP8)
 		avail_touch_mask = 0b11111111;
 	// map the used octaves evenly above/below the current octave
-	u8 arp_octs = param_val(P_ARP_OCTAVES);
+	u8 arp_octs = param_index(P_ARP_OCTAVES);
 	u8 top_oct_offset = (arp_octs + 1) / 2;
 	s8 bottom_oct_offset = top_oct_offset - arp_octs;
 	switch (arp_order) {
@@ -211,8 +211,8 @@ u8 arp_tick(u8 string_touch_mask) {
 	static bool step_next_strings_frame = false;
 
 	// update properties
-	arp_order = param_val(P_ARP_ORDER);
-	c_step.euclid_len = param_val(P_ARP_EUC_LEN);
+	arp_order = param_index(P_ARP_ORDER);
+	c_step.euclid_len = param_index(P_ARP_EUC_LEN);
 	c_step.density = param_val(P_ARP_CHANCE);
 
 	// does this tick generate a step?

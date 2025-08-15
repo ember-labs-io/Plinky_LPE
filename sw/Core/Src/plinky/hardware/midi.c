@@ -85,7 +85,7 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	if (status == MIDI_PROGRAM_CHANGE || status == MIDI_CHANNEL_PRESSURE)
 		num_bytes = 2;
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
-		status += param_val(P_MIDI_CH_OUT);
+		status += param_index(P_MIDI_CH_OUT);
 	u8 buf[4] = {status >> 4, status, data1, data2};
 	// send to serial
 	if (!send_midi_serial(buf + 1, num_bytes)) {
@@ -210,7 +210,7 @@ static void process_midi_msg(u8 status, u8 d1, u8 d2) {
 	u8 type = status & 0xF0; // take the channel out
 
 	// allow only selected channel and system msgs
-	if ((chan != param_val(P_MIDI_CH_IN)) && (type != MIDI_SYSTEM_COMMON_MSG))
+	if (chan != param_index(P_MIDI_CH_IN) && type != MIDI_SYSTEM_COMMON_MSG)
 		return;
 
 	// turn silent note ons into note offs

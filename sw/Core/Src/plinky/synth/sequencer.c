@@ -72,7 +72,7 @@ static void align_cur_step(void) {
 
 // calculate start step from preset and step offset modulation
 static void recalc_start_step(void) {
-	cur_seq_start = (cur_preset.seq_start + param_val(P_STEP_OFFSET) + 64) & 63;
+	cur_seq_start = (cur_preset.seq_start + param_index(P_STEP_OFFSET) + 64) & 63;
 	// this always needs an align of cur step as well
 	align_cur_step();
 }
@@ -121,7 +121,7 @@ static void seq_step(void) {
 	seq_flags.force_next_step = false;
 
 	// perform a conditional step
-	c_step.euclid_len = param_val(P_SEQ_EUC_LEN);
+	c_step.euclid_len = param_index(P_SEQ_EUC_LEN);
 	c_step.density = param_val(P_SEQ_CHANCE);
 	do_conditional_step(&c_step, false);
 
@@ -132,7 +132,7 @@ static void seq_step(void) {
 	}
 
 	// we're advancing, let's define what the next step is going to be
-	SeqOrder seq_order = param_val(P_SEQ_ORDER);
+	SeqOrder seq_order = param_index(P_SEQ_ORDER);
 	bool wrapped = false;
 	switch (seq_order) {
 	case SEQ_ORD_PAUSE:
@@ -212,7 +212,7 @@ static void seq_step(void) {
 void seq_tick(void) {
 	// update properties
 	ticks_since_step++;
-	u8 seq_div = param_val(P_SEQ_CLK_DIV);
+	u8 seq_div = param_index(P_SEQ_CLK_DIV);
 	step_32nds = seq_div == NUM_SYNC_DIVS ? -1 : sync_divs_32nds[clampi(seq_div, 0, NUM_SYNC_DIVS - 1)];
 	recalc_start_step();
 
@@ -438,7 +438,7 @@ bool seq_dec_step(void) {
 
 void seq_try_set_start(u8 new_step) {
 	// get the unmodulated new start step
-	u8 new_start = (new_step - param_val(P_STEP_OFFSET) + 64) & 63;
+	u8 new_start = (new_step - param_index(P_STEP_OFFSET) + 64) & 63;
 	// 1. not playing => change immediately
 	// 2. goal identical to cued means double press on the same step => change immediately
 	if (!seq_flags.playing || cued_ptn_start == new_start) {

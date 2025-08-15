@@ -228,7 +228,7 @@ void ram_frame(void) {
 				u8 dst_page = 4 * (edit_item_id - PATTERNS_START) + PATTERNS_START;
 				for (u8 qtr = 0; qtr < 4; ++qtr)
 					flash_write_page(ptn_quarter_flash_ptr(src_page + qtr), sizeof(PatternQuarter), dst_page + qtr);
-				save_param(P_PATTERN, SRC_BASE, edit_item_id - PATTERNS_START);
+				save_param_index(P_PATTERN, edit_item_id - PATTERNS_START);
 			} break;
 			default:
 				// samples don't copy
@@ -318,7 +318,7 @@ bool update_preset_ram(bool force) {
 }
 
 void update_pattern_ram(bool force) {
-	cur_pattern_id = param_val(P_PATTERN);
+	cur_pattern_id = param_index(P_PATTERN);
 	// already up to date
 	if (!pattern_outdated() && !force)
 		return;
@@ -333,7 +333,7 @@ void update_pattern_ram(bool force) {
 }
 
 void update_sample_ram(bool force) {
-	cur_sample_id = param_val(P_SAMPLE);
+	cur_sample_id = param_index(P_SAMPLE);
 	// already up to date
 	if (!sample_outdated() && !force)
 		return;
@@ -392,12 +392,12 @@ bool apply_cued_load_items(void) {
 		possible_seq_changes = true;
 	}
 	if (cued_pattern_id != 255) {
-		save_param(P_PATTERN, SRC_BASE, cued_pattern_id);
+		save_param_index(P_PATTERN, cued_pattern_id);
 		cued_pattern_id = 255;
 		possible_seq_changes = true;
 	}
 	if (cued_sample_id != cur_sample_id && cued_sample_id != 255) {
-		save_param(P_SAMPLE, SRC_BASE, cued_sample_id);
+		save_param_index(P_SAMPLE, cued_sample_id);
 		cued_sample_id = 255;
 	}
 	return possible_seq_changes;
@@ -450,13 +450,13 @@ void try_apply_cued_ram_item(u8 item_id) {
 		break;
 	case RAM_PATTERN:
 		if (cued_pattern_id != 255 && (!seq_playing() || cued_pattern_id == prev_cued_pattern_id)) {
-			save_param(P_PATTERN, SRC_BASE, cued_pattern_id);
+			save_param_index(P_PATTERN, cued_pattern_id);
 			cued_pattern_id = 255;
 		}
 		break;
 	case RAM_SAMPLE:
 		if (cued_sample_id != 255 && (!seq_playing() || cued_sample_id == prev_cued_sample_id)) {
-			save_param(P_SAMPLE, SRC_BASE, cued_sample_id);
+			save_param_index(P_SAMPLE, cued_sample_id);
 			cued_sample_id = 255;
 		}
 		break;

@@ -127,7 +127,7 @@ void update_lfo(u8 lfo_id) {
 		lfo_clock_q32[lfo_id] = (lfo_clock_q32[lfo_id] & 0xFFFFFFFF00000000) | ((u32)new_phase_q16 << 16);
 	}
 	// calc half cycle & position in cycle
-	LfoShape lfo_shape = param_val(P_A_SHAPE + lfo_page_offset);
+	LfoShape lfo_shape = param_index(P_A_SHAPE + lfo_page_offset);
 	u32 lfo_clock_q16 = (u32)(lfo_clock_q32[lfo_id] >> 16);
 	float cycle_center = param_val(P_A_SYM + lfo_page_offset) * (1.f / 65535.f) * 0.49f + 0.5f; // range [0.01, 0.99]
 	u32 half_cycle;

@@ -55,13 +55,13 @@ void generate_oscs(u8 string_id, Voice* voice) {
 
 	s32 base_pitch = 12 *
 	                 // pitch from arp and the octave parameter
-	                 (((arp_oct_offset + param_val_poly(P_OCT, string_id)) << 9)
+	                 (((arp_oct_offset + param_index_poly(P_OCT, string_id)) << 9)
 	                  // pitch from the pitch parameter
 	                  + (param_val_poly(P_PITCH, string_id) >> 7));
 	// pitch from interval parameter
 	s32 osc_interval_pitch = (param_val_poly(P_INTERVAL, string_id) * 12) >> 7;
 	// scale step from rotate parameter
-	s8 string_step_offset = param_val_poly(P_DEGREE, string_id);
+	s8 string_step_offset = param_index_poly(P_DEGREE, string_id);
 
 	// for midi
 	if ((midi_pitch_override & mask) && !(midi_suppress & mask)) {
@@ -69,7 +69,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	}
 	// for touch
 	else {
-		scale = param_val_poly(P_SCALE, string_id);
+		scale = param_index_poly(P_SCALE, string_id);
 		if (scale >= NUM_SCALES)
 			scale = 0;
 
@@ -78,7 +78,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 
 		// cv
 		s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
-		if (param_val(P_CV_QUANT) == CVQ_SCALE)
+		if (param_index(P_CV_QUANT) == CVQ_SCALE)
 			cv_step_offset = pitch_to_scale_steps(cv_pitch, scale); // quantized cv
 		else
 			cv_pitch_offset = cv_pitch; // unquantized cv

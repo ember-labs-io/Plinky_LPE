@@ -338,7 +338,7 @@ static u16 find_string_position_for_midi_pitch(u8 string_id, int midi_pitch) {
 static u8 find_free_midi_string(u8 midi_note_number, u16* midi_note_position, u8 chan) {
 	s32 midi_pitch = 12 *
 	                     // pitch from octave parameter
-	                     ((param_val(P_OCT) << 9)
+	                     ((param_index(P_OCT) << 9)
 	                      // pitch from pitch parameter
 	                      + (param_val(P_PITCH) >> 7))
 	                 // pitch from midi note

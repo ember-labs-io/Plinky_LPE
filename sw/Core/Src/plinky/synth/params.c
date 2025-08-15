@@ -17,6 +17,8 @@
 
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
 
+#define VAL_TO_INDEX(value, range) (clampi((value), -65535, 65535) * (range) >> 16)
+
 static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
 
@@ -202,17 +204,16 @@ void params_tick(void) {
 
 // == RETRIEVAL == //
 
-// raw parameter value
+// raw parameter value, range -1024 to 1024
 static s16 param_val_raw(Param param_id, ModSource mod_src) {
 	if (param_id == P_VOLUME)
 		return mod_src == SRC_BASE ? sys_params.headphonevol << 2 : 0;
 	return cur_preset.params[param_id][mod_src];
 }
 
-// modulated and scaled parameter value
+// modulated parameter value, range -65536 to 65536
 static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 	s16* param = cur_preset.params[param_id];
-	u8 range = param_range[param_id] & RANGE_MASK;
 
 	// pre-modulated with lfos, has 16 precision bits
 	s32 mod_val = param_with_lfo[param_id];
@@ -237,28 +238,10 @@ static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 	}
 
 	// all 7 mod sources have now been applied, scale and clamp to 16 bit
-	mod_val = clampi(mod_val >> 10, (param_range[param_id] & RANGE_SIGNED) ? -65536 : 0, range ? 65535 : 65536);
-
-	// bring value to appropriate range
-	if (range)
-		mod_val = (mod_val * range) >> 16;
-
-	// special cases
-	switch (param_id) {
-	case P_MIDI_CH_IN:
-	case P_MIDI_CH_OUT:
-		// return scaled but unmodulated
-		mod_val = clampi(cur_preset.params[param_id][SRC_BASE] / PARAM_SIZE, 0, 15);
-		break;
-	case P_SAMPLE:
-		// sample_id is stored 1-based, revert before returning
-		mod_val = (mod_val - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
-		break;
-	default:
-		break;
-	}
-	return mod_val;
+	return clampi(mod_val >> 10, (param_range[param_id] & RANGE_SIGNED) ? -65536 : 0, 65536);
 }
+
+// param value range +/- 65536
 
 s32 param_val(Param param_id) {
 	return param_val_mod(param_id, sample_hold_global, max_env_global, max_pres_global);
@@ -267,6 +250,31 @@ s32 param_val(Param param_id) {
 s32 param_val_poly(Param param_id, u8 string_id) {
 	return param_val_mod(param_id, sample_hold_poly[string_id], voices[string_id].env2_lvl16,
 	                     clampi(touch_pointer[string_id]->pres << 5, 0, 65535));
+}
+
+// index value is scaled to its appropriate range
+
+s8 param_index(Param param_id) {
+	s8 index = VAL_TO_INDEX(param_val(param_id), param_range[param_id] & RANGE_MASK);
+	// special cases
+	switch (param_id) {
+	// disallow midi channel modulation
+	case P_MIDI_CH_IN:
+	case P_MIDI_CH_OUT:
+		index = clampi(cur_preset.params[param_id][SRC_BASE] >> 10, 0, 15);
+		break;
+	// sample_id is stored 1-based, revert before returning
+	case P_SAMPLE:
+		index = (index - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
+		break;
+	default:
+		break;
+	}
+	return index;
+}
+
+s8 param_index_poly(Param param_id, u8 string_id) {
+	return VAL_TO_INDEX(param_val_poly(param_id, string_id), param_range[param_id] & RANGE_MASK);
 }
 
 // == SAVING == //
@@ -303,21 +311,20 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	log_ram_edit(SEG_PRESET);
 }
 
-// constrain data to param_range bounds before saving, all data is scaled to s8 or smaller
-void save_param(Param param_id, ModSource mod_src, s16 data) {
+void save_param_index(Param param_id, s8 index) {
 	if (param_id == P_SAMPLE)
 		// sample id is stored 1-based, with value NUM_SAMPLES representing "off" stored as 0
-		data = (data + 1) % SAMPLE_ID_RANGE;
+		index = (index + 1) % SAMPLE_ID_RANGE;
 
 	u8 range = param_range[param_id] & RANGE_MASK;
 	// ranged parameters are truncated and scaled to [0, PARAM_SIZE] or [-PARAM_SIZE, PARAM_SIZE]
 	if (range > 0) {
-		data %= range;
-		if (data < 0 && !(param_range[param_id] & RANGE_SIGNED))
-			data += range;
-		data = ((data * 2 + 1) * PARAM_SIZE) / (range * 2);
+		index %= range;
+		if (index < 0 && !(param_range[param_id] & RANGE_SIGNED))
+			index += range;
+		index = ((index * 2 + 1) * PARAM_SIZE) / (range * 2);
 	}
-	save_param_raw(param_id, mod_src, data);
+	save_param_raw(param_id, SRC_BASE, index);
 }
 
 // == PAD ACTION == //

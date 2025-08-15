@@ -90,7 +90,7 @@ float adc_get_smooth(ADCSmoothIndex index) {
 	if (index == ADC_S_PITCH) {
 		s32 pitch = (s32)(adc_smoother[ADC_S_PITCH].y2 * (512.f * 12.f));
 		// quantize pitch according to param
-		if (param_val(P_CV_QUANT))
+		if (param_index(P_CV_QUANT))
 			pitch = (pitch + 256) & (~511);
 		return pitch;
 	}

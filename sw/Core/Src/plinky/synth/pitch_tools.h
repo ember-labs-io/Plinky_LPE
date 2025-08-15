@@ -35,7 +35,7 @@ static inline u8 scale_steps_at_string(Scale scale, u8 string_id) {
 	if (string_id == 0)
 		return 0;
 
-	s8 stride_semitones = maxi(0, param_val_poly(P_COLUMN, string_id));
+	s8 stride_semitones = maxi(0, param_index_poly(P_COLUMN, string_id));
 
 	// we basically lazy-generate the scale steps table - whenever the hash changes (scale or column has changed) we
 	// recalculate the scale steps for this string and reuse it until the hash changes again
@@ -85,7 +85,7 @@ static inline u8 scale_steps_at_string(Scale scale, u8 string_id) {
 }
 
 static inline int string_pitch_at_pad(u8 string_id, u8 pad_y) {
-	Scale scale = param_val_poly(P_SCALE, string_id);
+	Scale scale = param_index_poly(P_SCALE, string_id);
 	// pitch calculation:
 	return
 	    // calculate pitch offset, based on
@@ -93,7 +93,7 @@ static inline int string_pitch_at_pad(u8 string_id, u8 pad_y) {
 	        // the scale
 	        scale,
 	        // the step-offset set by "degree"
-	        param_val_poly(P_DEGREE, string_id) +
+	        param_index_poly(P_DEGREE, string_id) +
 	            // the step-offset of this string based on "column"
 	            scale_steps_at_string(scale, string_id) +
 	            // the step-offset caused by the pad_id on the string
@@ -103,7 +103,7 @@ static inline int string_pitch_at_pad(u8 string_id, u8 pad_y) {
 	    12
 	        * (
 	            // octave offset
-	            (param_val_poly(P_OCT, string_id) << 9) +
+	            (param_index_poly(P_OCT, string_id) << 9) +
 	            // pitch offset
 	            (param_val_poly(P_PITCH, string_id) >> 7));
 }

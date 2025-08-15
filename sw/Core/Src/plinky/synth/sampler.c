@@ -50,7 +50,7 @@ int using_sampler(void) {
 
 void open_sampler(u8 with_sample_id) {
 	load_sample(with_sample_id);
-	save_param(P_SAMPLE, SRC_BASE, with_sample_id);
+	save_param_index(P_SAMPLE, with_sample_id);
 	ui_mode = UI_SAMPLE_EDIT;
 	cur_slice_id = 7;
 }
