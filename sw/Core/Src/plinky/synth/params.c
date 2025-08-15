@@ -334,11 +334,6 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 	// smooth the pressed value
 	smooth_value(&left_strip_smooth, press_value, PARAM_SIZE);
 	float smoothed_value = clampf(left_strip_smooth.y2, (is_signed) ? -PARAM_SIZE - 0.1f : 0.f, PARAM_SIZE + 0.1f);
-	// value stops exactly at zero when crossing it
-	if (smoothed_value < 0.f && left_strip_start > 0)
-		smoothed_value = 0.f;
-	if (smoothed_value > 0.f && left_strip_start < 0)
-		smoothed_value = 0.f;
 	// value stops exactly halfway when crossing center
 	bool notch_at_50 = (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
 	if (notch_at_50) {
