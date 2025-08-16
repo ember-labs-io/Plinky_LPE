@@ -204,10 +204,8 @@ void process_all_midi_out(void) {
 
 // apply midi messages to plinky
 static void process_midi_msg(u8 status, u8 d1, u8 d2) {
-	static u8 cc14_lsb[NUM_14BIT_CCS];
-
-	u8 chan = status & 0x0F; // save the channel
-	u8 type = status & 0xF0; // take the channel out
+	u8 chan = status & 0x0F;              // save the channel
+	MidiMessageType type = status & 0xF0; // take the channel out
 
 	// allow only selected channel and system msgs
 	if (chan != param_index(P_MIDI_CH_IN) && type != MIDI_SYSTEM_COMMON_MSG)
@@ -236,26 +234,56 @@ static void process_midi_msg(u8 status, u8 d1, u8 d2) {
 	case MIDI_CHANNEL_PRESSURE:
 		midi_chan_pressure[chan] = d1;
 		break;
-	case MIDI_CONTROL_CHANGE: {
+	case MIDI_CONTROL_CHANGE:
 		// sustain is sent to the strings
 		if (d1 == 64) {
 			strings_rcv_midi(status, d1, d2);
 			break;
 		}
-		if (d1 >= NUM_14BIT_CCS && d1 < (2 * NUM_14BIT_CCS))
-			cc14_lsb[d1 - 32] = d2;
-		s8 param = (d1 < 128) ? midi_cc_table[d1] : -1;
-		if (param >= 0) {
-			u16 value = d2 << 7;
-			if (d1 < 32)
-				value += cc14_lsb[d1]; // full CC14
-			set_param_from_cc(param, value);
+
+		// CCs 0 through 31 are treated as regular 7 bit CCs by default
+		// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
+		// treated as 14 bit CCs
+		static u8 cc14[NUM_14BIT_CCS][2];
+		static bool seen_14bit = false;
+		Param param_id;
+		s16 value;
+
+		if (!seen_14bit && d1 >= NUM_14BIT_CCS && d1 < 2 * NUM_14BIT_CCS)
+			seen_14bit = true;
+
+		// 14 bit CCs
+		if (seen_14bit && d1 < 2 * NUM_14BIT_CCS) {
+			u8 param_cc = d1 % NUM_14BIT_CCS;
+			param_id = midi_cc_table[param_cc];
+			if (param_id == NUM_PARAMS)
+				break;
+			cc14[param_cc][d1 / NUM_14BIT_CCS] = d2;
+			value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * RAW_SIZE / 16383;
 		}
+		// 7 bit CCs
+		else {
+			param_id = midi_cc_table[d1];
+			if (param_id == NUM_PARAMS)
+				return;
+			// save in cc14 array in case the second byte comes in later
+			if (d1 < NUM_14BIT_CCS)
+				cc14[d1][0] = d2;
+			value = d2 * RAW_SIZE / 127;
+		}
+
+		// scale from unsigned to signed
+		if (param_signed(param_id))
+			value = value * 2 - RAW_SIZE;
+
+		// save
+		save_param_raw(param_id, SRC_BASE, value);
 		break;
-	}
 	// out of the system messages we only implement the time-related ones => forward to clock
 	case MIDI_SYSTEM_COMMON_MSG:
 		clock_rcv_midi(status);
+		break;
+	default:
 		break;
 	}
 }

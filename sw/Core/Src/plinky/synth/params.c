@@ -77,7 +77,7 @@ static u8 param_range(Param param_id) {
 	return param_info[range_type[param_id]] & RANGE_MASK;
 }
 
-static bool param_signed(Param param_id) {
+bool param_signed(Param param_id) {
 	return param_info[range_type[param_id]] & SIGNED;
 }
 
@@ -506,6 +506,8 @@ void params_toggle_default_value(void) {
 		save_param_raw(param_id, selected_mod_src, saved_val);
 }
 
+// == VISUALS == //
+
 void hold_encoder_for_params(u16 duration) {
 	if (!EDITING_PARAM)
 		return;
@@ -518,17 +520,7 @@ void hold_encoder_for_params(u16 duration) {
 		flash_message(F_20_BOLD, I_CROSS "Clear Mod?", "");
 }
 
-// == MIDI == //
-
-void set_param_from_cc(Param param_id, u16 value) {
-	// scale from 14 bit to RAW_SIZE
-	value = value * RAW_SIZE / 16383;
-	// scale from unsigned to signed
-	if (param_signed(param_id))
-		value = value * 2 - RAW_SIZE;
-	// save
-	save_param_raw(param_id, SRC_BASE, value);
-}
+// == VISUALS == //
 
 static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec_buf) {
 	if (dec_buf)
@@ -644,8 +636,6 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 	}
 	return val_buf;
 }
-
-// == VISUALS == //
 
 void take_param_snapshots(void) {
 	param_snap = selected_param;

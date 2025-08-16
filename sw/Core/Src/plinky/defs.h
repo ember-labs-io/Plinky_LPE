@@ -597,29 +597,29 @@ typedef enum MidiMessageType {
 } MidiMessageType;
 
 // clang-format off
-static const s8 midi_cc_table[128] = {
-	//					0					1				2				3				4				5			6			7
-	/*   0 */			-1,					-1,/*mod whl*/	P_NOISE,		P_ENV_LVL1,		P_DISTORTION,	P_GLIDE,	-1,			P_SYN_LVL,
-	/*   8 */			P_SYN_WET_DRY,	P_PITCH,		-1,				P_GATE_LENGTH,	P_DLY_TIME,		P_SHAPE,	P_INTERVAL,	P_SCRUB,
-	/*  16 */			P_GR_SIZE,	P_PLAY_SPD,	P_SMP_STRETCH,	P_ENV_LVL2,		P_ATTACK2,		P_DECAY2,	P_SUSTAIN2,	P_RELEASE2,
-	/*  24 */			P_A_RATE,			P_A_DEPTH,		P_A_OFFSET,		P_B_RATE,		P_B_DEPTH,		P_B_OFFSET,	-1,			P_HPF,
+ const static Param midi_cc_table[128] = {
+	//			0				1				2				3				4				5				6				7	
+	/*   0 */	NUM_PARAMS,		NUM_PARAMS, 	P_NOISE,		P_ENV_LVL1,		P_DISTORTION,	P_GLIDE,		NUM_PARAMS,		P_SYN_LVL,
+	/*   8 */	P_SYN_WET_DRY,	P_PITCH,		NUM_PARAMS,		P_GATE_LENGTH,	P_DLY_TIME,		P_SHAPE,		P_INTERVAL,		P_SCRUB,
+	/*  16 */	P_GR_SIZE,		P_PLAY_SPD,		P_SMP_STRETCH,	P_ENV_LVL2,		P_ATTACK2,		P_DECAY2,		P_SUSTAIN2,		P_RELEASE2,
+	/*  24 */	P_A_RATE,		P_A_DEPTH,		P_A_OFFSET,		P_B_RATE,		P_B_DEPTH,		P_B_OFFSET,		NUM_PARAMS,		P_HPF,
 
-	// CCs 32 through 63 reserved for 14-bit CCs, each of them representing the LSB of CC [number - 32]
-	/*  32 */			-1,			-1,			-1,			-1,			-1,			-1,			-1,			-1,
-	/*  40 */			-1,			-1,			-1,			-1,			-1,			-1,			-1,			-1,
-	/*  48 */			-1,			-1,			-1,			-1,			-1,			-1,			-1,			-1,
-	/*  56 */			-1,			-1,			-1,			-1,			-1,			-1,			-1,			-1,
-	// End of 14-bit CC reserved numbers
+	/* 	CCs 32 through 63 reserved for 14-bit CCs, each of them representing the LSB of CC [number - 32] */
+	/*  32 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
+	/*  40 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
+	/*  48 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
+	/*  56 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
 
-	/*  64 */			-1,/*sustain*/	-1,				-1,					-1,				-1,					-1,						-1,					P_RESO,
-	/*  72 */			P_RELEASE1,		P_ATTACK1,		P_SUSTAIN1,			P_DECAY1,		P_X_RATE,			P_X_DEPTH,				P_X_OFFSET,			P_Y_RATE,
-	/*  80 */			P_Y_DEPTH,		P_Y_OFFSET,		P_SAMPLE,			P_PATTERN,		-1,					P_STEP_OFFSET,			-1,					-1,
-	/*  88 */			-1,				P_IN_LVL,	    P_IN_WET_DRY,	    P_RVB_SEND,		P_RVB_TIME,			P_SHIMMER,			    P_DLY_SEND,			P_DLY_FEEDBACK,
-	/*  96 */			-1,				-1,				-1,					-1,				-1,					P_LATCH_TGL,			P_ARP_TGL,		    P_ARP_ORDER,
-	/* 104 */			P_ARP_CLK_DIV,	P_ARP_CHANCE,	P_ARP_EUC_LEN,		P_ARP_OCTAVES,	P_SEQ_ORDER,		P_SEQ_CLK_DIV,			P_SEQ_CHANCE,		P_SEQ_EUC_LEN,
-	/* 112 */			P_PING_PONG,	P_DLY_WOBBLE,	P_RVB_WOBBLE,		-1,				P_SCRUB_JIT,	    P_GR_SIZE_JIT, 	        P_PLAY_SPD_JIT, 	P_SMP_UNUSED1,
-	/* 120 */			-1,				-1,				-1,					-1,				-1,					-1,						-1,					-1,
+	/*  64 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		P_RESO,
+	/*  72 */	P_RELEASE1,		P_ATTACK1,		P_SUSTAIN1,		P_DECAY1,		P_X_RATE,		P_X_DEPTH,		P_X_OFFSET,		P_Y_RATE,
+	/*  80 */	P_Y_DEPTH,		P_Y_OFFSET,		P_SAMPLE,		P_PATTERN,		NUM_PARAMS,		P_STEP_OFFSET,	NUM_PARAMS,		NUM_PARAMS,
+	/*  88 */	NUM_PARAMS,		P_IN_LVL,	    P_IN_WET_DRY,	P_RVB_SEND,		P_RVB_TIME,		P_SHIMMER,		P_DLY_SEND,		P_DLY_FEEDBACK,
+	/*  96 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		P_LATCH_TGL,	P_ARP_TGL,		P_ARP_ORDER,
+	/* 104 */	P_ARP_CLK_DIV,	P_ARP_CHANCE,	P_ARP_EUC_LEN,	P_ARP_OCTAVES,	P_SEQ_ORDER,	P_SEQ_CLK_DIV,	P_SEQ_CHANCE,	P_SEQ_EUC_LEN,
+	/* 112 */	P_PING_PONG,	P_DLY_WOBBLE,	P_RVB_WOBBLE,	NUM_PARAMS,		P_SCRUB_JIT,	P_GR_SIZE_JIT, 	P_PLAY_SPD_JIT, P_SMP_UNUSED1,
+	/* 120 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
 };
+
 // clang-format on
 
 // == GRAPHICS == //
