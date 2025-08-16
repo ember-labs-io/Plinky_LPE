@@ -29,8 +29,8 @@ void select_mod_src(ModSource mod_src);
 void reset_left_strip(void);
 
 // shift state calls
-void enter_param_edit_mode(bool mode_a);
-void try_exit_param_edit_mode(bool param_select);
+void try_enter_edit_mode(bool mode_a);
+void try_exit_edit_mode(bool param_select);
 
 // encoder calls
 void edit_param_from_encoder(s8 enc_diff, float enc_acc);

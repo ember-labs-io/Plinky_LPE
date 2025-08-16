@@ -58,7 +58,7 @@ void shift_set_state(ShiftState new_state) {
 	// Shift A / Shift B:
 	// - pressing shift pad sets ui_mode to UI_EDITING_A / UI_EDITING_B
 	// - releasing shift pad immediately reverts to UI_DEFAULT
-	// - the state of touched_main_area and param_from_mem decide whether a parameter stays selected for editing, or
+	// - the state of touched_main_area and open_edit_mode decide whether a parameter stays selected for editing, or
 	// gets cleared, when the shift pad is released
 	//
 	// Preset / Left / Right
@@ -80,7 +80,7 @@ void shift_set_state(ShiftState new_state) {
 	case SS_SHIFT_B:
 		bool mode_a = shift_state == SS_SHIFT_A;
 		ui_mode = mode_a ? UI_EDITING_A : UI_EDITING_B;
-		enter_param_edit_mode(mode_a);
+		try_enter_edit_mode(mode_a);
 		break;
 	case SS_LOAD:
 		// activate preset load screen
@@ -164,7 +164,7 @@ void shift_release_state(void) {
 	case SS_SHIFT_A:
 	case SS_SHIFT_B:
 		ui_mode = UI_DEFAULT;
-		try_exit_param_edit_mode(action_pressed_during_shift);
+		try_exit_edit_mode(action_pressed_during_shift);
 		break;
 	case SS_LOAD:
 		if (action_pressed_during_shift || prev_ui_mode == ui_mode)

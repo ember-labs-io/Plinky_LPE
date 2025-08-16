@@ -51,7 +51,7 @@ static u16 sample_hold_poly[NUM_STRINGS] = {0, 1 << 12, 2 << 12, 3 << 12, 4 << 1
 
 // editing params
 static Param mem_param = 255; // remembers previous selected_param, used by encoder and A/B shift-presses
-static bool param_from_mem = false;
+static bool open_edit_mode = false;
 static s16 left_strip_start = 0;
 static ValueSmoother left_strip_smooth;
 
@@ -400,31 +400,45 @@ void reset_left_strip(void) {
 
 // == SHIFT STATE == //
 
-void enter_param_edit_mode(bool mode_a) {
-	// remember parameter
+void try_enter_edit_mode(bool mode_a) {
+	u8 new_param;
+	open_edit_mode = false;
+	// enter param edit mode from remembering a param
 	if (!EDITING_PARAM && mem_param < NUM_PARAMS) {
-		selected_param = mem_param;
-		param_from_mem = true;
+		open_edit_mode = true;
+		new_param = mem_param;
+		if ((new_param % 12 < 6) != mode_a) {
+			new_param += mode_a ? -6 : 6;
+			if (range_type[new_param] == R_UNUSED)
+				return;
+		}
+		selected_param = new_param;
+		selected_mod_src = SRC_BASE;
 	}
-	else
-		param_from_mem = false;
-	// pick the correct A/B parameter on this pad
-	if (EDITING_PARAM && ((selected_param % 12 < 6) ^ mode_a))
-		selected_param += mode_a ? -6 : 6;
+	// Switch from A to B param, or vice versa
+	else if (EDITING_PARAM && (selected_param % 12 < 6) != mode_a) {
+		open_edit_mode = true;
+		new_param = selected_param + (mode_a ? -6 : 6);
+		if (range_type[new_param] == R_UNUSED) {
+			flash_message(F_20_BOLD, I_CROSS "No Param", "");
+			return;
+		}
+		selected_param = new_param;
+		selected_mod_src = SRC_BASE;
+	}
 }
 
-// this gets triggered when an A / B shift state pad gets released
-void try_exit_param_edit_mode(bool param_select) {
-	// we don't exit if a parameter was retrieved from memory when we entered edit mode
-	if (param_from_mem)
+void try_exit_edit_mode(bool param_select) {
+	// we just opened edit mode => don't exit
+	if (open_edit_mode)
 		return;
-	// we don't exit if during edit mode, a parameter was selected
+	// we just selected a param => don't exit
 	if (param_select)
 		return;
 	// otherwise this was a press-and-release while a param was showing => exit and remember the param
 	mem_param = selected_param;
 	selected_param = NUM_PARAMS;
-	selected_mod_src = 0;
+	selected_mod_src = SRC_BASE;
 }
 
 // == ENCODER == //
@@ -436,7 +450,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 
 	// if this is a precision-edit, keep the param selected
 	if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
-		param_from_mem = true;
+		open_edit_mode = true;
 
 	s16 raw = param_val_raw(param_id, selected_mod_src);
 	u8 range = param_range(param_id);
