@@ -78,7 +78,7 @@ void trigger_tap_tempo(void) {
 		float tap_per_min = (SAMPLE_RATE * (tap_count - 1) * 60.f) / ((synth_tick - tap_start_tick) * SAMPLES_PER_TICK);
 		bpm_10x = clampi((int)(tap_per_min * 10.f + 0.5f), MIN_BPM_10X, MAX_BPM_10X);
 		// save result to parameter
-		save_param_raw(P_TEMPO, SRC_BASE, ((bpm_10x - 1200) * PARAM_SIZE) / 1200);
+		save_param_raw(P_TEMPO, SRC_BASE, ((bpm_10x - 1200) << 10) / 1200);
 	}
 }
 

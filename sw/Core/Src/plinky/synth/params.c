@@ -17,7 +17,23 @@
 
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
 
-#define VAL_TO_INDEX(value, range) (clampi((value), -65535, 65535) * (range) >> 16)
+// There are three ranges of parameters:
+// Raw:
+//  - saved parameters
+//  - s16 in range -1024 to 1024
+// Value:
+//  - high resolution
+//  - used for granular control such as envelope parameters
+//  - are displayed on screen as -100.0 to 100.0
+//  - s32 in range -65536 to 65536 (effectively raw << 6)
+// Index:
+//  - whole numbers
+//  - used for discrete values such as octave offset and sequencer clock division
+//  - s8 scaled and clamped to their own range
+//  - mapping to index follows a simple (value * index_range / full_range) formula
+//  - mapping from index will snap to the value closest to 0 that truncates to the given index:
+//    index (range = 3)   |........-2|........-1|.........0.........|1.........|2.........|
+//    raw            -1024|......-683|......-342|.........0.........|342.......|683.......|1024
 
 static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
@@ -47,6 +63,22 @@ static s32 SATURATE17(s32 a) {
 	int tmp;
 	asm("ssat %0, %1, %2" : "=r"(tmp) : "I"(17), "r"(a));
 	return tmp;
+}
+
+static s8 value_to_index(s32 value, u8 range) {
+	return clampi(value, -65535, 65535) * range >> 16;
+}
+
+static u8 param_range(Param param_id) {
+	return param_info[range_type[param_id]] & RANGE_MASK;
+}
+
+static bool param_signed(Param param_id) {
+	return param_info[range_type[param_id]] & SIGNED;
+}
+
+static bool param_signed_or_mod(Param param_id, ModSource mod_src) {
+	return param_signed(param_id) || mod_src != SRC_BASE;
 }
 
 static void set_arp(bool on) {
@@ -104,8 +136,6 @@ void params_update_touch_pointers(void) {
 // == MAIN == //
 
 static void apply_lfo_mods(Param param_id) {
-	if (param_id == P_VOLUME)
-		return;
 	s16* param = cur_preset.params[param_id];
 	s32 new_val = param[SRC_BASE] << 16;
 	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++)
@@ -206,8 +236,8 @@ void params_tick(void) {
 
 // raw parameter value, range -1024 to 1024
 static s16 param_val_raw(Param param_id, ModSource mod_src) {
-	if (param_id == P_VOLUME)
-		return mod_src == SRC_BASE ? sys_params.headphonevol << 2 : 0;
+	if (param_id == P_VOLUME && mod_src == SRC_BASE)
+		return sys_params.headphonevol << 2;
 	return cur_preset.params[param_id][mod_src];
 }
 
@@ -238,7 +268,7 @@ static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 	}
 
 	// all 7 mod sources have now been applied, scale and clamp to 16 bit
-	return clampi(mod_val >> 10, (param_range[param_id] & RANGE_SIGNED) ? -65536 : 0, 65536);
+	return clampi(mod_val >> 10, param_signed(param_id) ? -65536 : 0, 65536);
 }
 
 // param value range +/- 65536
@@ -255,16 +285,17 @@ s32 param_val_poly(Param param_id, u8 string_id) {
 // index value is scaled to its appropriate range
 
 s8 param_index(Param param_id) {
-	s8 index = VAL_TO_INDEX(param_val(param_id), param_range[param_id] & RANGE_MASK);
+	s8 index = value_to_index(param_val(param_id), param_range(param_id));
 	// special cases
-	switch (param_id) {
-	// disallow midi channel modulation
-	case P_MIDI_CH_IN:
-	case P_MIDI_CH_OUT:
-		index = clampi(cur_preset.params[param_id][SRC_BASE] >> 10, 0, 15);
+	switch (range_type[param_id]) {
+	// return the number of 32nds
+	case R_CLOCK1:
+	case R_CLOCK2:
+		if (index >= 0)
+			index = sync_divs_32nds[index];
 		break;
-	// sample_id is stored 1-based, revert before returning
-	case P_SAMPLE:
+	// revert from being stored 1-based
+	case R_SAMPLE:
 		index = (index - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
 		break;
 	default:
@@ -274,36 +305,30 @@ s8 param_index(Param param_id) {
 }
 
 s8 param_index_poly(Param param_id, u8 string_id) {
-	return VAL_TO_INDEX(param_val_poly(param_id, string_id), param_range[param_id] & RANGE_MASK);
+	return value_to_index(param_val_poly(param_id, string_id), param_range(param_id));
 }
 
 // == SAVING == //
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
-	// invalid request
-	if (param_id >= NUM_PARAMS || mod_src >= NUM_MOD_SOURCES)
-		return;
-	// special headphone case
+	// special case
 	if (param_id == P_VOLUME) {
-		if (mod_src == SRC_BASE) {
-			data = clampi(data >> 2, 0, 255);
-			if (data == sys_params.headphonevol)
-				return;
-			sys_params.headphonevol = data;
-			log_ram_edit(SEG_SYS);
-		}
+		data = clampi(data >> 2, 0, 255);
+		if (data == sys_params.headphonevol)
+			return;
+		sys_params.headphonevol = data;
+		log_ram_edit(SEG_SYS);
 		return;
 	}
 	// rj: this is a bit of a hacky way to make sure the tempo is not saved to a value lower than 30bpm
 	// I'm leaving it like this until the parameter system is rewritten to more elegantly support parameter limits
 	if (param_id == P_TEMPO && mod_src == SRC_BASE)
 		data = maxi(data, -768);
-	// edit gets discarded if previous change isn't saved yet
-	if (!update_preset_ram(false))
-		return;
 	// don't save if no change
-	s16 old_data = param_val_raw(param_id, mod_src);
-	if (old_data == data)
+	if (data == cur_preset.params[param_id][mod_src])
+		return;
+	// don't save if ram not ready
+	if (!update_preset_ram(false))
 		return;
 	// save
 	cur_preset.params[param_id][mod_src] = data;
@@ -312,19 +337,12 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 }
 
 void save_param_index(Param param_id, s8 index) {
+	// save 1-based
 	if (param_id == P_SAMPLE)
-		// sample id is stored 1-based, with value NUM_SAMPLES representing "off" stored as 0
 		index = (index + 1) % SAMPLE_ID_RANGE;
-
-	u8 range = param_range[param_id] & RANGE_MASK;
-	// ranged parameters are truncated and scaled to [0, PARAM_SIZE] or [-PARAM_SIZE, PARAM_SIZE]
-	if (range > 0) {
-		index %= range;
-		if (index < 0 && !(param_range[param_id] & RANGE_SIGNED))
-			index += range;
-		index = ((index * 2 + 1) * PARAM_SIZE) / (range * 2);
-	}
-	save_param_raw(param_id, SRC_BASE, index);
+	u8 range = param_range(param_id);
+	index = clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1);
+	save_param_raw(param_id, SRC_BASE, INDEX_TO_RAW(index, range));
 }
 
 // == PAD ACTION == //
@@ -339,7 +357,7 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 	float press_value =
 	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (PARAM_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
 	           PARAM_SIZE);
-	bool is_signed = (param_range[selected_param] & RANGE_SIGNED) || (selected_mod_src != SRC_BASE);
+	bool is_signed = param_signed_or_mod(selected_param, selected_mod_src);
 	if (is_signed)
 		press_value = press_value * 2 - PARAM_SIZE;
 	// smooth the pressed value
@@ -390,6 +408,15 @@ bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 }
 
 void select_mod_src(ModSource mod_src) {
+	switch (selected_param) {
+	case P_MIDI_CH_IN:
+	case P_MIDI_CH_OUT:
+	case P_VOLUME:
+		flash_message(F_20_BOLD, "No Modulation", "");
+		return;
+	default:
+		break;
+	}
 	selected_mod_src = mod_src;
 }
 
@@ -443,9 +470,9 @@ void edit_param_from_encoder(Param param_id, s8 enc_diff, float enc_acc) {
 	// retrieve parameters
 	s16 cur_val = param_val_raw(param_id, selected_mod_src);
 	s16 new_val = cur_val;
-	u8 range = param_range[param_id];
+	u8 range = param_range(param_id);
 	// mod sources are always signed
-	bool is_signed = (range & RANGE_SIGNED) || selected_mod_src;
+	bool is_signed = param_signed_or_mod(param_id, selected_mod_src);
 
 	// base values of params that have a constrained range change with 1 per encoder-notch (non-scaled)
 	if ((range & RANGE_MASK) && (selected_mod_src == SRC_BASE)) {
@@ -523,7 +550,7 @@ void set_param_from_cc(Param param_id, u16 value) {
 	// scale from 14 bit to PARAM_SIZE
 	value = (value * PARAM_SIZE) / 16383;
 	// scale from unsigned to signed
-	if (param_range[param_id] & RANGE_SIGNED)
+	if (param_signed(param_id))
 		value = value * 2 - PARAM_SIZE;
 	// save
 	save_param_raw(param_id, SRC_BASE, value);
@@ -532,7 +559,7 @@ void set_param_from_cc(Param param_id, u16 value) {
 static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec_buf) {
 	if (dec_buf)
 		*dec_buf = 0;
-	int valmax = param_range[p] & RANGE_MASK;
+	int valmax = param_range(p);
 	int vscale = valmax ? (mini(v, PARAM_SIZE - 1) * valmax) / PARAM_SIZE : v;
 	int displaymax = valmax ? valmax * 10 : 1000;
 	bool decimal = true;
@@ -761,9 +788,8 @@ s16 value_editor_column_led(u8 y) {
 	u8 kontrast = 16;
 	s16 k = 0;
 	s16 v = param_val_raw(param_snap, src_snap);
-	bool is_signed = (param_range[param_snap] & RANGE_SIGNED) || (src_snap != SRC_BASE);
 
-	if (is_signed) {
+	if (param_signed_or_mod(param_snap, src_snap)) {
 		if (y < 4) {
 			k = ((v - (3 - y) * (PARAM_SIZE / 4)) * (192 * 4)) / PARAM_SIZE;
 			k = y * 2 * kontrast + clampi(k, 0, 191);

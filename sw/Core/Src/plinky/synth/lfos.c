@@ -112,13 +112,13 @@ void update_lfo(u8 lfo_id) {
 	u8 lfo_page_offset = lfo_id * 6;
 	s32 lfo_rate = param_val(P_A_RATE + lfo_page_offset);
 	// free running - resulting lfo rate of this phase diff calculation is roughly 0.037-4913 Hz
-	if (lfo_rate <= 0) {
+	if (lfo_rate < 0) {
 		u32 phase_diff_q32 = (u32)(table_interp(pitches, -lfo_rate) * (1 << 24));
 		lfo_clock_q32[lfo_id] += phase_diff_q32;
 	}
 	// synced
 	else {
-		u16 step_32nds = sync_divs_32nds[(clampi(lfo_rate, 0, 65535) * NUM_SYNC_DIVS) >> 16];
+		u16 step_32nds = param_index(P_A_RATE + lfo_page_offset);
 		u16 prev_phase_q16 = (lfo_clock_q32[lfo_id] >> 16) & 0xFFFF;
 		u16 new_phase_q16 = clock_pos_q16(step_32nds);
 		// add cycle if the phase rolls over
