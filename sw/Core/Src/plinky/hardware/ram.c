@@ -271,7 +271,7 @@ bool update_preset_ram(bool force) {
 			cur_preset.params[P_ACCEL_SENS][mod_id] = temp;
 		}
 		// set default
-		cur_preset.params[P_MIX_WIDTH][0] = HALF_PARAM_SIZE;
+		cur_preset.params[P_MIX_WIDTH][0] = RAW_HALF;
 		cur_preset.version = 1;
 		// fall through for further upgrading
 	case 1:
@@ -279,8 +279,8 @@ bool update_preset_ram(bool force) {
 		for (u8 lfo_id = 0; lfo_id < NUM_LFOS; ++lfo_id) {
 			s16* data = cur_preset.params[P_A_SHAPE + lfo_id * 6];
 			*data = (*data * (NUM_LFO_SHAPES - 1)) / (NUM_LFO_SHAPES); // rescale to add extra enum entry
-			if (*data >= (LFO_SAW * PARAM_SIZE) / NUM_LFO_SHAPES)      // and shift high numbers up
-				*data += (1 * PARAM_SIZE) / NUM_LFO_SHAPES;
+			if (*data >= (LFO_SAW * RAW_SIZE) / NUM_LFO_SHAPES)        // and shift high numbers up
+				*data += (1 * RAW_SIZE) / NUM_LFO_SHAPES;
 		}
 		cur_preset.version = 2;
 		// fall through for further upgrading

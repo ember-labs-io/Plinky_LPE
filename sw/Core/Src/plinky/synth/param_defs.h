@@ -1,15 +1,15 @@
 #pragma once
 #include "utils.h"
 
-#define QUARTER (PARAM_SIZE / 4)
-#define EIGHTH (PARAM_SIZE / 8)
-#define INDEX_TO_RAW(index, range) ((((index) << 10) + ((index) >= 0 ? (range) - 1 : 0)) / (range))
-
 // the msb indicates whether the range is signed
 #define UNSIGNED 0
 #define SIGNED 128
 // the actual range is stored in the 7 lsb of a byte
 #define RANGE_MASK 127
+
+#define RAW_QUART (RAW_SIZE / 4)
+#define RAW_EIGHTH (RAW_SIZE / 8)
+#define INDEX_TO_RAW(index, range) ((((index) << 10) + ((index) >= 0 ? (range) - 1 : 0)) / (range))
 
 #define SAMPLE_ID_RANGE (NUM_SAMPLES + 1)
 
@@ -82,111 +82,26 @@ const static RangeType range_type[NUM_PARAMS] = {
    [P_IN_LVL] = R_UVALUE,      [P_IN_WET_DRY] = R_SVALUE,   [P_SYS_UNUSED1] = R_UNUSED,   [P_MIDI_CH_OUT] = R_MIDICH, [P_ACCEL_SENS] = R_SVALUE,    [P_MIX_WIDTH] = R_SVALUE,     // Mixer 2
 };
 
-// clang-format on
-
-static Preset const init_params = {
-
+const static Preset init_params = {
     .seq_start = 0,
     .seq_len = 8,
     .version = CUR_PRESET_VERSION,
     .params = {
-        [P_ENV_LVL1] = {HALF_PARAM_SIZE},
-        [P_DISTORTION] = {0},
-        [P_ATTACK1] = {EIGHTH},
-        [P_DECAY1] = {QUARTER},
-        [P_SUSTAIN1] = {PARAM_SIZE},
-        [P_RELEASE1] = {EIGHTH},
-
-        [P_OCT] = {0, 0, 0},
-        [P_PITCH] = {0, 0, 0},
-        [P_SCALE] = {INDEX_TO_RAW(S_MAJOR, NUM_SCALES)},
-        [P_MICROTONE] = {EIGHTH},
-        [P_COLUMN] = {INDEX_TO_RAW(7, 13)},
-        [P_INTERVAL] = {0},
-        [P_DEGREE] = {0, 0, 0},
-
-        [P_NOISE] = {0, 0, 0},
-
-        [P_PLAY_SPD] = {HALF_PARAM_SIZE},
-        [P_GR_SIZE] = {HALF_PARAM_SIZE},
-        [P_SMP_STRETCH] = {HALF_PARAM_SIZE},
-
-        [P_ARP_ORDER] = {INDEX_TO_RAW(ARP_UP, NUM_ARP_ORDERS)},
-        [P_ARP_CLK_DIV] = {INDEX_TO_RAW(2, NUM_SYNC_DIVS)},
-        [P_ARP_CHANCE] = {PARAM_SIZE},
-        [P_ARP_EUC_LEN] = {INDEX_TO_RAW(8, 17)},
-        [P_ARP_OCTAVES] = {INDEX_TO_RAW(0, 4)},
-        [P_GLIDE] = {0},
-
-        [P_SEQ_ORDER] = {INDEX_TO_RAW(SEQ_ORD_FWD, NUM_SEQ_ORDERS)},
-        [P_SEQ_CLK_DIV] = {INDEX_TO_RAW(6, NUM_SYNC_DIVS + 1)},
-        [P_SEQ_CHANCE] = {PARAM_SIZE},
-        [P_SEQ_EUC_LEN] = {INDEX_TO_RAW(8, 17)},
-        [P_PATTERN] = {INDEX_TO_RAW(0, NUM_PATTERNS)},
-        [P_STEP_OFFSET] = {0},
-        [P_TEMPO] = {0},
-
-        [P_GATE_LENGTH] = {PARAM_SIZE},
-
-        //[P_DLY_SEND]={HALF_PARAM_SIZE},
-        [P_DLY_TIME] = {INDEX_TO_RAW(3, 8)},
-        [P_DLY_FEEDBACK] = {HALF_PARAM_SIZE},
-        //[P_DLCOLOR]={PARAM_SIZE},
-        [P_DLY_WOBBLE] = {QUARTER},
-        [P_PING_PONG] = {PARAM_SIZE},
-
-        [P_RVB_SEND] = {QUARTER},
-        [P_RVB_TIME] = {HALF_PARAM_SIZE},
-        [P_SHIMMER] = {QUARTER},
-        //[P_RVCOLOR]={PARAM_SIZE-QUARTER},
-        [P_RVB_WOBBLE] = {QUARTER},
-        //[P_RVB_UNUSED]={0},
-
-        [P_SYN_LVL] = {HALF_PARAM_SIZE},
-        [P_MIX_WIDTH] = {(HALF_PARAM_SIZE * 7) / 8},
-        [P_IN_WET_DRY] = {0},
-        [P_IN_LVL] = {HALF_PARAM_SIZE},
-        [P_SYN_WET_DRY] = {0},
-
-        [P_ATTACK2] = {EIGHTH},
-        [P_DECAY2] = {QUARTER},
-        [P_SUSTAIN2] = {PARAM_SIZE},
-        [P_RELEASE2] = {EIGHTH},
-        [P_SWING] = {0},
-        [P_ENV_LVL2] = {HALF_PARAM_SIZE},
-        [P_CV_QUANT] = {INDEX_TO_RAW(CVQ_OFF, NUM_CV_QUANT_TYPES)},
-
-        [P_A_OFFSET] = {0},
-        [P_A_SCALE] = {HALF_PARAM_SIZE},
-        [P_A_DEPTH] = {0},
-        [P_A_RATE] = {QUARTER},
-        //[P_A_SHAPE] = {INDEX_TO_RAW(LFO_ENV,NUM_LFO_SHAPES)},
-        [P_A_SYM] = {0},
-
-        [P_B_OFFSET] = {0},
-        [P_B_SCALE] = {HALF_PARAM_SIZE},
-        [P_B_DEPTH] = {0},
-        [P_B_RATE] = {HALF_PARAM_SIZE},
-        [P_B_SHAPE] = {0},
-        [P_B_SYM] = {0},
-
-        [P_X_OFFSET] = {0},
-        [P_X_SCALE] = {HALF_PARAM_SIZE},
-        [P_X_DEPTH] = {0},
-        [P_X_RATE] = {-246},
-        [P_X_SHAPE] = {0},
-        [P_X_SYM] = {0},
-
-        [P_Y_OFFSET] = {0},
-        [P_Y_SCALE] = {HALF_PARAM_SIZE},
-        [P_Y_DEPTH] = {0},
-        [P_Y_RATE] = {-630},
-        [P_Y_SHAPE] = {0},
-        [P_Y_SYM] = {0},
-
-        [P_ACCEL_SENS] = {HALF_PARAM_SIZE},
-
-        [P_MIDI_CH_IN] = {0},
-        [P_MIDI_CH_OUT] = {0},
-
-    }};
+        [P_SHAPE] = {0},            [P_DISTORTION] = {0},                                       [P_PITCH] = {0},                                    [P_OCT] = {0},                  [P_GLIDE] = {0},                                            [P_INTERVAL] = {0},                 // Sound 1
+        [P_NOISE] = {0},            [P_RESO] = {0},                                             [P_DEGREE] = {0},                                   [P_SCALE] = {0},                [P_MICROTONE] = {RAW_EIGHTH},                               [P_COLUMN] = {INDEX_TO_RAW(7, 13)}, // Sound 2
+        [P_ENV_LVL1] = {RAW_HALF},  [P_ATTACK1] = {RAW_EIGHTH},                                 [P_DECAY1] = {RAW_QUART},                           [P_SUSTAIN1] = {RAW_SIZE},      [P_RELEASE1] = {RAW_EIGHTH},                                [P_ENV1_UNUSED] = {},               // Envelope 1
+        [P_ENV_LVL2] = {RAW_HALF},  [P_ATTACK2] = {RAW_EIGHTH},                                 [P_DECAY2] = {RAW_QUART},                           [P_SUSTAIN2] = {RAW_SIZE},      [P_RELEASE2] = {RAW_EIGHTH},                                [P_ENV2_UNUSED] = {},               // Envelope 2
+        [P_DLY_SEND] = {0},         [P_DLY_TIME] = {INDEX_TO_RAW(3, NUM_SYNC_DIVS)},            [P_PING_PONG] = {RAW_SIZE},                         [P_DLY_WOBBLE] = {RAW_QUART},   [P_DLY_FEEDBACK] = {RAW_HALF},                              [P_TEMPO] = {0},                    // Delay
+        [P_RVB_SEND] = {RAW_QUART}, [P_RVB_TIME] = {RAW_HALF},                                  [P_SHIMMER] = {RAW_QUART},                          [P_RVB_WOBBLE] = {RAW_QUART},   [P_RVB_UNUSED] = {},                                        [P_SWING] = {0},                    // Reverb
+        [P_ARP_TGL] = {0},          [P_ARP_ORDER] = {INDEX_TO_RAW(ARP_UP, NUM_ARP_ORDERS)},     [P_ARP_CLK_DIV] = {INDEX_TO_RAW(2, NUM_SYNC_DIVS)}, [P_ARP_CHANCE] = {RAW_SIZE},    [P_ARP_EUC_LEN] = {INDEX_TO_RAW(8, 17)},                    [P_ARP_OCTAVES] = {0},              // Arp
+        [P_LATCH_TGL] = {0},        [P_SEQ_ORDER] = {INDEX_TO_RAW(SEQ_ORD_FWD, NUM_SEQ_ORDERS)},[P_SEQ_CLK_DIV] = {INDEX_TO_RAW(5, NUM_SYNC_DIVS)}, [P_SEQ_CHANCE] = {RAW_SIZE},    [P_SEQ_EUC_LEN] = {INDEX_TO_RAW(8, 17)},                    [P_GATE_LENGTH] = {RAW_SIZE},       // Sequencer
+        [P_SCRUB] = {0},            [P_GR_SIZE] = {RAW_HALF},                                   [P_PLAY_SPD] = {RAW_HALF},                          [P_SMP_STRETCH] = {RAW_HALF},   [P_SAMPLE] = {0},                                           [P_PATTERN] = {0},                  // Sampler 1
+        [P_SCRUB_JIT] = {0},        [P_GR_SIZE_JIT] = {0},                                      [P_PLAY_SPD_JIT] = {0},                             [P_SMP_UNUSED1] = {},           [P_SMP_UNUSED2] = {},                                       [P_STEP_OFFSET] = {0},              // Sampler 2
+        [P_A_SCALE] = {RAW_HALF},   [P_A_OFFSET] = {0},                                         [P_A_DEPTH] = {0},                                  [P_A_RATE] = {RAW_QUART},       [P_A_SHAPE] = {0},                                          [P_A_SYM] = {0},                    // LFO A
+        [P_B_SCALE] = {RAW_HALF},   [P_B_OFFSET] = {0},                                         [P_B_DEPTH] = {0},                                  [P_B_RATE] = {RAW_HALF},        [P_B_SHAPE] = {0},                                          [P_B_SYM] = {0},                    // LFO B
+        [P_X_SCALE] = {RAW_HALF},   [P_X_OFFSET] = {0},                                         [P_X_DEPTH] = {0},                                  [P_X_RATE] = {-246},            [P_X_SHAPE] = {0},                                          [P_X_SYM] = {0},                    // LFO X
+        [P_Y_SCALE] = {RAW_HALF},   [P_Y_OFFSET] = {0},                                         [P_Y_DEPTH] = {0},                                  [P_Y_RATE] = {-630},            [P_Y_SHAPE] = {0},                                          [P_Y_SYM] = {0},                    // LFO Y
+        [P_SYN_LVL] = {RAW_HALF},   [P_SYN_WET_DRY] = {0},                                      [P_HPF] = {0},                                      [P_MIDI_CH_IN] = {0},           [P_CV_QUANT] = {INDEX_TO_RAW(CVQ_OFF, NUM_CV_QUANT_TYPES)}, [P_VOLUME] = {0},                   // Mixer 1
+        [P_IN_LVL] = {RAW_HALF},    [P_IN_WET_DRY] = {0},                                       [P_SYS_UNUSED1] = {},                               [P_MIDI_CH_OUT] = {0},          [P_ACCEL_SENS] = {RAW_HALF},                                [P_MIX_WIDTH] = {RAW_SIZE * 7 / 16},// Mixer 2
+    }
+};

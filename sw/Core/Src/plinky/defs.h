@@ -42,8 +42,8 @@
 
 // PARAMS
 
-#define PARAM_SIZE 1024 // range of a parameter // make local or redundant after param cleanups
-#define HALF_PARAM_SIZE (PARAM_SIZE / 2)
+#define RAW_SIZE 1024 // range of a parameter - make local after param cleanups
+#define RAW_HALF (RAW_SIZE / 2)
 
 // MEMORY
 

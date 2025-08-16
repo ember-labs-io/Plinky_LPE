@@ -344,25 +344,25 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 
 	// scale the press position to a param size value
 	float press_value =
-	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (PARAM_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
-	           PARAM_SIZE);
+	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (RAW_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
+	           RAW_SIZE);
 	bool is_signed = param_signed_or_mod(selected_param, selected_mod_src);
 	if (is_signed)
-		press_value = press_value * 2 - PARAM_SIZE;
+		press_value = press_value * 2 - RAW_SIZE;
 	// smooth the pressed value
 	smooth_value(&left_strip_smooth, press_value, 256);
-	float smoothed_value = clampf(left_strip_smooth.y2, (is_signed) ? -PARAM_SIZE - 0.1f : 0.f, PARAM_SIZE + 0.1f);
+	float smoothed_value = clampf(left_strip_smooth.y2, (is_signed) ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
 	// value stops exactly halfway when crossing center
 	bool notch_at_50 = (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
 	if (notch_at_50) {
-		if (smoothed_value < HALF_PARAM_SIZE && left_strip_start > HALF_PARAM_SIZE)
-			smoothed_value = HALF_PARAM_SIZE;
-		if (smoothed_value > HALF_PARAM_SIZE && left_strip_start < HALF_PARAM_SIZE)
-			smoothed_value = HALF_PARAM_SIZE;
-		if (smoothed_value < -HALF_PARAM_SIZE && left_strip_start > -HALF_PARAM_SIZE)
-			smoothed_value = -HALF_PARAM_SIZE;
-		if (smoothed_value > -HALF_PARAM_SIZE && left_strip_start < -HALF_PARAM_SIZE)
-			smoothed_value = -HALF_PARAM_SIZE;
+		if (smoothed_value < RAW_HALF && left_strip_start > RAW_HALF)
+			smoothed_value = RAW_HALF;
+		if (smoothed_value > RAW_HALF && left_strip_start < RAW_HALF)
+			smoothed_value = RAW_HALF;
+		if (smoothed_value < -RAW_HALF && left_strip_start > -RAW_HALF)
+			smoothed_value = -RAW_HALF;
+		if (smoothed_value > -RAW_HALF && left_strip_start < -RAW_HALF)
+			smoothed_value = -RAW_HALF;
 	}
 	// save the value to the parameter
 	save_param_raw(selected_param, selected_mod_src, (s16)(smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f)));
@@ -475,7 +475,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	s8 pos = raw & 127;
 	if (pos == 1 || pos == 43 || pos == 86 || pos == -42 || pos == -85 || pos == -127)
 		raw += enc_diff > 0 ? 1 : -1;
-	raw = clampi(raw, param_signed_or_mod(param_id, selected_mod_src) ? -PARAM_SIZE : 0, PARAM_SIZE);
+	raw = clampi(raw, param_signed_or_mod(param_id, selected_mod_src) ? -RAW_SIZE : 0, RAW_SIZE);
 	save_param_raw(param_id, selected_mod_src, raw);
 }
 
@@ -521,11 +521,11 @@ void hold_encoder_for_params(u16 duration) {
 // == MIDI == //
 
 void set_param_from_cc(Param param_id, u16 value) {
-	// scale from 14 bit to PARAM_SIZE
-	value = (value * PARAM_SIZE) / 16383;
+	// scale from 14 bit to RAW_SIZE
+	value = value * RAW_SIZE / 16383;
 	// scale from unsigned to signed
 	if (param_signed(param_id))
-		value = value * 2 - PARAM_SIZE;
+		value = value * 2 - RAW_SIZE;
 	// save
 	save_param_raw(param_id, SRC_BASE, value);
 }
@@ -534,7 +534,7 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 	if (dec_buf)
 		*dec_buf = 0;
 	int valmax = param_range(p);
-	int vscale = valmax ? (mini(v, PARAM_SIZE - 1) * valmax) / PARAM_SIZE : v;
+	int vscale = valmax ? (mini(v, RAW_SIZE - 1) * valmax) / RAW_SIZE : v;
 	int displaymax = valmax ? valmax * 10 : 1000;
 	bool decimal = true;
 	//	const char* val = val_buf;
@@ -574,14 +574,14 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 				displaymax = 1000;
 				break;
 			}
-			vscale = (mini(v, PARAM_SIZE - 1) * NUM_SYNC_DIVS) / PARAM_SIZE;
+			vscale = (mini(v, RAW_SIZE - 1) * NUM_SYNC_DIVS) / RAW_SIZE;
 			int n = sprintf(val_buf, "%d", sync_divs_32nds[vscale] /*>> divisor*/);
 			if (!dec_buf)
 				dec_buf = val_buf + n;
 			sprintf(dec_buf, /*divisornames[divisor]*/ "/32");
 			return val_buf;
 		case P_ARP_OCTAVES:
-			v += (PARAM_SIZE * 10) / displaymax; // 1 based
+			v += (RAW_SIZE * 10) / displaymax; // 1 based
 			break;
 		case P_MIDI_CH_IN:
 		case P_MIDI_CH_OUT: {
@@ -609,24 +609,24 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 			displaymax = 120;
 			break;
 		case P_TEMPO:
-			v += PARAM_SIZE;
+			v += RAW_SIZE;
 			// when listening to external clocks, we manually calculate the bpm_10x value as the pulses come in
 			if (clock_type != CLK_INTERNAL)
-				v = (bpm_10x * PARAM_SIZE) / 1200;
+				v = (bpm_10x * RAW_SIZE) / 1200;
 			displaymax = 1200;
 			break;
 		case P_DLY_TIME:
 			if (v < 0) {
 				if (v <= -1024)
 					v++;
-				v = (-v * 13) / PARAM_SIZE;
+				v = (-v * 13) / RAW_SIZE;
 				int n = sprintf(val_buf, "%d", sync_divs_32nds[v]);
 				if (!dec_buf)
 					dec_buf = val_buf + n;
 				sprintf(dec_buf, "/32 sync");
 			}
 			else {
-				int n = sprintf(val_buf, "%d", (v * 100) / PARAM_SIZE);
+				int n = sprintf(val_buf, "%d", (v * 100) / RAW_SIZE);
 				if (!dec_buf)
 					dec_buf = val_buf + n;
 				sprintf(dec_buf, "free");
@@ -634,7 +634,7 @@ static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec
 			return val_buf;
 		default:;
 		}
-	v = (v * displaymax) / PARAM_SIZE;
+	v = (v * displaymax) / RAW_SIZE;
 	int av = abs(v);
 	int n = sprintf(val_buf, "%c%d", (v < 0) ? '-' : ' ', av / 10);
 	if (decimal) {
@@ -761,20 +761,20 @@ s16 value_editor_column_led(u8 y) {
 
 	if (param_signed_or_mod(param_snap, src_snap)) {
 		if (y < 4) {
-			k = ((v - (3 - y) * (PARAM_SIZE / 4)) * (192 * 4)) / PARAM_SIZE;
+			k = ((v - (3 - y) * RAW_QUART) * (192 * 4)) / RAW_SIZE;
 			k = y * 2 * kontrast + clampi(k, 0, 191);
 			if (y == 3 && v < 0)
 				k = 255;
 		}
 		else {
-			k = ((-v - (y - 4) * (PARAM_SIZE / 4)) * (192 * 4)) / PARAM_SIZE;
+			k = ((-v - (y - 4) * RAW_QUART) * (192 * 4)) / RAW_SIZE;
 			k = (8 - y) * 2 * kontrast + clampi(k, 0, 191);
 			if (y == 4 && v > 0)
 				k = 255;
 		}
 	}
 	else {
-		k = ((v - (7 - y) * (PARAM_SIZE / 8)) * (192 * 8)) / PARAM_SIZE;
+		k = ((v - (7 - y) * RAW_EIGHTH) * (192 * 8)) / RAW_SIZE;
 		k = y * kontrast + clampi(k, 0, 191);
 	}
 	return clampi(k, 0, 255);
