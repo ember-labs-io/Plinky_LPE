@@ -357,15 +357,18 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 	save_param_raw(selected_param, selected_mod_src, (s16)(smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f)));
 }
 
-// returns whether this activated a different param
 bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
-	// pressing a parameter always reverts to the "base" mod src
-	selected_mod_src = SRC_BASE;
-	// select param based on pressed pad
 	u8 prev_param = selected_param;
 	selected_param = pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
+	if (range_type[selected_param] == R_UNUSED) {
+		selected_param = prev_param;
+		flash_message(F_20_BOLD, I_CROSS "No Param", "");
+		return false;
+	}
 	if (is_press_start && selected_param == P_TEMPO)
 		trigger_tap_tempo();
+	// pressing a parameter always reverts to the "base" mod src
+	selected_mod_src = SRC_BASE;
 	return selected_param != prev_param;
 }
 
