@@ -2,11 +2,13 @@
 
 u8 gfx_text_color = 1;
 
-void gfx_init() {
-	// init oled
+void gfx_init(void) {
 	oled_init();
-	// draw logo
-	oled_flip_with_buffer(logo_buffer);
+	draw_logo();
+}
+
+void draw_logo(void) {
+	oled_flip_with_buffer(hw_version == HW_PLINKY ? plinky_logo : plinky_plus_logo);
 }
 
 // BASICS

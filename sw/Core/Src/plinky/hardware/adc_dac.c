@@ -381,6 +381,6 @@ void cv_calib(void) {
 		HAL_Delay(1);
 
 	HAL_Delay(500);
-	oled_flip_with_buffer(logo_buffer);
+	draw_logo();
 	leds_bootswish();
 }

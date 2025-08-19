@@ -116,9 +116,6 @@ static void draw_startup_visuals(void) {
 	u8 y = maxi(frame - 255 + 32, 20);
 	fdraw_str(47, y, F_12, param_index(P_LATCH_TGL) ? "v" FIRMWARE_VERSION : "LPE v" FIRMWARE_VERSION, version_tail);
 	frame += 4;
-	// draw plinky plus
-	if (hw_version == HW_PLINKY_PLUS)
-		fdraw_str(32, y - 12, F_12, "PLINKY+");
 }
 
 static void draw_preset_info(void) {

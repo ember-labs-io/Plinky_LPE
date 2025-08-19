@@ -548,6 +548,6 @@ void touch_calib(FlashCalibType flash_calib_type) {
 	flash_write_calib(flash_calib_type);
 
 	HAL_Delay(500);
-	oled_flip_with_buffer(logo_buffer);
+	draw_logo();
 	leds_bootswish();
 }
