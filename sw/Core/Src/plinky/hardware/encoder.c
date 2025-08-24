@@ -14,6 +14,10 @@ bool enc_recently_used(void) {
 	return last_encoder_use > millis() - 2000;
 }
 
+void clear_last_encoder_use(void) {
+	last_encoder_use = 0;
+}
+
 void encoder_init(void) {
 	// rj: I've taken this from main.c, not quite sure why it is necessary - one inaccurate tick of the encoder on
 	// startup can't hurt anything can it?

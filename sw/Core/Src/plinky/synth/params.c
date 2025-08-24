@@ -445,6 +445,7 @@ void try_exit_edit_mode(bool param_select) {
 	if (param_select)
 		return;
 	// otherwise this was a press-and-release while a param was showing => exit and remember the param
+	clear_last_encoder_use();
 	mem_param = selected_param;
 	selected_param = NUM_PARAMS;
 	selected_mod_src = SRC_BASE;
