@@ -77,6 +77,16 @@ static u8 param_range(Param param_id) {
 	return param_info[range_type[param_id]] & RANGE_MASK;
 }
 
+static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
+	if (mod_src != SRC_BASE)
+		return false;
+	if (param_range(param_id) == 0)
+		return false;
+	if (range_type[param_id] == R_DUACLK && raw < 0)
+		return false;
+	return true;
+}
+
 bool param_signed(Param param_id) {
 	return param_info[range_type[param_id]] & SIGNED;
 }
@@ -353,8 +363,15 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 		if (smoothed_value > -RAW_HALF && left_strip_start < -RAW_HALF)
 			smoothed_value = -RAW_HALF;
 	}
-	// save the value to the parameter
-	save_param_raw(selected_param, selected_mod_src, (s16)(smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f)));
+
+	s16 raw = smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f);
+	// snap to index value
+	if (param_is_index(selected_param, selected_mod_src, raw)) {
+		u8 range = param_range(selected_param);
+		raw = INDEX_TO_RAW(raw_to_index(raw, range), range);
+	}
+	// save to parameter
+	save_param_raw(selected_param, selected_mod_src, raw);
 }
 
 bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
