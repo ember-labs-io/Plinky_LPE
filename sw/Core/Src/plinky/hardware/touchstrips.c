@@ -520,7 +520,7 @@ void touch_calib(FlashCalibType flash_calib_type) {
 						errors |= (1 << read_id);
 					}
 					else if (abs(touch_calib_data[read_id].pos[pad] - touch_calib_data[read_id].pos[PADS_PER_STRIP - 1])
-					         < 300) {
+					         < 250) {
 						snprintf(help_text, sizeof(help_text), "!pad %d shorted?\ncheck soldering", read_id + 1);
 						errors |= (1 << read_id);
 					}
