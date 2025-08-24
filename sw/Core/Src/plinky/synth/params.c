@@ -969,33 +969,65 @@ bool is_snap_param(u8 x, u8 y) {
 	return param_snap < NUM_PARAMS && x > 0 && x < 7 && (param_snap == pA || param_snap == pA + 6);
 }
 
+static u8 col_led(float brightness) {
+	const static u8 bg = 48;
+	return clampf(brightness, 0.f, 1.f) * (255 - bg) + bg;
+}
+
 s16 value_editor_column_led(u8 y) {
 	if (param_snap >= NUM_PARAMS)
 		return -1;
-
-	u8 kontrast = 16;
-	s16 k = 0;
-	s16 v = param_val_raw(param_snap, src_snap);
-
-	if (param_signed_or_mod(param_snap, src_snap)) {
-		if (y < 4) {
-			k = ((v - (3 - y) * RAW_QUART) * (192 * 4)) / RAW_SIZE;
-			k = y * 2 * kontrast + clampi(k, 0, 191);
-			if (y == 3 && v < 0)
-				k = 255;
-		}
-		else {
-			k = ((-v - (y - 4) * RAW_QUART) * (192 * 4)) / RAW_SIZE;
-			k = (8 - y) * 2 * kontrast + clampi(k, 0, 191);
-			if (y == 4 && v > 0)
-				k = 255;
+	bool is_signed = param_signed_or_mod(param_snap, src_snap);
+	s16 raw = param_val_raw(param_snap, src_snap);
+	u8 pad_id = 7 - y;
+	u8 range = src_snap == SRC_BASE ? param_range(param_snap) : 0;
+	float pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
+	if (is_signed) {
+		// absolute center
+		if (raw == 0 && (y == 3 || y == 4))
+			return col_led(1);
+		// mapped
+		pad_pos = fabs(pad_pos) / 2.f - 0.5f;
+		switch (pad_id) {
+		// negative
+		case 0:
+		case 1:
+		case 2:
+			if (raw > 0)
+				return col_led(0);
+			if (pad_id >= 3 - (u8)pad_pos)
+				return col_led(1);
+			if (pad_id == 2 - (u8)pad_pos)
+				return col_led(fmod(pad_pos, 1));
+			break;
+		// center
+		case 3:
+		case 4:
+			if ((raw < 0) ^ (pad_id == 4))
+				return col_led(1);
+			if (pad_pos < 0)
+				return col_led(-2 * pad_pos);
+			break;
+		// positive
+		case 5:
+		case 6:
+		case 7:
+			if (raw < 0)
+				return col_led(0);
+			if (pad_id <= (u8)pad_pos + 4)
+				return col_led(1);
+			if (pad_id == (u8)pad_pos + 5)
+				return col_led(fmod(pad_pos, 1));
+			break;
 		}
 	}
 	else {
-		k = ((v - (7 - y) * RAW_EIGHTH) * (192 * 8)) / RAW_SIZE;
-		k = y * kontrast + clampi(k, 0, 191);
+		if (pad_id <= (u8)pad_pos)
+			return col_led(1);
+		if (pad_id == (u8)pad_pos + 1)
+			return col_led(fmod(pad_pos, 1));
 	}
-	return clampi(k, 0, 255);
+	return col_led(0);
 }
 
 u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
