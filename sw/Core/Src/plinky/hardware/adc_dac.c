@@ -87,12 +87,19 @@ float adc_get_calib(ADC_DAC_Index index) { // only one use in arp.h
 }
 
 float adc_get_smooth(ADCSmoothIndex index) {
-	if (index == ADC_S_PITCH) {
+	switch (index) {
+	case ADC_S_PITCH:
 		s32 pitch = (s32)(adc_smoother[ADC_S_PITCH].y2 * (512.f * 12.f));
 		// quantize pitch according to param
 		if (param_index(P_CV_QUANT))
 			pitch = (pitch + 256) & (~511);
 		return pitch;
+	case ADC_S_A_KNOB:
+	case ADC_S_B_KNOB:
+		// make sure the knobs reach the full 100%
+		return clampf(adc_smoother[index].y2 * 1.0001f, -1.f, 1.f);
+	default:
+		break;
 	}
 	return adc_smoother[index].y2;
 }
