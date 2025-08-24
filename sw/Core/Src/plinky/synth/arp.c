@@ -220,7 +220,7 @@ u8 arp_tick(u8 string_touch_mask) {
 	s32 arp_div = param_val(P_ARP_CLK_DIV);
 	// clock synced
 	if (arp_div >= 0) {
-		u8 step_32nds = sync_divs_32nds[param_index(P_ARP_CLK_DIV)];
+		u16 step_32nds = sync_divs_32nds[param_index(P_ARP_CLK_DIV)];
 		if (pulse_32nd && (counter_32nds % step_32nds == 0)) {
 			step_next_strings_frame = true;
 			strings_frame_tick = -1; // u32 max
