@@ -258,7 +258,7 @@ bool shift_states_oled_visuals(void) {
 			return false;
 		case UI_LOAD:
 			if (shift_state_frames > 4) {
-				draw_clear_load_item(long_press_pad, shift_state_frames - 4 > 64);
+				draw_clear_load_item(shift_state_frames - 4 > 64);
 				inverted_rectangle(0, 0, shift_state_frames * 2 - 4, 32);
 			}
 			break;

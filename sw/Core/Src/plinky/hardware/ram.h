@@ -46,6 +46,6 @@ void draw_preset_name(u8 xtab);
 void draw_sample_id(void);
 void draw_latch_flag(void);
 void draw_select_load_item(u8 item_id, bool done);
-void draw_clear_load_item(u8 item_id, bool done);
+void draw_clear_load_item(bool done);
 
 u8 ui_load_led(u8 x, u8 y, u8 pulse);

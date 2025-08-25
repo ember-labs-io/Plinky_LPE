@@ -506,8 +506,8 @@ void draw_select_load_item(u8 item_id, bool done) {
 	}
 }
 
-void draw_clear_load_item(u8 item_id, bool done) {
-	switch (get_item_type(item_id)) {
+void draw_clear_load_item(bool done) {
+	switch (get_item_type(recent_load_item)) {
 	case RAM_PRESET:
 		fdraw_str(0, 0, F_16_BOLD, done ? "cleared\n" I_PRESET "Preset %d" : "initialize\n" I_PRESET "Preset %d?",
 		          recent_load_item + 1);
