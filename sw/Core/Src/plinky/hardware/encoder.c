@@ -11,7 +11,7 @@ static float encoder_acc;
 static u32 last_encoder_use = 0;
 
 bool enc_recently_used(void) {
-	return last_encoder_use > millis() - 2000;
+	return last_encoder_use > millis() - 1000;
 }
 
 void clear_last_encoder_use(void) {
