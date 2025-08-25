@@ -267,8 +267,8 @@ bool update_preset_ram(bool force) {
 		// add mix width, switch value with accel sensitivity
 		for (u8 mod_id = 0; mod_id < NUM_MOD_SOURCES; ++mod_id) {
 			s16 temp = cur_preset.params[P_MIX_WIDTH][mod_id];
-			cur_preset.params[P_MIX_WIDTH][mod_id] = cur_preset.params[P_ACCEL_SENS][mod_id];
-			cur_preset.params[P_ACCEL_SENS][mod_id] = temp;
+			cur_preset.params[P_MIX_WIDTH][mod_id] = cur_preset.params[P_MIX_UNUSED3][mod_id];
+			cur_preset.params[P_MIX_UNUSED3][mod_id] = temp;
 		}
 		// set default
 		cur_preset.params[P_MIX_WIDTH][0] = RAW_HALF;

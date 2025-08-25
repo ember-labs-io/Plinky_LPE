@@ -52,6 +52,7 @@ static u16 sample_hold_poly[NUM_STRINGS] = {0, 1 << 12, 2 << 12, 3 << 12, 4 << 1
 // editing params
 static Param mem_param = 255; // remembers previous selected_param, used by encoder and A/B shift-presses
 static bool open_edit_mode = false;
+static bool param_from_mem = false;
 static s16 left_strip_start = 0;
 static ValueSmoother left_strip_smooth;
 
@@ -390,14 +391,9 @@ bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
 }
 
 void select_mod_src(ModSource mod_src) {
-	switch (selected_param) {
-	case P_MIDI_CH_IN:
-	case P_MIDI_CH_OUT:
-	case P_VOLUME:
+	if (selected_param == P_VOLUME) {
 		flash_message(F_20_BOLD, I_CROSS "No Modulation", "");
 		return;
-	default:
-		break;
 	}
 	selected_mod_src = mod_src;
 }
@@ -410,11 +406,17 @@ void reset_left_strip(void) {
 // == SHIFT STATE == //
 
 void try_enter_edit_mode(bool mode_a) {
+	if (ui_mode == UI_SETTINGS_MENU) {
+		open_edit_mode = true;
+		return;
+	}
 	u8 new_param;
 	open_edit_mode = false;
+	param_from_mem = false;
 	// enter param edit mode from remembering a param
 	if (!EDITING_PARAM && mem_param < NUM_PARAMS) {
 		open_edit_mode = true;
+		param_from_mem = true;
 		new_param = mem_param;
 		if ((new_param % 12 < 6) != mode_a) {
 			new_param += mode_a ? -6 : 6;
@@ -438,12 +440,18 @@ void try_enter_edit_mode(bool mode_a) {
 }
 
 void try_exit_edit_mode(bool param_select) {
-	// we just opened edit mode => don't exit
-	if (open_edit_mode)
-		return;
-	// we just selected a param => don't exit
-	if (param_select)
-		return;
+	if (ui_mode == UI_SETTINGS_MENU) {
+		if (!param_from_mem)
+			return;
+	}
+	else {
+		// we just opened edit mode => don't exit
+		if (open_edit_mode)
+			return;
+		// we just selected a param => don't exit
+		if (param_select)
+			return;
+	}
 	// otherwise this was a press-and-release while a param was showing => exit and remember the param
 	clear_last_encoder_use();
 	mem_param = selected_param;
@@ -587,8 +595,6 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 		// 1-based params
 		case P_ARP_OCTAVES:
 		case P_PATTERN:
-		case P_MIDI_CH_IN:
-		case P_MIDI_CH_OUT:
 			sprintf(val_buf, "%d", index + 1);
 			return val_buf;
 		case P_SAMPLE:
@@ -597,8 +603,6 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 				return val_buf;
 			}
 			break;
-		case P_CV_QUANT:
-			return cv_quant_name[index];
 		default:
 			break;
 		}
@@ -671,7 +675,6 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 	case P_B_SCALE:
 	case P_X_SCALE:
 	case P_Y_SCALE:
-	case P_ACCEL_SENS:
 		disp_range_10x = 2000;
 		break;
 	// show negative value as positive
@@ -783,14 +786,6 @@ void draw_cur_param(void) {
 		case P_Y_OFFSET:
 			sect_str = I_Y "Mod Y";
 			break;
-		case P_MIDI_CH_IN:
-		case P_MIDI_CH_OUT:
-			sect_str = I_JACK "Midi";
-			break;
-		case P_CV_QUANT:
-		case P_ACCEL_SENS:
-			sect_str = I_SLIDERS "System";
-			break;
 		default:
 			break;
 		}
@@ -859,9 +854,6 @@ void draw_cur_param(void) {
 		case P_SEQ_ORDER:
 			font = F_12_BOLD;
 			x_center = 80;
-			break;
-		case P_CV_QUANT:
-			font = F_16_BOLD;
 			break;
 		default:
 			break;

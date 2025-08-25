@@ -1,5 +1,6 @@
 #include "accelerometer.h"
 #include "../../lis2dh12_reg.h"
+#include "ram.h"
 #include "synth/params.h"
 
 // https://github.com/STMicroelectronics/STMems_Standard_C_drivers/blob/master/lis2dh12_STdC/example/lis2dh12_read_data_polling.c
@@ -64,7 +65,7 @@ void accel_read(void) {
 void accel_tick(void) {
 	static u16 accel_counter;
 	// full sensitivity equals 200% scaling
-	float accel_sens_f = 2 * param_val(P_ACCEL_SENS) / 65536.f;
+	float accel_sens_f = 2 * (sys_params.accel_sens - 100) / 100.f;
 	// detect inverted sensor
 	bool axis_swap = accel_raw[2] > 4000;
 	for (u8 axis_id = 0; axis_id < 2; ++axis_id) {

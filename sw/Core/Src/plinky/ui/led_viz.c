@@ -2,12 +2,14 @@
 #include "hardware/adc_dac.h"
 #include "hardware/leds.h"
 #include "hardware/ram.h"
+#include "settings_menu.h"
+#include "shift_states.h"
 #include "synth/pitch_tools.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
 #include "synth/strings.h"
-#include "ui/shift_states.h"
 
+static u8 pulse_eighth;
 static u8 pulse_half;
 static u8 pulse;
 static u8 pulse_8x;
@@ -68,96 +70,103 @@ static void precalc_waves(float** next_wave_ptr) {
 static void draw_main_leds(void) {
 	update_peak_hist();
 
-	if (ui_mode == UI_SAMPLE_EDIT)
+	switch (ui_mode) {
+	case UI_SAMPLE_EDIT:
 		sampler_leds(pulse_half, pulse);
-	else {
-		float* next_wave;
-		precalc_waves(&next_wave);
+		return;
+	case UI_SETTINGS_MENU:
+		settings_menu_leds(pulse_half);
+		return;
+	default:
+		break;
+	}
 
-		// prepare pitch calc
-		int cv_pitch = adc_get_smooth(ADC_S_PITCH);
+	float* next_wave;
+	precalc_waves(&next_wave);
 
-		for (u8 x = 0; x < 8; ++x) {
-			// prepare press
-			Touch* s_touch = get_string_touch(x);
+	// prepare pitch calc
+	int cv_pitch = adc_get_smooth(ADC_S_PITCH);
 
-			// prepare sample points
-			int sp0 = cur_sample_info.splitpoints[x];
-			int sp1 = (x < 7) ? cur_sample_info.splitpoints[x + 1] : cur_sample_info.samplelen;
+	for (u8 x = 0; x < 8; ++x) {
+		// prepare press
+		Touch* s_touch = get_string_touch(x);
 
-			// root pitch calcs
-			s8 root = param_index_poly(P_DEGREE, x);
-			Scale scale = param_index_poly(P_SCALE, x);
-			if (scale >= NUM_SCALES)
-				scale = 0;
-			if (param_index(P_CV_QUANT) == CVQ_SCALE) {
-				int steps = ((cv_pitch / 512) * scale_table[scale][0] + 1) / 12;
-				root += steps;
-			}
-			root += scale_steps_at_string(scale, x);
+		// prepare sample points
+		int sp0 = cur_sample_info.splitpoints[x];
+		int sp1 = (x < 7) ? cur_sample_info.splitpoints[x + 1] : cur_sample_info.samplelen;
 
-			for (u8 y = 0; y < 8; ++y) {
-				u8 k = 0;
+		// root pitch calcs
+		s8 root = param_index_poly(P_DEGREE, x);
+		Scale scale = param_index_poly(P_SCALE, x);
+		if (scale >= NUM_SCALES)
+			scale = 0;
+		if (sys_params.cv_quant == CVQ_SCALE) {
+			int steps = ((cv_pitch / 512) * scale_table[scale][0] + 1) / 12;
+			root += steps;
+		}
+		root += scale_steps_at_string(scale, x);
 
-				// draw wave
-				k = clampi((int)((next_wave[x + y * 8]) * 64.f) - 20, 0, 128);
+		for (u8 y = 0; y < 8; ++y) {
+			u8 k = 0;
 
-				// draw finger press
-				if (s_touch->pos / 256 == y)
-					k = maxi(k, mini(s_touch->pres / 8, 255));
+			// draw wave
+			k = clampi((int)((next_wave[x + y * 8]) * 64.f) - 20, 0, 128);
 
-				// draw seq press
-				k = maxi(k, seq_press_led(x, y));
+			// draw finger press
+			if (s_touch->pos / 256 == y)
+				k = maxi(k, mini(s_touch->pres / 8, 255));
 
-				switch (ui_mode) {
-				case UI_DEFAULT:
-					// draw left column value editor
-					if (x == 0) {
-						s16 edit_k = value_editor_column_led(y);
-						if (edit_k >= 0) {
-							k = edit_k;
-							// done
-							break;
-						}
+			// draw seq press
+			k = maxi(k, seq_press_led(x, y));
+
+			switch (ui_mode) {
+			case UI_DEFAULT:
+				// draw left column value editor
+				if (x == 0) {
+					s16 edit_k = value_editor_column_led(y);
+					if (edit_k >= 0) {
+						k = edit_k;
+						// done
+						break;
 					}
-					// pulse selected param
-					if (is_snap_param(x, y))
-						k = pulse_half;
-					// map loudness of each 8th of a slice to a pad
-					if (using_sampler() && !cur_sample_info.pitched) {
-						int samp = sp0 + (((sp1 - sp0) * y) >> 3);
-						u16 avg_peak = getwaveform4zoom(&cur_sample_info, samp / 1024, 3) & 15;
-						k = maxi(k, avg_peak * 6);
-					}
-					// draw root notes
-					else {
-						s32 pitch = (pitch_at_step(scale, (7 - y) + root));
-						pitch %= 12 * 512;
-						if (pitch < 0)
-							pitch += 12 * 512;
-						if (pitch < 256)
-							k = maxi(k, 96);
-					}
-					// draw sequencer
-					k = maxi(k, seq_led(x, y, sync_pulse));
-					break;
-				case UI_EDITING_A:
-				case UI_EDITING_B:
-					k = ui_editing_led(x, y, pulse_half);
-					break;
-				case UI_PTN_START:
-				case UI_PTN_END:
-					k = seq_led(x, y, sync_pulse);
-					break;
-				case UI_LOAD:
-					k = ui_load_led(x, y, pulse_8x);
-					break;
-				default:
-					break;
 				}
-				k = maxi(k, ext_audio_led(x, y));
-				leds[x][y] = led_add_gamma(k);
+				// pulse selected param
+				if (is_snap_param(x, y))
+					k = pulse_half;
+				// map loudness of each 8th of a slice to a pad
+				if (using_sampler() && !cur_sample_info.pitched) {
+					int samp = sp0 + (((sp1 - sp0) * y) >> 3);
+					u16 avg_peak = getwaveform4zoom(&cur_sample_info, samp / 1024, 3) & 15;
+					k = maxi(k, avg_peak * 6);
+				}
+				// draw root notes
+				else {
+					s32 pitch = (pitch_at_step(scale, (7 - y) + root));
+					pitch %= 12 * 512;
+					if (pitch < 0)
+						pitch += 12 * 512;
+					if (pitch < 256)
+						k = maxi(k, 96);
+				}
+				// draw sequencer
+				k = maxi(k, seq_led(x, y, sync_pulse));
+				break;
+			case UI_EDITING_A:
+			case UI_EDITING_B:
+				k = ui_editing_led(x, y, pulse_half);
+				break;
+			case UI_PTN_START:
+			case UI_PTN_END:
+				k = seq_led(x, y, sync_pulse);
+				break;
+			case UI_LOAD:
+				k = ui_load_led(x, y, pulse_8x);
+				break;
+			default:
+				break;
 			}
+			k = maxi(k, ext_audio_led(x, y));
+			leds[x][y] = led_add_gamma(k);
 		}
 	}
 }
@@ -181,6 +190,13 @@ static void draw_shift_leds(void) {
 		                     : sampler_mode == SM_RECORDING ? 255         //
 		                                                    : pulse_half; //
 		break;
+	// case UI_SETTINGS_MENU:
+	// 	leds[8][SS_SHIFT_A] = 32 + (pulse_eighth >> 3);
+	// 	leds[8][SS_SHIFT_B] = 32 + ((255 - pulse_eighth) >> 3);
+	// 	// always light up the active shift state
+	// 	if (shift_state >= 0)
+	// 		leds[8][shift_state] = maxi(leds[8][shift_state], 128);
+	// 	break;
 	default:
 		param_shift_leds(pulse_half); // shift a & b
 		leds[8][SS_LOAD] = (ui_mode == UI_LOAD) ? 255 : 0;
@@ -198,6 +214,7 @@ static void draw_shift_leds(void) {
 }
 
 void draw_led_visuals(void) {
+	pulse_eighth = triangle(millis() / 8);
 	pulse_half = triangle(millis() / 2);
 	pulse = triangle(millis());
 	pulse_8x = triangle(millis() * 8);

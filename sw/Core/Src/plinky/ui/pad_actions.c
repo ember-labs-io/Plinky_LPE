@@ -2,6 +2,7 @@
 #include "gfx/gfx.h"
 #include "hardware/ram.h"
 #include "hardware/touchstrips.h"
+#include "settings_menu.h"
 #include "shift_states.h"
 #include "synth/params.h"
 #include "synth/sampler.h"
@@ -61,6 +62,11 @@ void handle_pad_actions(u8 strip_id, Touch* strip_cur) {
 		case UI_DEFAULT:
 		case UI_EDITING_A:
 		case UI_EDITING_B: {
+			// settings menu
+			if (pad_id == 47) {
+				open_settings_menu();
+				break;
+			}
 			// do we need to reset the left strip?
 			bool left_strip_reset = false;
 			// left-most strip used to edit param value
@@ -117,6 +123,9 @@ void handle_pad_actions(u8 strip_id, Touch* strip_cur) {
 				touch_load_item(pad_id);
 				cue_ram_item(pad_id, long_press_pad);
 			}
+			break;
+		case UI_SETTINGS_MENU:
+			select_settings_item(strip_id, pad_y);
 			break;
 		} // mode
 	}

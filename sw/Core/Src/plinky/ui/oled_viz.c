@@ -2,6 +2,7 @@
 #include "gfx/gfx.h"
 #include "hardware/ram.h"
 #include "pad_actions.h"
+#include "settings_menu.h"
 #include "shift_states.h"
 #include "synth/lfos.h"
 #include "synth/params.h"
@@ -191,6 +192,9 @@ static void draw_visuals(void) {
 		break;
 	case UI_SAMPLE_EDIT:
 		sampler_oled_visuals();
+		break;
+	case UI_SETTINGS_MENU:
+		draw_settings_menu();
 		break;
 	}
 }

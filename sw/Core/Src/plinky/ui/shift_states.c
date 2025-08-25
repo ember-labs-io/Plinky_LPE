@@ -79,8 +79,8 @@ void shift_set_state(ShiftState new_state) {
 	case SS_SHIFT_A:
 	case SS_SHIFT_B:
 		bool mode_a = shift_state == SS_SHIFT_A;
-		ui_mode = mode_a ? UI_EDITING_A : UI_EDITING_B;
 		try_enter_edit_mode(mode_a);
+		ui_mode = mode_a ? UI_EDITING_A : UI_EDITING_B;
 		break;
 	case SS_LOAD:
 		// activate preset load screen
@@ -98,6 +98,9 @@ void shift_set_state(ShiftState new_state) {
 	case SS_CLEAR:
 		// pressing Clear stops latched notes playing
 		clear_latch();
+		// exit settings menu
+		if (ui_mode == UI_SETTINGS_MENU)
+			ui_mode = UI_DEFAULT;
 		break;
 	case SS_PLAY:
 		// cued to stop? => stop immediately
@@ -163,8 +166,10 @@ void shift_release_state(void) {
 	switch (shift_state) {
 	case SS_SHIFT_A:
 	case SS_SHIFT_B:
-		ui_mode = UI_DEFAULT;
 		try_exit_edit_mode(action_pressed_during_shift);
+		if (ui_mode == UI_SETTINGS_MENU && action_pressed_during_shift)
+			break;
+		ui_mode = UI_DEFAULT;
 		break;
 	case SS_LOAD:
 		if (action_pressed_during_shift || prev_ui_mode == ui_mode)
