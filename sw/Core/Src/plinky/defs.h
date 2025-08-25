@@ -158,10 +158,13 @@ typedef struct Voice {
 
 typedef struct SysParams {
 	u8 curpreset;
-	u8 paddy;
-	u8 systemflags;
+	u8 midi_in_chan : 4;
+	u8 midi_out_chan : 4;
+	u8 accel_sens;
 	u8 headphonevol;
-	u8 pad[16 - 4];
+	u8 cv_quant : 2;
+	u8 paddy : 6;
+	u8 pad[16 - 5];
 } SysParams;
 
 typedef struct Preset {
@@ -531,8 +534,8 @@ typedef enum Param {
 	P_B_SCALE = R_B * 6,        P_B_OFFSET,     P_B_DEPTH,      P_B_RATE,	    P_B_SHAPE,	    P_B_SYM,        // LFO B
 	P_X_SCALE = R_X * 6,        P_X_OFFSET,     P_X_DEPTH,      P_X_RATE,	    P_X_SHAPE,	    P_X_SYM,        // LFO X
 	P_Y_SCALE = R_Y * 6,        P_Y_OFFSET,     P_Y_DEPTH,      P_Y_RATE,	    P_Y_SHAPE,	    P_Y_SYM,        // LFO Y
-	P_SYN_LVL = R_MIX1 * 6,     P_SYN_WET_DRY,  P_HPF,          P_MIDI_CH_IN,	P_CV_QUANT,	    P_VOLUME,       // Mixer 1
-	P_IN_LVL = R_MIX2 * 6,      P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIDI_CH_OUT,	P_ACCEL_SENS,	P_MIX_WIDTH,    // Mixer 2
+	P_SYN_LVL = R_MIX1 * 6,     P_SYN_WET_DRY,  P_HPF,          P_MIX_UNUSED1,	P_MIX_UNUSED4,	P_VOLUME,       // Mixer 1
+	P_IN_LVL = R_MIX2 * 6,      P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIX_UNUSED2,	P_MIX_UNUSED3,	P_MIX_WIDTH,    // Mixer 2
 
     NUM_PARAMS = R_NUM_ROWS * 6,
 } Param;
@@ -741,8 +744,8 @@ const static char* const param_name[NUM_PARAMS] = {
    [P_B_SCALE] = I_AMPLITUDE "CV Depth",    [P_B_OFFSET] = I_OFFSET "Offset",     		[P_B_DEPTH] = I_AMPLITUDE "Depth",			[P_B_RATE] = I_TEMPO "Clock Div",      	[P_B_SHAPE] = I_SHAPE "Shape",       		[P_B_SYM] = I_WARP "Symmetry",         		// LFO B
    [P_X_SCALE] = I_AMPLITUDE "CV Depth",    [P_X_OFFSET] = I_OFFSET "Offset",     		[P_X_DEPTH] = I_AMPLITUDE "Depth",			[P_X_RATE] = I_TEMPO "Clock Div",      	[P_X_SHAPE] = I_SHAPE "Shape",       		[P_X_SYM] = I_WARP "Symmetry",         		// LFO X
    [P_Y_SCALE] = I_AMPLITUDE "CV Depth",    [P_Y_OFFSET] = I_OFFSET "Offset",     		[P_Y_DEPTH] = I_AMPLITUDE "Depth",			[P_Y_RATE] = I_TEMPO "Clock Div",      	[P_Y_SHAPE] = I_SHAPE "Shape",       		[P_Y_SYM] = I_WARP "Symmetry",         		// LFO Y
-   [P_SYN_LVL] = I_WAVE "Synth Lvl",    	[P_SYN_WET_DRY] = I_REVERB "Wet/Dry",		[P_HPF] = I_HPF "High Pass",           		[P_MIDI_CH_IN] = I_RIGHT "In Chan",  	[P_CV_QUANT] = I_JACK "CV Quant",       	[P_VOLUME] = I_PHONES "Volume",        		// Mixer 1
-   [P_IN_LVL] = I_JACK "Input Lvl",     	[P_IN_WET_DRY] = I_JACK "In Wet/Dry",   	[P_SYS_UNUSED1] = I_CROSS "<unused>",   	[P_MIDI_CH_OUT] = I_LEFT "Out Chan",	[P_ACCEL_SENS] = I_INTERVAL "Accel Sens",	[P_MIX_WIDTH] = I_PHONES "Width",			// Mixer 2
+   [P_SYN_LVL] = I_WAVE "Synth Lvl",    	[P_SYN_WET_DRY] = I_REVERB "Wet/Dry",		[P_HPF] = I_HPF "High Pass",           		[P_MIX_UNUSED1] = I_CROSS "<unused>",  	[P_MIX_UNUSED4] = I_CROSS "<unused>",       [P_VOLUME] = I_PHONES "Volume",        		// Mixer 1
+   [P_IN_LVL] = I_JACK "Input Lvl",     	[P_IN_WET_DRY] = I_JACK "In Wet/Dry",   	[P_SYS_UNUSED1] = I_CROSS "<unused>",   	[P_MIX_UNUSED2] = I_CROSS "<unused>",	[P_MIX_UNUSED3] = I_CROSS "<unused>",		[P_MIX_WIDTH] = I_PHONES "Width",			// Mixer 2
 };
 
 // clang-format on

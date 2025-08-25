@@ -78,7 +78,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 
 		// cv
 		s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
-		if (param_index(P_CV_QUANT) == CVQ_SCALE)
+		if (sys_params.cv_quant == CVQ_SCALE)
 			cv_step_offset = pitch_to_scale_steps(cv_pitch, scale); // quantized cv
 		else
 			cv_pitch_offset = cv_pitch; // unquantized cv

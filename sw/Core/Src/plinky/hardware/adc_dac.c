@@ -3,6 +3,7 @@
 #include "flash.h"
 #include "gfx/gfx.h"
 #include "leds.h"
+#include "ram.h"
 #include "synth/params.h"
 #include "touchstrips.h"
 
@@ -91,7 +92,7 @@ float adc_get_smooth(ADCSmoothIndex index) {
 	case ADC_S_PITCH:
 		s32 pitch = (s32)(adc_smoother[ADC_S_PITCH].y2 * (512.f * 12.f));
 		// quantize pitch according to param
-		if (param_index(P_CV_QUANT))
+		if (sys_params.cv_quant)
 			pitch = (pitch + 256) & (~511);
 		return pitch;
 	case ADC_S_A_KNOB:
