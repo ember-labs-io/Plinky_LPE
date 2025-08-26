@@ -268,14 +268,14 @@ typedef enum ArpOrder {
 	ARP_PEDAL_UP,
 	ARP_PEDAL_DOWN,
 	ARP_PEDAL_UPDOWN,
-	ARP_RANDOM,
-	ARP_RANDOM2,
+	ARP_SHUFFLE,
+	ARP_SHUFFLE2,
 	ARP_CHORD,
 	ARP_UP8,
 	ARP_DOWN8,
 	ARP_UPDOWN8,
-	ARP_RANDOM8,
-	ARP_RANDOM28,
+	ARP_SHUFFLE8,
+	ARP_SHUFFLE28,
 	NUM_ARP_ORDERS,
 } ArpOrder;
 
@@ -309,7 +309,7 @@ typedef enum SeqOrder {
 	SEQ_ORD_BACK,
 	SEQ_ORD_PINGPONG,
 	SEQ_ORD_PINGPONG_REP,
-	SEQ_ORD_RANDOM,
+	SEQ_ORD_SHUFFLE,
 	NUM_SEQ_ORDERS,
 } SeqOrder;
 
@@ -503,8 +503,8 @@ typedef enum ParamRow {
 	R_RVB,
 	R_ARP,
 	R_SEQ,
-	R_SMP,
-	R_JIT,
+	R_SMP1,
+	R_SMP2,
 	R_A,
 	R_B,
 	R_X,
@@ -525,8 +525,8 @@ typedef enum Param {
 	P_RVB_SEND = R_RVB * 6,     P_RVB_TIME,     P_SHIMMER,	    P_RVB_WOBBLE,	P_RVB_UNUSED,	P_SWING,        // Reverb
 	P_ARP_TGL = R_ARP * 6,      P_ARP_ORDER,    P_ARP_CLK_DIV,  P_ARP_CHANCE,	P_ARP_EUC_LEN,	P_ARP_OCTAVES,  // Arp
 	P_LATCH_TGL = R_SEQ * 6,    P_SEQ_ORDER,    P_SEQ_CLK_DIV,  P_SEQ_CHANCE,	P_SEQ_EUC_LEN,	P_GATE_LENGTH,  // Sequencer
-	P_SCRUB = R_SMP * 6,        P_GR_SIZE,      P_PLAY_SPD,	    P_SMP_STRETCH,	P_SAMPLE,	    P_PATTERN,      // Sampler 1
-	P_SCRUB_JIT = R_JIT * 6,    P_GR_SIZE_JIT,  P_PLAY_SPD_JIT,	P_SMP_UNUSED1,	P_SMP_UNUSED2,	P_STEP_OFFSET,  // Sampler 2
+	P_SCRUB = R_SMP1 * 6,       P_GR_SIZE,      P_PLAY_SPD,	    P_SMP_STRETCH,	P_SAMPLE,	    P_PATTERN,      // Sampler 1
+	P_SCRUB_JIT = R_SMP2 * 6,   P_GR_SIZE_JIT,  P_PLAY_SPD_JIT,	P_SMP_UNUSED1,	P_SMP_UNUSED2,	P_STEP_OFFSET,  // Sampler 2
 	P_A_SCALE = R_A * 6,        P_A_OFFSET,     P_A_DEPTH,      P_A_RATE,	    P_A_SHAPE,	    P_A_SYM,        // LFO A
 	P_B_SCALE = R_B * 6,        P_B_OFFSET,     P_B_DEPTH,      P_B_RATE,	    P_B_SHAPE,	    P_B_SYM,        // LFO B
 	P_X_SCALE = R_X * 6,        P_X_OFFSET,     P_X_DEPTH,      P_X_RATE,	    P_X_SHAPE,	    P_X_SYM,        // LFO X
@@ -640,7 +640,15 @@ typedef enum Font {
 	F_24_BOLD,
 	F_28_BOLD,
 	F_32_BOLD,
+	NUM_FONTS,
 } Font;
+
+// offset to make fonts down-align to the same pixel (currently incomplete)
+const static u8 font_y_offset[NUM_FONTS] = {
+    [F_16] = 3,
+    [F_12_BOLD] = 3,
+    [F_16_BOLD] = 3,
+};
 
 #define I_KNOB "\x80"
 #define I_SEND "\x81"
@@ -707,143 +715,42 @@ typedef enum Font {
 
 const static char* const param_row_name[R_NUM_ROWS] = {
 
-    [R_SOUND1] = I_SLIDERS "Sound",
-    [R_SOUND2] = I_PIANO "Sound",
-    [R_ENV1] = I_ADSR_A "Env1",
-    [R_ENV2] = I_ADSR_A "Env2",
-    [R_ARP] = I_NOTES "Arp",
-    [R_SEQ] = I_NOTES "Seq",
-    [R_DLY] = I_DELAY "Delay",
-    [R_RVB] = I_REVERB "Reverb",
-    [R_A] = I_A,
-    [R_B] = I_B,
-    [R_X] = I_X,
-    [R_Y] = I_Y,
-    [R_SMP] = I_WAVE "Sampler",
-    [R_JIT] = I_RANDOM "Jitter"
+    [R_SOUND1] = I_SLIDERS "Sound", [R_SOUND2] = I_SLIDERS "Sound", [R_ENV1] = I_ENV "Env 1",
+    [R_ENV2] = I_ENV "Env 2",       [R_ARP] = I_NOTES "Arp",        [R_SEQ] = I_NOTES "Seq",
+    [R_DLY] = I_DELAY "Delay",      [R_RVB] = I_REVERB "Reverb",    [R_A] = I_ALFO "LFO",
+    [R_B] = I_BLFO "LFO",           [R_X] = I_XLFO "LFO",           [R_Y] = I_YLFO "LFO",
+    [R_SMP1] = I_WAVE "Sample",     [R_SMP2] = I_WAVE "Sample",     [R_MIX1] = I_SLIDERS "Mixer",
+    [R_MIX2] = I_SLIDERS "Mixer"
 
 };
+
+// clang-format off
 
 const static char* const param_name[NUM_PARAMS] = {
-    [P_ATTACK2] = I_ADSR_A "Attack2",
-    [P_DECAY2] = I_ADSR_D "Decay2",
-    [P_SUSTAIN2] = I_ADSR_S "Sustain2",
-    [P_RELEASE2] = I_ADSR_R "Release2",
-    [P_SWING] = "Swing",
-
-    [P_ENV_LVL1] = I_TOUCH "Sensitivity",
-    [P_DISTORTION] = I_DISTORT "Distort",
-    [P_ATTACK1] = I_ADSR_A "Attack",
-    [P_DECAY1] = I_ADSR_D "Decay",
-    [P_SUSTAIN1] = I_ADSR_S "Sustain",
-    [P_RELEASE1] = I_ADSR_R "Release",
-
-    [P_SYN_LVL] = I_WAVE "Synth Lvl",
-    [P_IN_LVL] = I_JACK "Input Lvl",
-    [P_IN_WET_DRY] = I_JACK "In Wet/Dry",
-    [P_SYN_WET_DRY] = I_REVERB "Main Wet/Dry",
-    [P_HPF] = I_HPF "High Pass",
-    [P_RESO] = I_DISTORT "Resonance",
-
-    [P_OCT] = I_OCTAVE "Octave",
-    [P_PITCH] = I_PIANO "Pitch",
-    [P_GLIDE] = I_GLIDE "Glide",
-    [P_INTERVAL] = I_INTERVAL "Interval",
-    [P_GATE_LENGTH] = I_INTERVAL "Gate Len",
-    [P_ENV_LVL2] = I_AMPLITUDE "Env Level",
-
-    [P_SHAPE] = "Shape",
-    [P_RVB_UNUSED] = "<unused>",
-
-    [P_SCALE] = I_PIANO "Scale",
-    [P_DEGREE] = I_FEEDBACK "Degree",
-    [P_MICROTONE] = I_MICRO "Microtone",
-    [P_COLUMN] = I_INTERVAL "Stride",
-
-    [P_ARP_TGL] = I_NOTES "Arp On/Off",
-    [P_LATCH_TGL] = "Latch On/Off",
-
-    [P_ARP_ORDER] = I_ORDER "Arp",
-    [P_ARP_CLK_DIV] = I_DIVIDE "Divide",
-    [P_ARP_CHANCE] = I_PERCENT "Prob %",
-    [P_ARP_EUC_LEN] = I_LENGTH "Euclid Len",
-    [P_ARP_OCTAVES] = I_OCTAVE "Octaves",
-    [P_TEMPO] = "BPM",
-
-    [P_SEQ_ORDER] = I_ORDER "Seq",
-    [P_SEQ_CLK_DIV] = I_DIVIDE "Divide",
-    [P_SEQ_CHANCE] = I_PERCENT "Prob %",
-    [P_SEQ_EUC_LEN] = I_LENGTH "Euclid Len",
-    [P_STEP_OFFSET] = I_SEQ "Step Ofs",
-    [P_PATTERN] = I_PRESET "Pattern",
-
-    [P_DLY_SEND] = I_SEND "Send",
-    [P_DLY_TIME] = I_TIME "Time",
-    [P_DLY_FEEDBACK] = I_FEEDBACK "Feedback",
-    //[P_DLCOLOR]=I_COLOR "Colour",
-    [P_DLY_WOBBLE] = I_AMPLITUDE "Wobble",
-    [P_PING_PONG] = I_DIVIDE "2nd Tap",
-
-    [P_RVB_SEND] = I_SEND "Send",
-    [P_RVB_TIME] = I_TIME "Time",
-    [P_SHIMMER] = I_FEEDBACK "Shimmer",
-    //[P_RVCOLOR]=I_COLOR "Colour",
-    [P_RVB_WOBBLE] = I_AMPLITUDE "Wobble",
-    //[P_RVB_UNUSED]=" ",
-
-    [P_SAMPLE] = I_WAVE "Sample",
-    [P_SCRUB] = "Scrub",
-    [P_PLAY_SPD] = I_NOTES "Rate",
-    [P_GR_SIZE] = I_PERIOD "Grain Sz",
-    [P_SMP_STRETCH] = I_TIME "Timestretch",
-    [P_CV_QUANT] = I_JACK "CV Quantise",
-
-    [P_ACCEL_SENS] = I_AMPLITUDE "Accel Sens",
-    [P_MIX_WIDTH] = I_AMPLITUDE "Stereo Width",
-    [P_NOISE] = I_WAVE "Noise",
-    [P_SCRUB_JIT] = "Scrub",
-    [P_PLAY_SPD_JIT] = I_NOTES "Rate",
-    [P_GR_SIZE_JIT] = I_PERIOD "Grain Sz",
-    [P_SMP_UNUSED1] = I_ENV "<unused>",
-    [P_VOLUME] = "'Phones Vol",
-
-    [P_A_OFFSET] = I_OFFSET "CV Offset",
-    [P_A_SCALE] = I_TIMES "CV Scale",
-    [P_A_DEPTH] = I_AMPLITUDE "LFO Depth",
-    [P_A_RATE] = I_PERIOD "LFO Rate",
-    [P_A_SHAPE] = I_SHAPE "LFO Shape",
-    [P_A_SYM] = I_WARP "LFO Warp",
-
-    [P_B_OFFSET] = I_OFFSET "CV Offset",
-    [P_B_SCALE] = I_TIMES "CV Scale",
-    [P_B_DEPTH] = I_AMPLITUDE "LFO Depth",
-    [P_B_RATE] = I_PERIOD "LFO Rate",
-    [P_B_SHAPE] = I_SHAPE "LFO Shape",
-    [P_B_SYM] = I_WARP "LFO Warp",
-
-    [P_X_OFFSET] = I_OFFSET "CV Offset",
-    [P_X_SCALE] = I_TIMES "CV Scale",
-    [P_X_DEPTH] = I_AMPLITUDE "LFO Depth",
-    [P_X_RATE] = I_PERIOD "LFO Rate",
-    [P_X_SHAPE] = I_SHAPE "LFO Shape",
-    [P_X_SYM] = I_WARP "LFO Warp",
-
-    [P_Y_OFFSET] = I_OFFSET "CV Offset",
-    [P_Y_SCALE] = I_TIMES "CV Scale",
-    [P_Y_DEPTH] = I_AMPLITUDE "LFO Depth",
-    [P_Y_RATE] = I_PERIOD "LFO Rate",
-    [P_Y_SHAPE] = I_SHAPE "LFO Shape",
-    [P_Y_SYM] = I_WARP "LFO Warp",
-
-    [P_MIDI_CH_IN] = I_PIANO "MIDI In Ch",
-    [P_MIDI_CH_OUT] = I_PIANO "MIDI Out Ch",
-
+   [P_SHAPE] = I_SHAPE "Shape",       		[P_DISTORTION] = I_DISTORT "Distortion",   	[P_PITCH] = I_PIANO "Pitch",         		[P_OCT] = I_OCTAVE "Octave",         	[P_GLIDE] = I_GLIDE "Glide",         		[P_INTERVAL] = I_OFFSET "Interval",			// Sound 1
+   [P_NOISE] = I_WAVE "Noise",       		[P_RESO] = I_DISTORT "Resonance",         	[P_DEGREE] = I_OFFSET "Degree",       		[P_SCALE] = I_PIANO "Scale",        	[P_MICROTONE] = I_MICRO "Microtone",     	[P_COLUMN] = I_OFFSET "Column",				// Sound 2
+   [P_ENV_LVL1] = I_TOUCH "Sens",			[P_ATTACK1] = I_ADSR_A "Attack",      		[P_DECAY1] = I_ADSR_D "Decay",        		[P_SUSTAIN1] = I_ADSR_S "Sustain",    	[P_RELEASE1] = I_ADSR_R "Release",      	[P_ENV1_UNUSED] = I_CROSS "<unused>",   	// Envelope 1
+   [P_ENV_LVL2] = I_AMPLITUDE "Level",  	[P_ATTACK2] = I_ADSR_A "Attack",      		[P_DECAY2] = I_ADSR_D "Decay",        		[P_SUSTAIN2] = I_ADSR_S "Sustain",    	[P_RELEASE2] = I_ADSR_R "Release",      	[P_ENV2_UNUSED] = I_CROSS "<unused>",   	// Envelope 2
+   [P_DLY_SEND] = I_SEND "Send",    		[P_DLY_TIME] = I_TEMPO "Clock Div",     	[P_PING_PONG] = I_TILT "2nd Tap",     		[P_DLY_WOBBLE] = I_WAVE "Wobble",  		[P_DLY_FEEDBACK] = I_FEEDBACK "Feedback",	[P_TEMPO] = I_PLAY "Tempo",         		// Delay
+   [P_RVB_SEND] = I_SEND "Send",    		[P_RVB_TIME] = I_TIME "Time",     			[P_SHIMMER] = I_FEEDBACK "Shimmer",     	[P_RVB_WOBBLE] = I_WAVE "Wobble",  		[P_RVB_UNUSED] = I_CROSS "<unused>",    	[P_SWING] = I_TILT "Swing 8th",         	// Reverb
+   [P_ARP_TGL] = I_PLAY "Enable",     		[P_ARP_ORDER] = I_ORDER "Order",    		[P_ARP_CLK_DIV] = I_TEMPO "Clock Div",   	[P_ARP_CHANCE] = I_PERCENT "Chance (S)",[P_ARP_EUC_LEN] = I_LENGTH "Euclid Len",   	[P_ARP_OCTAVES] = I_OCTAVE "Octaves",   	// Arp
+   [P_LATCH_TGL] = I_PLAY "Enable",   		[P_SEQ_ORDER] = I_ORDER "Order",    		[P_SEQ_CLK_DIV] = I_TEMPO "Clock Div",   	[P_SEQ_CHANCE] = I_PERCENT "Chance (S)",[P_SEQ_EUC_LEN] = I_LENGTH "Euclid Len",   	[P_GATE_LENGTH] = I_INTERVAL "Gate Len",	// Sequencer
+   [P_SCRUB] = I_RIGHT "Scrub",       		[P_GR_SIZE] = I_PERIOD "Grain Size",      	[P_PLAY_SPD] = I_RIGHT "Play Spd",      	[P_SMP_STRETCH] = I_TIME "Stretch", 	[P_SAMPLE] = I_SEQ "ID",        			[P_PATTERN] = I_SEQ "Pattern ID",      		// Sampler 1
+   [P_SCRUB_JIT] = I_RIGHT "Scrub Jit",		[P_GR_SIZE_JIT] = I_PERIOD "Size Jit",		[P_PLAY_SPD_JIT] = I_RIGHT "Spd Jit",		[P_SMP_UNUSED1] = I_CROSS "<unused>", 	[P_SMP_UNUSED2] = I_CROSS "<unused>",   	[P_STEP_OFFSET] = I_OFFSET "Step Ofs",   	// Sampler 2
+   [P_A_SCALE] = I_AMPLITUDE "CV Depth",    [P_A_OFFSET] = I_OFFSET "Offset",     		[P_A_DEPTH] = I_AMPLITUDE "Depth",			[P_A_RATE] = I_TEMPO "Clock Div",		[P_A_SHAPE] = I_SHAPE "Shape",       		[P_A_SYM] = I_WARP "Symmetry",         		// LFO A
+   [P_B_SCALE] = I_AMPLITUDE "CV Depth",    [P_B_OFFSET] = I_OFFSET "Offset",     		[P_B_DEPTH] = I_AMPLITUDE "Depth",			[P_B_RATE] = I_TEMPO "Clock Div",      	[P_B_SHAPE] = I_SHAPE "Shape",       		[P_B_SYM] = I_WARP "Symmetry",         		// LFO B
+   [P_X_SCALE] = I_AMPLITUDE "CV Depth",    [P_X_OFFSET] = I_OFFSET "Offset",     		[P_X_DEPTH] = I_AMPLITUDE "Depth",			[P_X_RATE] = I_TEMPO "Clock Div",      	[P_X_SHAPE] = I_SHAPE "Shape",       		[P_X_SYM] = I_WARP "Symmetry",         		// LFO X
+   [P_Y_SCALE] = I_AMPLITUDE "CV Depth",    [P_Y_OFFSET] = I_OFFSET "Offset",     		[P_Y_DEPTH] = I_AMPLITUDE "Depth",			[P_Y_RATE] = I_TEMPO "Clock Div",      	[P_Y_SHAPE] = I_SHAPE "Shape",       		[P_Y_SYM] = I_WARP "Symmetry",         		// LFO Y
+   [P_SYN_LVL] = I_WAVE "Synth Lvl",    	[P_SYN_WET_DRY] = I_REVERB "Wet/Dry",		[P_HPF] = I_HPF "High Pass",           		[P_MIDI_CH_IN] = I_RIGHT "In Chan",  	[P_CV_QUANT] = I_JACK "CV Quant",       	[P_VOLUME] = I_PHONES "Volume",        		// Mixer 1
+   [P_IN_LVL] = I_JACK "Input Lvl",     	[P_IN_WET_DRY] = I_JACK "In Wet/Dry",   	[P_SYS_UNUSED1] = I_CROSS "<unused>",   	[P_MIDI_CH_OUT] = I_LEFT "Out Chan",	[P_ACCEL_SENS] = I_INTERVAL "Accel Sens",	[P_MIX_WIDTH] = I_PHONES "Width",			// Mixer 2
 };
 
+// clang-format on
+
 const static char* const mod_src_name[NUM_MOD_SOURCES] = {
-    [SRC_BASE] = I_SLIDERS "Base",   [SRC_RND] = I_RANDOM "Random", [SRC_ENV2] = I_ENV "Env",
-    [SRC_PRES] = I_TOUCH "Pressure", [SRC_LFO_A] = I_A "Knob/LFO",  [SRC_LFO_B] = I_B "Knob/LFO",
-    [SRC_LFO_X] = I_X "CV/LFO",      [SRC_LFO_Y] = I_Y "CV/LFO",
+    [SRC_BASE] = I_SLIDERS "Base", [SRC_ENV2] = I_ENV "Env 2 >>",  [SRC_PRES] = I_TOUCH "Pres >>",
+    [SRC_LFO_A] = I_A "Mod A >>",  [SRC_LFO_B] = I_B "Mod B >>",   [SRC_LFO_X] = I_X "Mod X >>",
+    [SRC_LFO_Y] = I_Y "Mod Y >>",  [SRC_RND] = I_RANDOM "Rand >>",
 };
 
 const static char* const arm_mode_name[NUM_ARP_ORDERS] = {
@@ -851,46 +758,46 @@ const static char* const arm_mode_name[NUM_ARP_ORDERS] = {
     [ARP_DOWN] = "Down",
     [ARP_UPDOWN] = "Up/Down",
     [ARP_UPDOWN_REP] = "Up/Down\nRepeat",
-    [ARP_PEDAL_UP] = "Pedal    \nUp",
-    [ARP_PEDAL_DOWN] = "Pedal    \nDown",
-    [ARP_PEDAL_UPDOWN] = "Pedal\nUp/Down",
-    [ARP_RANDOM] = "Rnd",
-    [ARP_RANDOM2] = "2xRnd",
+    [ARP_PEDAL_UP] = "Up\nPedal",
+    [ARP_PEDAL_DOWN] = "Down\nPedal",
+    [ARP_PEDAL_UPDOWN] = "Up/Down\nPedal",
+    [ARP_SHUFFLE] = "Shuffle",
+    [ARP_SHUFFLE2] = "Shuffle 2x",
     [ARP_CHORD] = "Chord",
     [ARP_UP8] = "Up\n8 Steps",
     [ARP_DOWN8] = "Down\n8 Steps",
     [ARP_UPDOWN8] = "Up/Down\n8 Steps",
-    [ARP_RANDOM8] = "Rnd\n8 Steps",
-    [ARP_RANDOM28] = "2xRnd\n8 Steps",
+    [ARP_SHUFFLE8] = "Shuffle\n8 Steps",
+    [ARP_SHUFFLE28] = "Shuffle 2x\n8 Steps",
 };
 
 const static char* const seq_mode_name[NUM_SEQ_ORDERS] = {
     [SEQ_ORD_PAUSE] = "Pause",
     [SEQ_ORD_FWD] = "Forward",
     [SEQ_ORD_BACK] = "Reverse",
-    [SEQ_ORD_PINGPONG] = "Pingpong",
-    [SEQ_ORD_PINGPONG_REP] = "PingPong Rep",
-    [SEQ_ORD_RANDOM] = "Random",
+    [SEQ_ORD_PINGPONG] = "Ping Pong",
+    [SEQ_ORD_PINGPONG_REP] = "Ping Pong\nRepeat",
+    [SEQ_ORD_SHUFFLE] = "Shuffle",
 };
 
 static const char* const cv_quant_name[NUM_CV_QUANT_TYPES] = {
     [CVQ_OFF] = "Off",
-    [CVQ_CHROMATIC] = "On",
+    [CVQ_CHROMATIC] = "Chrom",
     [CVQ_SCALE] = "Scale",
 };
 
 static const char* const lfo_shape_name[NUM_LFO_SHAPES] = {
     [LFO_TRI] = "Triangle",
     [LFO_SIN] = "Sine",
-    [LFO_SMOOTH_RAND] = "SmthRnd",
-    [LFO_STEP_RAND] = "StepRnd",
-    [LFO_BI_SQUARE] = "BiSquare",
-    [LFO_SQUARE] = "Square",
+    [LFO_SMOOTH_RAND] = "Random\nSmooth",
+    [LFO_STEP_RAND] = "Random\nStepped",
+    [LFO_BI_SQUARE] = "Square\nBipolar",
+    [LFO_SQUARE] = "Square\nUnipolar",
     [LFO_CASTLE] = "Castle",
-    [LFO_BI_TRIGS] = "BiTrigs",
-    [LFO_TRIGS] = "Trigs",
-    [LFO_ENV] = "Env",
     [LFO_SAW] = "Saw",
+    [LFO_BI_TRIGS] = "Triggers\nBipolar",
+    [LFO_TRIGS] = "Triggers\nUnipolar",
+    [LFO_ENV] = "Envelope",
 };
 
 static const char* const preset_category_name[NUM_PST_CATS] = {
@@ -901,24 +808,24 @@ static const char* const preset_category_name[NUM_PST_CATS] = {
 const static char* const scale_name[NUM_SCALES] = {
     [S_MAJOR] = "Major",
     [S_MINOR] = "Minor",
-    [S_HARMMINOR] = "Harmonic Min",
-    [S_PENTA] = "Penta Maj",
-    [S_PENTAMINOR] = "Penta Min",
+    [S_HARMMINOR] = "Harmonic",
+    [S_PENTA] = "Penta\nMajor",
+    [S_PENTAMINOR] = "Penta\nMinor",
     [S_HIRAJOSHI] = "Hirajoshi",
     [S_INSEN] = "Insen",
     [S_IWATO] = "Iwato",
     [S_MINYO] = "Minyo",
     [S_FIFTHS] = "Fifths",
-    [S_TRIADMAJOR] = "Triad Maj",
-    [S_TRIADMINOR] = "Triad Min",
+    [S_TRIADMAJOR] = "Triad\nMajor",
+    [S_TRIADMINOR] = "Triad\nMinor",
     [S_DORIAN] = "Dorian",
     [S_PHYRGIAN] = "Phrygian",
     [S_LYDIAN] = "Lydian",
     [S_MIXOLYDIAN] = "Mixolydian",
     [S_AEOLIAN] = "Aeolian",
     [S_LOCRIAN] = "Lacrian",
-    [S_BLUESMINOR] = "Blues Min",
-    [S_BLUESMAJOR] = "Blues Maj",
+    [S_BLUESMINOR] = "Blues\nMinor",
+    [S_BLUESMAJOR] = "Blues\nMajor",
     [S_ROMANIAN] = "Romanian",
     [S_WHOLETONE] = "Wholetone",
     [S_HARMONICS] = "Harmonics",

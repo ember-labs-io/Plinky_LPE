@@ -174,7 +174,7 @@ static void seq_step(void) {
 			seq_flags.playing_backwards ? seq_dec_step() : seq_inc_step();
 		break;
 	}
-	case SEQ_ORD_RANDOM: {
+	case SEQ_ORD_SHUFFLE: {
 		// no steps left: end of a "loop"
 		if (!random_steps_avail) {
 			// all steps are available again
@@ -213,7 +213,7 @@ void seq_tick(void) {
 	// update properties
 	ticks_since_step++;
 	u8 seq_div = param_index(P_SEQ_CLK_DIV);
-	step_32nds = seq_div == NUM_SYNC_DIVS ? -1 : sync_divs_32nds[clampi(seq_div, 0, NUM_SYNC_DIVS - 1)];
+	step_32nds = seq_div == NUM_SYNC_DIVS ? -1 : sync_divs_32nds[seq_div];
 	recalc_start_step();
 
 	// synced

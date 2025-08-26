@@ -385,7 +385,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 	float goal_lpg = update_envelope(voice_id, voice);
 
 	// pre-calc noise, drive, resonance
-	int drive_lvl = param_val_poly(P_DISTORTION, voice_id);
+	int drive_lvl = param_val_poly(P_DISTORTION, voice_id) * 2 - 65536;
 	float fdrive = table_interp(pitches, ((32768 - 2048) + drive_lvl / 2));
 	if (drive_lvl < -65536 + 2048)
 		fdrive *= (drive_lvl + 65536) * (1.f / 2048.f); // ensure drive goes right to 0 when full minimum

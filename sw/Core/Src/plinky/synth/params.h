@@ -39,7 +39,8 @@ void hold_encoder_for_params(u16 duration);
 
 // visuals
 void take_param_snapshots(void);
-bool draw_cur_param(void);
+bool params_want_to_draw(void);
+void draw_cur_param(void);
 bool is_snap_param(u8 x, u8 y);
 s16 value_editor_column_led(u8 y);
 u8 ui_editing_led(u8 x, u8 y, u8 pulse);

@@ -265,22 +265,11 @@ s32 param_val_poly(Param param_id, u8 string_id) {
 // index value is scaled to its appropriate range
 
 s8 param_index(Param param_id) {
-	s8 index = value_to_index(param_val(param_id), param_range(param_id));
-	// special cases
-	switch (range_type[param_id]) {
-	// return the number of 32nds
-	case R_CLOCK1:
-	case R_CLOCK2:
-		if (index >= 0)
-			index = sync_divs_32nds[index];
-		break;
+	u8 range = param_range(param_id);
+	s8 index = value_to_index(param_val(param_id), range);
 	// revert from being stored 1-based
-	case R_SAMPLE:
-		index = (index - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
-		break;
-	default:
-		break;
-	}
+	if (param_id == P_SAMPLE)
+		index = (index - 1 + range) % range;
 	return index;
 }
 
@@ -302,7 +291,7 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 		return;
 	case P_TEMPO:
 		// rj: this is a bit of a hacky way to make sure the tempo is not saved to a value lower than 30bpm
-		// I'm leaving it like this until the parameter system is rewritten to more elegantly support parameter limits
+		// I'm leaving it like this until there is a better way to save values with larger ranges, with lower limits
 		if (mod_src == SRC_BASE)
 			data = maxi(data, -768);
 		break;
@@ -326,10 +315,10 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 }
 
 void save_param_index(Param param_id, s8 index) {
+	u8 range = param_range(param_id);
 	// save 1-based
 	if (param_id == P_SAMPLE)
-		index = (index + 1) % SAMPLE_ID_RANGE;
-	u8 range = param_range(param_id);
+		index = (index + 1) % range;
 	index = clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1);
 	save_param_raw(param_id, SRC_BASE, INDEX_TO_RAW(index, range));
 }
@@ -385,7 +374,7 @@ void select_mod_src(ModSource mod_src) {
 	case P_MIDI_CH_IN:
 	case P_MIDI_CH_OUT:
 	case P_VOLUME:
-		flash_message(F_20_BOLD, "No Modulation", "");
+		flash_message(F_20_BOLD, I_CROSS "No Modulation", "");
 		return;
 	default:
 		break;
@@ -455,33 +444,32 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	s16 raw = param_val_raw(param_id, selected_mod_src);
 	u8 range = param_range(param_id);
 
-	// special case
-	if (range_type[param_id] == R_CLOCK2 && raw < 0)
+	// negative values of dual clock are unranged
+	if (range_type[param_id] == R_DUACLK && raw < 0)
 		range = 0;
 
 	// indeces: just add/subtract 1 per encoder tick
 	if (range && selected_mod_src == SRC_BASE) {
-		s16 index = raw_to_index(raw, range);
-
-		// retrieve 1-based
-		if (param_id == P_SAMPLE)
-			index = (index - 1 + SAMPLE_ID_RANGE) % SAMPLE_ID_RANGE;
-
-		index += enc_diff;
-
+		s16 index = raw_to_index(raw, range) + enc_diff;
+		raw = INDEX_TO_RAW(clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1), range);
 		// smooth transition between synced and free timing
-		if (range_type[param_id] == R_CLOCK2 && index < 0) {
-			save_param_raw(param_id, SRC_BASE, -1);
-			return;
-		}
-
-		save_param_index(param_id, index);
+		if (range_type[param_id] == R_DUACLK && index < 0)
+			raw = -1;
+		save_param_raw(param_id, SRC_BASE, raw);
 		return;
 	}
 
 	// full range values, add/subtract 0.1 per encoder tick with acceleration
-	if (param_id == P_VOLUME)
+	switch (param_id) {
+	case P_INTERVAL:
+		enc_diff *= 8;
+		break;
+	case P_VOLUME:
 		enc_diff *= 4;
+		break;
+	default:
+		break;
+	}
 	// holding shift disables acceleration
 	enc_acc = shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B ? 1.f : maxf(1.f, enc_acc * enc_acc);
 	raw += floorf(enc_diff * enc_acc + 0.5f);
@@ -536,218 +524,424 @@ void hold_encoder_for_params(u16 duration) {
 
 // == VISUALS == //
 
-static const char* get_param_str(int p, int mod, int v, char* val_buf, char* dec_buf) {
-	if (dec_buf)
-		*dec_buf = 0;
-	int valmax = param_range(p);
-	int vscale = valmax ? (mini(v, RAW_SIZE - 1) * valmax) / RAW_SIZE : v;
-	int displaymax = valmax ? valmax * 10 : 1000;
-	bool decimal = true;
-	//	const char* val = val_buf;
-	if (mod == SRC_BASE)
-		switch (p) {
-		case P_SMP_STRETCH:
-		case P_PLAY_SPD:
-			displaymax = 2000;
-			break;
-		case P_ARP_TGL:
-			return param_index(P_ARP_TGL) ? "On" : "Off";
-		case P_LATCH_TGL:
-			return param_index(P_LATCH_TGL) ? "On" : "Off";
-		case P_SAMPLE:
-			if (vscale == 0) {
-				return "Off";
-			}
-			break;
-		case P_SEQ_CLK_DIV: {
-			if (vscale >= NUM_SYNC_DIVS)
-				return "(Gate CV)";
-			int n = sprintf(val_buf, "%d", sync_divs_32nds[vscale] /* >> divisor*/);
-			if (!dec_buf)
-				dec_buf = val_buf + n;
-			sprintf(dec_buf, /*divisornames[divisor]*/ "/32");
-			return val_buf;
-		}
-		case P_ARP_CLK_DIV:
-		case P_A_RATE:
-		case P_B_RATE:
-		case P_X_RATE:
-		case P_Y_RATE:
-			if (v < 0) {
-				v = -v;
-				decimal = true;
-				valmax = 0;
-				displaymax = 1000;
-				break;
-			}
-			vscale = (mini(v, RAW_SIZE - 1) * NUM_SYNC_DIVS) / RAW_SIZE;
-			int n = sprintf(val_buf, "%d", sync_divs_32nds[vscale] /*>> divisor*/);
-			if (!dec_buf)
-				dec_buf = val_buf + n;
-			sprintf(dec_buf, /*divisornames[divisor]*/ "/32");
-			return val_buf;
-		case P_ARP_OCTAVES:
-			v += (RAW_SIZE * 10) / displaymax; // 1 based
-			break;
-		case P_MIDI_CH_IN:
-		case P_MIDI_CH_OUT: {
-			int midich = clampi(vscale, 0, 15) + 1;
-			int n = sprintf(val_buf, "%d", midich);
-			if (!dec_buf)
-				dec_buf = val_buf + n;
-			return val_buf;
-		}
-		case P_ARP_ORDER:
-			return arm_mode_name[clampi(vscale, 0, NUM_ARP_ORDERS - 1)];
-		case P_SEQ_ORDER:
-			return seq_mode_name[clampi(vscale, 0, NUM_SEQ_ORDERS - 1)];
-		case P_CV_QUANT:
-			return cv_quant_name[clampi(vscale, 0, NUM_CV_QUANT_TYPES - 1)];
-		case P_SCALE:
-			return scale_name[clampi(vscale, 0, NUM_SCALES - 1)];
-		case P_A_SHAPE:
-		case P_B_SHAPE:
-		case P_X_SHAPE:
-		case P_Y_SHAPE:
-			return lfo_shape_name[clampi(vscale, 0, NUM_LFO_SHAPES - 1)];
-		case P_PITCH:
-		case P_INTERVAL:
-			displaymax = 120;
-			break;
-		case P_TEMPO:
-			v += RAW_SIZE;
-			// when listening to external clocks, we manually calculate the bpm_10x value as the pulses come in
-			if (clock_type != CLK_INTERNAL)
-				v = (bpm_10x * RAW_SIZE) / 1200;
-			displaymax = 1200;
-			break;
-		case P_DLY_TIME:
-			if (v < 0) {
-				if (v <= -1024)
-					v++;
-				v = (-v * 13) / RAW_SIZE;
-				int n = sprintf(val_buf, "%d", sync_divs_32nds[v]);
-				if (!dec_buf)
-					dec_buf = val_buf + n;
-				sprintf(dec_buf, "/32 sync");
-			}
-			else {
-				int n = sprintf(val_buf, "%d", (v * 100) / RAW_SIZE);
-				if (!dec_buf)
-					dec_buf = val_buf + n;
-				sprintf(dec_buf, "free");
-			}
-			return val_buf;
-		default:;
-		}
-	v = (v * displaymax) / RAW_SIZE;
-	int av = abs(v);
-	int n = sprintf(val_buf, "%c%d", (v < 0) ? '-' : ' ', av / 10);
-	if (decimal) {
-		if (!dec_buf)
-			dec_buf = val_buf + n;
-		sprintf(dec_buf, ".%d", av % 10);
-	}
-	return val_buf;
-}
-
 void take_param_snapshots(void) {
 	param_snap = selected_param;
 	src_snap = selected_mod_src;
 }
 
-// returns whether this drew anything
-bool draw_cur_param(void) {
-	gfx_text_color = 1;
-	Param draw_param;
-	// should we be drawing the param?
+static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, char* val_buf) {
+	s16 disp_val_10x;
+
+	// mod amounts
+	if (mod_src != SRC_BASE) {
+		disp_val_10x = raw * 1000 >> 10;
+		sprintf(val_buf, "%s%d.%d",
+		        disp_val_10x > 0   ? "+"
+		        : disp_val_10x < 0 ? "-"
+		                           : "",
+		        abs(disp_val_10x) / 10, abs(disp_val_10x) % 10);
+		return val_buf;
+	}
+
+	u8 range = param_range(param_id);
+	if (range_type[param_id] == R_DUACLK && raw < 0)
+		range = 0;
+
+	// indeces
+	if (range) {
+		s8 index = raw_to_index(raw, range);
+		switch (param_id) {
+		case P_SCALE:
+			return scale_name[index];
+		case P_ARP_ORDER:
+			return arm_mode_name[index];
+		case P_SEQ_ORDER:
+			return seq_mode_name[index];
+		case P_SEQ_CLK_DIV:
+			if (index == NUM_SYNC_DIVS) {
+				sprintf(val_buf, "(CV Gate)");
+				return val_buf;
+			}
+			break;
+		// 1-based params
+		case P_ARP_OCTAVES:
+		case P_PATTERN:
+		case P_MIDI_CH_IN:
+		case P_MIDI_CH_OUT:
+			sprintf(val_buf, "%d", index + 1);
+			return val_buf;
+		case P_SAMPLE:
+			if (index == 0) {
+				sprintf(val_buf, "None");
+				return val_buf;
+			}
+			break;
+		case P_CV_QUANT:
+			return cv_quant_name[index];
+		default:
+			break;
+		}
+		switch (range_type[param_id]) {
+		// clock sync
+		case R_SEQCLK:
+		case R_DUACLK: {
+			u16 num_32nds = sync_divs_32nds[index];
+			u16 gcd = num_32nds;
+			u8 n = 32;
+			while (n) {
+				u16 temp = n;
+				n = gcd % n;
+				gcd = temp;
+			}
+			u8 numerator = num_32nds / gcd;
+			u8 denominator = 32 / gcd;
+			char postfix[3];
+
+			if (denominator == 1)
+				sprintf(val_buf, "%d %s%s", numerator, "bar", numerator > 1 ? "s" : "");
+			else {
+				switch (denominator) {
+				case 2:
+				case 32:
+					strcpy(postfix, "nd");
+					break;
+				case 3:
+					strcpy(postfix, "rd");
+					break;
+				case 4:
+				case 8:
+				case 16:
+					strcpy(postfix, "th");
+					break;
+				}
+				sprintf(val_buf, "%d/%d%s", numerator, denominator, postfix);
+			}
+			return val_buf;
+		}
+		case R_BINARY:
+			sprintf(val_buf, "%s", index ? "On" : "Off");
+			return val_buf;
+		case R_EUCLEN:
+			if (index == 0) {
+				sprintf(val_buf, "rnd");
+				return val_buf;
+			}
+			sprintf(val_buf, "%d", index + 1);
+			return val_buf;
+		case R_LFOSHP:
+			return lfo_shape_name[index];
+		default:
+			break;
+		}
+		sprintf(val_buf, "%d", index);
+		return val_buf;
+	}
+
+	// values
+	u16 disp_range_10x = 1000;
+	switch (param_id) {
+	// on a different scale
+	case P_INTERVAL:
+		disp_range_10x = 120;
+		break;
+	case P_PLAY_SPD:
+	case P_SMP_STRETCH:
+	case P_A_SCALE:
+	case P_B_SCALE:
+	case P_X_SCALE:
+	case P_Y_SCALE:
+	case P_ACCEL_SENS:
+		disp_range_10x = 2000;
+		break;
+	// show negative value as positive
+	case P_SWING:
+	case P_ARP_CHANCE:
+	case P_SEQ_CHANCE:
+		raw = abs(raw);
+		break;
+	default:
+		break;
+	}
+	disp_val_10x = raw * disp_range_10x >> 10;
+	// on a different calculation altogether
+	switch (param_id) {
+	case P_PING_PONG:
+		disp_val_10x = disp_val_10x - 1000;
+		break;
+	case P_TEMPO:
+		disp_val_10x = clock_type == CLK_INTERNAL ? (raw + RAW_SIZE) * 1200 >> 10 : bpm_10x;
+		break;
+	case P_VOLUME:
+		disp_val_10x = raw * 1000 / 1020;
+		break;
+	default:
+		break;
+	}
+	sprintf(val_buf, "%s%d.%d", disp_val_10x < 0 ? "-" : "", abs(disp_val_10x) / 10, abs(disp_val_10x) % 10);
+	return val_buf;
+}
+
+static bool has_modulation(Param param_id) {
+	for (u8 mod_src = SRC_ENV2; mod_src <= SRC_RND; mod_src++)
+		if (cur_preset.params[param_id][mod_src])
+			return true;
+	return false;
+}
+
+bool params_want_to_draw(void) {
 	switch (ui_mode) {
 	case UI_DEFAULT:
-		if (param_snap < NUM_PARAMS)
-			// standard param editing
-			draw_param = param_snap;
-		else if (mem_param < NUM_PARAMS && enc_recently_used())
-			// edited param with encoder => draw remembered param
-			draw_param = mem_param;
-		else
-			// not editing
-			return false;
+		if (param_snap < NUM_PARAMS || (mem_param < NUM_PARAMS && enc_recently_used()))
+			return true;
 		break;
 	case UI_EDITING_A:
 	case UI_EDITING_B:
-		if (param_snap < NUM_PARAMS)
-			draw_param = param_snap;
-		else {
-			// not editing => ask for param
-			draw_str(0, 0, F_20_BOLD, mod_src_name[src_snap]);
-			draw_str(0, 16, F_16, "select parameter");
-			return true;
-		}
-		break;
-	default:
-		// other ui mode => don't draw anything
-		return false;
-		break;
-	}
-
-	// draw with upper shadow
-	gfx_text_color = 2;
-
-	const char* page_name = param_row_name[draw_param / 6];
-	// manual page name overrides
-	switch (draw_param) {
-	case P_TEMPO:
-	case P_SWING:
-		page_name = I_TEMPO "Clock";
-		break;
-	case P_NOISE:
-		page_name = I_WAVE "Noise";
-		break;
-	case P_CV_QUANT:
-	case P_VOLUME:
-		page_name = "System";
-		break;
+		return true;
 	default:
 		break;
 	}
+	return false;
+}
 
-	// draw page name, or mod source if one is selected
-	draw_str(0, 0, F_12, src_snap == SRC_BASE ? page_name : mod_src_name[src_snap]);
-	// draw param name
-	const char* p_name = param_name[draw_param];
-	if (str_width(F_16_BOLD, p_name) > 64)
-		draw_str(0, 20, F_12_BOLD, p_name);
+// this assumes params_want_to_draw() has already been checked
+void draw_cur_param(void) {
+	if ((ui_mode == UI_EDITING_A || ui_mode == UI_EDITING_B) && param_snap >= NUM_PARAMS) {
+		// not editing => ask for param
+		draw_str(0, 8, F_16_BOLD, "select parameter");
+		return;
+	}
+
+	Param draw_param;
+	if (param_snap < NUM_PARAMS)
+		// standard param editing
+		draw_param = param_snap;
 	else
-		draw_str(0, 16, F_16_BOLD, p_name);
+		// no valid snap param => this must be an encoder edit
+		draw_param = mem_param;
 
+	gfx_text_color = 3;
+	// draw section name
+	const char* sect_str;
+	if (src_snap == SRC_BASE) {
+		sect_str = param_row_name[draw_param / 6];
+
+		// manual section name overrides
+		switch (draw_param) {
+		case P_PITCH:
+		case P_OCT:
+		case P_DEGREE:
+		case P_SCALE:
+		case P_MICROTONE:
+		case P_COLUMN:
+			sect_str = I_TOUCH "Pads";
+			break;
+		case P_TEMPO:
+		case P_SWING:
+			sect_str = I_TEMPO "Clock";
+			break;
+		case P_LATCH_TGL:
+			sect_str = I_TOUCH "Latch";
+			break;
+		case P_PATTERN:
+		case P_STEP_OFFSET:
+			sect_str = I_NOTES "Seq";
+			break;
+		case P_A_SCALE:
+		case P_A_OFFSET:
+			sect_str = I_A "Mod A";
+			break;
+		case P_B_SCALE:
+		case P_B_OFFSET:
+			sect_str = I_B "Mod B";
+			break;
+		case P_X_SCALE:
+		case P_X_OFFSET:
+			sect_str = I_X "Mod X";
+			break;
+		case P_Y_SCALE:
+		case P_Y_OFFSET:
+			sect_str = I_Y "Mod Y";
+			break;
+		case P_MIDI_CH_IN:
+		case P_MIDI_CH_OUT:
+			sect_str = I_JACK "Midi";
+			break;
+		case P_CV_QUANT:
+		case P_ACCEL_SENS:
+			sect_str = I_SLIDERS "System";
+			break;
+		default:
+			break;
+		}
+	}
+	// mod sources
+	else
+		sect_str = mod_src_name[src_snap];
+
+	const u8 text_x = 19;
+	const u8 text_right_x = OLED_WIDTH - 17;
+	u8 text_y;
+	u8 icon_y = sect_str[0] == I_NOTES[0] ? 1 : 0;
+	char icon_str[2] = {sect_str[0], '\0'};
+	draw_str(0, icon_y, F_12_BOLD, icon_str);
+	draw_str(text_x, 3, F_12_BOLD, sect_str + 1);
+	u8 sect_end_x = text_x + str_width(F_12_BOLD, sect_str + 1);
+
+	// draw value
+	Font font;
 	char val_buf[32];
 	u8 width = 0;
-	s16 val = param_val_raw(draw_param, src_snap);
-	// s32 vbase = val;
-	// if (src_snap == SRC_BASE && draw_param != P_VOLUME) {
-	// 	val = (param_val_unscaled(draw_param) * PARAM_SIZE) >> 16;
-	// 	if (val != vbase) {
-	// 		// if there is modulation going on, show the base value below
-	// 		const char* val_str = get_param_str(draw_param, src_snap, vbase, val_buf, NULL);
-	// 		width = str_width(F_8, val_str);
-	// 		draw_str(OLED_WIDTH - 16 - width, 32 - 8, F_8, val_str);
-	// 	}
-	// }
+	u8 x_center = 0;
+	u8 x;
+	s16 raw = param_val_raw(draw_param, src_snap);
 
-	char dec_buf[16];
-	const char* val_str = get_param_str(draw_param, src_snap, val, val_buf, dec_buf);
-	u8 x = OLED_WIDTH - 15;
-	if (*dec_buf)
-		x -= str_width(F_8, dec_buf);
-	Font font = F_28_BOLD; // F_24_BOLD is the first font that will be checked
-	do {
+	// modulated value
+	if (src_snap != SRC_BASE || has_modulation(draw_param)) {
+		s16 raw_mod = param_val(draw_param) >> 6;
+		switch (draw_param) {
+		case P_SCALE:
+		case P_ARP_ORDER:
+		case P_SEQ_ORDER:
+		case P_A_SHAPE:
+		case P_B_SHAPE:
+		case P_X_SHAPE:
+		case P_Y_SHAPE:
+			// display the modulated param as the main param
+			if (src_snap == SRC_BASE)
+				raw = raw_mod;
+			break;
+		default:
+			const char* mod_val_str = get_param_str(draw_param, SRC_BASE, raw_mod, val_buf);
+			font = F_12_BOLD;
+			width = str_width(font, mod_val_str);
+			x = text_right_x - width;
+			draw_str(x, 21, font, mod_val_str);
+			break;
+		}
+	}
+
+	// main value
+	font = F_20_BOLD;
+	const char* val_str = get_param_str(draw_param, src_snap, raw, val_buf);
+	strcpy(val_buf, val_str);
+
+	if (src_snap == SRC_BASE) {
+		switch (draw_param) {
+		case P_SCALE:
+			font = F_12_BOLD;
+			x_center = 82;
+			break;
+		case P_ARP_ORDER:
+			font = F_12_BOLD;
+			x_center = 81;
+			break;
+		case P_SEQ_ORDER:
+			font = F_12_BOLD;
+			x_center = 80;
+			break;
+		case P_CV_QUANT:
+			font = F_16_BOLD;
+			break;
+		default:
+			break;
+		}
+		if (range_type[draw_param] == R_LFOSHP) {
+			font = F_12_BOLD;
+			x_center = 85;
+		}
+	}
+
+	char* newline_pos = strchr(val_buf, '\n');
+	if (newline_pos) {
+		// draw second line
+		char* val_buf2 = newline_pos + 1;
+		width = str_width(font, val_buf2);
+		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
+		draw_str(x, 18, font, val_buf2);
+		*newline_pos = '\0';
+	}
+	// draw first line
+	width = str_width(font, val_buf);
+	x = x_center == 0 ? text_right_x - width : x_center - width / 2;
+	if (x < sect_end_x) {
 		font--;
-		width = str_width(font, val_str);
-	} while (width >= 64 && font > F_12_BOLD);
-	draw_str(x - width, 0, font, val_str);
-	if (*dec_buf)
-		draw_str(x, 0, F_8, dec_buf);
-	return true;
+		width = str_width(font, val_buf);
+		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
+	}
+	draw_str(x, font_y_offset[font], font, val_buf);
+
+	// draw param name
+
+	//  special negative ranges
+	s16 base_raw = param_val_raw(draw_param, SRC_BASE);
+	if (base_raw < 0) {
+		switch (draw_param) {
+		case P_SWING:
+			draw_str(0, 18, F_12_BOLD, I_TILT);
+			draw_str(text_x, 18, F_12_BOLD, "Swing 16th");
+			return;
+		case P_ARP_CHANCE:
+		case P_SEQ_CHANCE:
+			draw_str(0, 18, F_12_BOLD, I_PERCENT);
+			draw_str(text_x, 20, F_12_BOLD, "Chance (H)");
+			return;
+		default:
+			break;
+		}
+		if (range_type[draw_param] == R_DUACLK) {
+			draw_str(0, 18, F_12_BOLD, I_TIME);
+			draw_str(text_x, 20, F_12_BOLD, "Rate");
+			return;
+		}
+	}
+
+	// special cases
+	u8 range = param_range(draw_param);
+	s8 index = raw_to_index(base_raw, range);
+	if (draw_param == P_SEQ_CLK_DIV && index == range - 1) {
+		draw_str(0, 18, F_12_BOLD, I_JACK);
+		draw_str(text_x, 18, F_12_BOLD, "Trigger");
+		return;
+	}
+
+	// default
+	const char* p_name = param_name[draw_param];
+	switch (p_name[0]) {
+	case '\x83': // I_DISTORT
+	case '\x81': // I_SEND
+	case '\x8d': // I_REVERB
+	case '\xab': // I_INTERVAL
+		icon_y = 17;
+		break;
+	default:
+		icon_y = 18;
+		break;
+	}
+	icon_str[0] = p_name[0];
+	draw_str(0, icon_y, F_12_BOLD, icon_str);
+
+	switch (draw_param) {
+	// make sure param name descenders don't bump into voice bars
+	case P_ENV_LVL1:
+	case P_DECAY1:
+	case P_DECAY2:
+	case P_PLAY_SPD:
+	case P_PLAY_SPD_JIT:
+	case P_A_SYM:
+	case P_B_SYM:
+	case P_X_SYM:
+	case P_Y_SYM:
+	case P_SWING:
+	case P_SYN_WET_DRY:
+	case P_IN_WET_DRY:
+		text_y = 18;
+		break;
+	default:
+		text_y = 20;
+		break;
+	}
+	draw_str(text_x, text_y, F_12_BOLD, p_name + 1);
+	return;
 }
 
 bool is_snap_param(u8 x, u8 y) {

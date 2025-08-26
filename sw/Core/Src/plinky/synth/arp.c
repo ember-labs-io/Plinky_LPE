@@ -118,7 +118,7 @@ static void step_random(u8 avail_touch_mask, s8 bottom_oct_offset, u8 top_oct_of
 	strings_used_by_rand1 |= arp_touch_mask;
 
 	// we need a second random string, analogous to first but taking out the string that was already generated
-	if (arp_order == ARP_RANDOM2 || arp_order == ARP_RANDOM28) {
+	if (arp_order == ARP_SHUFFLE2 || arp_order == ARP_SHUFFLE28) {
 		strings_left = avail_touch_mask & ~strings_used_by_rand2;
 		strings_left &= ~(1 << cur_string);
 		if (strings_left == 0) {
@@ -182,10 +182,10 @@ static void advance_step(u8 avail_touch_mask) {
 			arp_touch_mask = avail_touch_mask ^ avail_no_pedal_mask;
 		}
 		break;
-	case ARP_RANDOM:
-	case ARP_RANDOM8:
-	case ARP_RANDOM2:
-	case ARP_RANDOM28:
+	case ARP_SHUFFLE:
+	case ARP_SHUFFLE8:
+	case ARP_SHUFFLE2:
+	case ARP_SHUFFLE28:
 		step_random(avail_touch_mask, bottom_oct_offset, top_oct_offset);
 		break;
 	case ARP_CHORD:
@@ -220,7 +220,7 @@ u8 arp_tick(u8 string_touch_mask) {
 	s32 arp_div = param_val(P_ARP_CLK_DIV);
 	// clock synced
 	if (arp_div >= 0) {
-		u8 step_32nds = param_index(P_ARP_CLK_DIV);
+		u8 step_32nds = sync_divs_32nds[param_index(P_ARP_CLK_DIV)];
 		if (pulse_32nd && (counter_32nds % step_32nds == 0)) {
 			step_next_strings_frame = true;
 			strings_frame_tick = -1; // u32 max
@@ -234,7 +234,7 @@ u8 arp_tick(u8 string_touch_mask) {
 	else {
 		static bool first_swing_note = true;
 		// reuse the pitches table to turn the linear arp_div value into an exponential time duration
-		u32 clock_diff = (u32)(table_interp(pitches, 32768 + (-arp_div >> 2)) * (1 << 24));
+		u32 clock_diff = (u32)(table_interp(pitches, 32768 + (arp_div >> 2)) * (1 << 24));
 		// swing
 		u32 swing_param = abs(param_val(P_SWING));
 		if (swing_param) {

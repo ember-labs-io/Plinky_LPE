@@ -63,18 +63,17 @@ void accel_read(void) {
 
 void accel_tick(void) {
 	static u16 accel_counter;
-	s16 accel_sens = clampi(param_val(P_ACCEL_SENS) / 2, -32767, 32767);
-	float accel_sens_f = (2.f / 16384.f / 32768.f) * abs(accel_sens);
-	// run 2 plinkys have the accelerometer rotated 90 degrees and upside touching from the addon, detect it via z
-	// direction
+	// full sensitivity equals 200% scaling
+	float accel_sens_f = 2 * param_val(P_ACCEL_SENS) / 65536.f;
+	// detect inverted sensor
 	bool axis_swap = accel_raw[2] > 4000;
 	for (u8 axis_id = 0; axis_id < 2; ++axis_id) {
-		float f = accel_raw[axis_id ^ axis_swap] * accel_sens_f;
+		float f = accel_raw[axis_id ^ axis_swap] / (float)(1 << 14) * accel_sens_f;
 		if (!axis_id) {
 			if (!axis_swap)
 				f = -f; // reverse x
 		}
-		else if (accel_sens < 0)
+		else if (accel_sens_f < 0)
 			f = -f; // reverse y if accel sens negative
 		accel_lpf[axis_id] += (f - accel_lpf[axis_id]) * 0.0001f;
 		accel_smooth[axis_id] += (f - accel_smooth[axis_id]) * 0.1f;

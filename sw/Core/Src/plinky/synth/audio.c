@@ -276,14 +276,14 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	const float k_target_fb = param_val(P_DLY_FEEDBACK) * (1.f / 65535.f) * (0.35f); // 3/4
 	static float k_fb = 0.f;
 	int k_target_delaytime = param_val(P_DLY_TIME);
-	if (k_target_delaytime > 0) {
+	if (k_target_delaytime < 0) {
 		// free timing
+		k_target_delaytime = -k_target_delaytime;
 		k_target_delaytime = (((k_target_delaytime + 255) >> 8) * k_target_delaytime) >> 8;
 		k_target_delaytime = (k_target_delaytime * (DL_SIZE_MASK - 64)) >> 16;
 	}
 	else {
-		k_target_delaytime =
-		    sync_divs_32nds[clampi((-k_target_delaytime * 13) >> 16, 0, 12)]; // results in a number 1-32
+		k_target_delaytime = sync_divs_32nds[param_index(P_DLY_TIME)];
 		// figure out how samples we can have, max, in a beat synced scenario
 		int max_delay = 32000 * 600 * 4 / bpm_10x;
 		while (max_delay > DL_SIZE_MASK - 64)
@@ -378,8 +378,8 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		synthlvl_mid = (asynthwidth * synthlvl_) >> 15;
 	}
 
-	int ainwetdry = param_val(P_IN_WET_DRY);
-	int wetdry = param_val(P_SYN_WET_DRY);
+	int ainwetdry = param_val(P_IN_WET_DRY) * 2 - 65536;
+	int wetdry = param_val(P_SYN_WET_DRY) * 2 - 65536;
 	int wetlvl = 65536 - maxi(-wetdry, 0);
 	int drylvl = 65536 - maxi(wetdry, 0);
 

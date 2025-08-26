@@ -252,7 +252,7 @@ int str_width(Font f, const char* buf) {
 	return maxi(mw, w);
 }
 
-static int font_height(Font f) {
+int font_height(Font f) {
 	return ((int)(f) & 15) * 4 + 8;
 }
 

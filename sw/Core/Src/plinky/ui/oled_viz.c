@@ -158,8 +158,9 @@ static void draw_visuals(void) {
 			draw_scope();
 		draw_lfos();
 		draw_max_pres();
-		if (draw_cur_param()) {
+		if (params_want_to_draw()) {
 			draw_voices(false);
+			draw_cur_param();
 			return; // this fills the rest of the display
 		}
 		draw_preset_info();
@@ -170,6 +171,7 @@ static void draw_visuals(void) {
 			return;
 		}
 		draw_arp_flag();
+		draw_startup_visuals();
 		break;
 	case UI_EDITING_A:
 	case UI_EDITING_B:
@@ -191,9 +193,6 @@ static void draw_visuals(void) {
 		sampler_oled_visuals();
 		break;
 	}
-
-	// startup visuals are drawn on top of the regular visuals
-	draw_startup_visuals();
 }
 
 void draw_oled_visuals(void) {
