@@ -49,7 +49,6 @@ static inline void ssd130x_command(unsigned char c) {
 
 static inline void ssd130x_flip(u8* buffer) {
 	ssd130x_wait();
-	ssd130x_command(0); // Page start address (0 = reset)
 	HAL_I2C_Master_Transmit(&hi2c2, I2C_ADDRESS, buffer, OLED_BUFFER_SIZE, 500);
 }
 
