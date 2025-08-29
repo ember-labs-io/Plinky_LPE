@@ -41,7 +41,7 @@ void encoder_irq(void) {
 	if (hardware_state == 0b11)
 		encoder_value = (encoder_value & ~0b11) | 2; // snap to the middle of a detent (value = 4x + 2)
 	else
-		encoder_value += enc_deltas[cur_state];
+		encoder_value += enc_deltas[cur_state] * (sys_params.reverse_encoder ? -1 : 1);
 
 	// acceleration
 	encoder_acc *= 0.998f;

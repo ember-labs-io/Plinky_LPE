@@ -15,6 +15,7 @@ typedef enum Section {
 typedef enum Item {
 	// system
 	I_ACCEL_SENS = S_SYSTEM * 8,
+	I_ENCODER_DIR,
 	// midi
 	I_MIDI_IN_CH = S_MIDI * 8,
 	I_MIDI_OUT_CH,
@@ -26,6 +27,7 @@ typedef enum Item {
 
 const static u8 num_options[NUM_ITEMS] = {
     [I_ACCEL_SENS] = 201,
+    [I_ENCODER_DIR] = 2,
     [I_MIDI_IN_CH] = 16,
     [I_MIDI_OUT_CH] = 16,
     [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
@@ -38,10 +40,8 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 };
 
 const static char* item_name[NUM_ITEMS] = {
-    [I_ACCEL_SENS] = "Acc sens",
-    [I_MIDI_IN_CH] = "In channel",
-    [I_MIDI_OUT_CH] = "Out channel",
-    [I_CV_QUANT] = "Quant",
+    [I_ACCEL_SENS] = "Acc sens",     [I_ENCODER_DIR] = "Enc dir", [I_MIDI_IN_CH] = "In channel",
+    [I_MIDI_OUT_CH] = "Out channel", [I_CV_QUANT] = "Quant",
 };
 
 static Item cur_item = 0;
@@ -55,6 +55,9 @@ static void select_item(Item item, bool force) {
 	switch (cur_item) {
 	case I_ACCEL_SENS:
 		cur_value = sys_params.accel_sens;
+		break;
+	case I_ENCODER_DIR:
+		cur_value = sys_params.reverse_encoder;
 		break;
 	case I_MIDI_IN_CH:
 		cur_value = sys_params.midi_in_chan;
@@ -77,6 +80,9 @@ static void save_value(u8 value) {
 	case I_ACCEL_SENS:
 		saved_value = sys_params.accel_sens;
 		break;
+	case I_ENCODER_DIR:
+		saved_value = sys_params.reverse_encoder;
+		break;
 	case I_MIDI_IN_CH:
 		saved_value = sys_params.midi_in_chan;
 		break;
@@ -95,6 +101,9 @@ static void save_value(u8 value) {
 	switch (cur_item) {
 	case I_ACCEL_SENS:
 		sys_params.accel_sens = cur_value;
+		break;
+	case I_ENCODER_DIR:
+		sys_params.reverse_encoder = cur_value;
 		break;
 	case I_MIDI_IN_CH:
 		sys_params.midi_in_chan = cur_value;
@@ -130,6 +139,9 @@ void settings_encoder_press(void) {
 void edit_settings_from_encoder(s8 enc_diff) {
 	// edit value
 	if (value_selected) {
+		// avoid encoder glitch while editing
+		if (cur_item == I_ENCODER_DIR && cur_value)
+			enc_diff = -enc_diff;
 		save_value(maxi(cur_value + enc_diff, 0));
 		return;
 	}
@@ -157,6 +169,8 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_ACCEL_SENS:
 		sprintf(val_buf, "%d", 2 * value - 200);
 		return val_buf;
+	case I_ENCODER_DIR:
+		return value ? "Rvrse" : "Normal";
 	// 1-based
 	case I_MIDI_IN_CH:
 	case I_MIDI_OUT_CH:

@@ -163,7 +163,8 @@ typedef struct SysParams {
 	u8 accel_sens;
 	u8 headphonevol;
 	u8 cv_quant : 2;
-	u8 paddy : 6;
+	u8 reverse_encoder : 1;
+	u8 paddy : 5;
 	u8 pad[16 - 5];
 } SysParams;
 
