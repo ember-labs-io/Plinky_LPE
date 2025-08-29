@@ -6,16 +6,42 @@
 # if you want to update the bootloader, you need to copy it over the golden_bootloader.bin
 # and rerun this script with the magic argument 'bootloader' 
 
+import re
+
+# Configuration
+FIRMWARE_PREFIX = "PlinkyLPE"
+
+def find_version_in_binary(binary_data):
+    """
+    Find version strings in binary data using regex.
+    Returns the last version found in format X.X.X
+    """
+    # Convert binary data to string, ignoring non-ASCII bytes
+    try:
+        text = binary_data.decode('ascii', errors='ignore')
+    except:
+        text = ''.join(chr(b) for b in binary_data if 32 <= b <= 126)
+    
+    # Regex pattern for version strings like "1.2.3"
+    # Matches: digit(s), dot, digit(s), dot, digit(s)
+    version_pattern = r'(\d+\.\d+\.\d+)'
+    
+    # Find all version matches
+    matches = re.findall(version_pattern, text)
+    
+    if matches:
+        # Return the last version found (most likely to be the current version)
+        return matches[-1]
+    
+    return None
+
 def main():
     # bin file maker
-    ver1 = '0'
-    ver2 = '0'
-    ver3 = '0'
     bootloader_file = 'golden_bootloader.bin' # "bootloader/Release/plinkybl.bin"
     try:
         with open(bootloader_file, "rb") as f1:
             bl_content = f1.read()
-        with open("sw/Release/plinkyblack.bin", "rb") as f2:
+        with open("../sw/Release/plinkyblack.bin", "rb") as f2:
             app_content = f2.read()
     except IOError as e:
         print(f"Failed to open file: {e}")
@@ -26,7 +52,6 @@ def main():
         bootloader_version = chr(bl_content[-4]) + chr(bl_content[-3]) + chr(bl_content[-2]) + chr(bl_content[-1])
     print(f'SIZES: {appsize} app, {len(bl_content)} bootloader, bootloader version [{bootloader_version}]')
     # pad bl_content and app_content to reach their sizes
-    og_bl_size = len(bl_content)
     bl_content += b'\xff' * (65536 - len(bl_content) - 4)
     bl_content += bootloader_version.encode('ascii')
     assert(len(bl_content) == 65536)
@@ -34,15 +59,21 @@ def main():
 
     app = bl_content + app_content
 
-    if chr(app[appsize + 65536 - 6])=='v' and chr(app[appsize + 65536 - 4]) == '.':
-        ver1 = chr(app[appsize + 65536 - 5])
-        ver2 = chr(app[appsize + 65536 - 3])
-        ver3 = chr(app[appsize + 65536 - 2])
+    # Extract version using regex-based approach
+    version_str = find_version_in_binary(app_content)
+    if version_str:
+        # Parse version components
+        version_parts = version_str.split('.')  # "X.Y.Z" -> ["X", "Y", "Z"]
+        ver_major = version_parts[0]
+        ver_minor = version_parts[1] 
+        ver_patch = version_parts[2]
+        print(f"Found version: {version_str}")
     else:
         print("!!!!!!!!!!!!!!!! NO VERSION FOUND IN BIN FILE")
+        print("Searched for patterns like '1.2.3' in the binary data")
         exit(2)
-    print(f"bootloader size {len(bl_content)}, app size {appsize}, version {ver1}{ver2}{ver3}")
-    fname = f"plink{ver1}{ver2}{ver3}.bin"
+    print(f"bootloader size {len(bl_content)}, app size {appsize}, version {ver_major}.{ver_minor}.{ver_patch}")
+    fname = f"{FIRMWARE_PREFIX}-{ver_major}.{ver_minor}.{ver_patch}.bin"
     print(f'outputting {fname}...')
     try:
         with open(fname, "wb") as fo:
@@ -50,16 +81,17 @@ def main():
     except IOError as e:
         print(f"Failed to write file: {e}")
         exit(2)
-    fname = f"plink{ver1}{ver2}{ver3}.uf2"
+    fname = f"{FIRMWARE_PREFIX}-{ver_major}.{ver_minor}.{ver_patch}.uf2"
     print(f'outputting {fname}...')
     # python ../../uf2conv.py -o ${ProjName}.uf2 -c -f STM32L4 ${ProjName}.hex
     class DotAccessibleObject:
-        def __getattr__(self, key): return False
+        def __getattr__(self, key): 
+            return False
     uf2args = DotAccessibleObject()
     uf2args.output=fname
     uf2args.convert=True
     uf2args.family='STM32L4'
-    uf2args.input='sw/Release/plinkyblack.hex'
+    uf2args.input='../sw/Release/plinkyblack.hex'
     uf2args.base='0x2000' # lol this is wrong, but luckily we were using .hex which has addresses. phew.
     # the actual base address is 0x08010000 ie 64k into the flash.
     import uf2conv
