@@ -5,6 +5,7 @@
 #include "gfx/gfx.h"
 #include "hardware/adc_dac.h"
 #include "hardware/ram.h"
+#include "params.h"
 #include "pitch_tools.h"
 #include "sampler.h"
 #include "strings.h"
@@ -98,8 +99,8 @@ void generate_oscs(u8 string_id, Voice* voice) {
 		else {
 			u16 position = s_touch_sort->pos; // touch position
 			u8 pad_y = 7 - (position >> 8);   // pad on string
-			// pitch at step + cv
-			note_pitch = pitch_at_step(scale, string_step_offset + pad_y + cv_step_offset) + cv_pitch_offset;
+			// pitch at step + cv + root note transposition
+			note_pitch = pitch_at_step(scale, string_step_offset + pad_y + cv_step_offset) + cv_pitch_offset + get_root_note() * PITCH_PER_SEMI;
 			// detuning scaled by microtune param
 			s16 fine_pos = 127 - (position & 255); // offset from pad center
 			s32 micro_tune = 64 + param_val_poly(P_MICROTONE, string_id);

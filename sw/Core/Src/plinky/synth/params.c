@@ -1,4 +1,5 @@
 #include "params.h"
+#include "param_defs.h"
 #include "data/tables.h"
 #include "gfx/gfx.h"
 #include "hardware/accelerometer.h"
@@ -229,6 +230,15 @@ void params_tick(void) {
 static s16 param_val_raw(Param param_id, ModSource mod_src) {
 	if (param_id == P_VOLUME && mod_src == SRC_BASE)
 		return sys_params.headphonevol << 2;
+	
+	// Special handling for root note: if uninitialized (0), return center C
+	if (param_id == P_ROOT_NOTE && mod_src == SRC_BASE) {
+		s16 raw_val = cur_preset.params[param_id][mod_src];
+		if (raw_val == 0) // Uninitialized, return center C (index 12)
+			return INDEX_TO_RAW(12, 25);
+		return raw_val;
+	}
+	
 	return cur_preset.params[param_id][mod_src];
 }
 
@@ -288,6 +298,10 @@ s8 param_index_poly(Param param_id, u8 string_id) {
 	return value_to_index(param_val_poly(param_id, string_id), param_range(param_id));
 }
 
+s8 get_root_note(void) {
+	return param_index(P_ROOT_NOTE) - 12; // Convert to -12 to +12 range
+}
+
 // == SAVING == //
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
@@ -343,15 +357,37 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 		return;
 
 	// scale the press position to a param size value
-	float press_value =
-	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (RAW_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
-	           RAW_SIZE);
-	bool is_signed = param_signed_or_mod(selected_param, selected_mod_src);
-	if (is_signed)
-		press_value = press_value * 2 - RAW_SIZE;
+	float press_value;
+	
+	// Special handling for root note: map full slider to -12 to +12 range
+	if (selected_param == P_ROOT_NOTE && selected_mod_src == SRC_BASE) {
+		// Map slider position directly to 0-24 index range, then convert to raw value
+		float slider_pos = clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE), 0.f, 1.f);
+		u8 range = param_range(selected_param);
+		s16 index = slider_pos * 24; // 0 to 24 index range
+		press_value = INDEX_TO_RAW(index, range);
+	} else {
+		press_value =
+		    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (RAW_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
+		           RAW_SIZE);
+		bool is_signed = param_signed_or_mod(selected_param, selected_mod_src);
+		if (is_signed)
+			press_value = press_value * 2 - RAW_SIZE;
+	}
 	// smooth the pressed value
 	smooth_value(&left_strip_smooth, press_value, 256);
-	float smoothed_value = clampf(left_strip_smooth.y2, (is_signed) ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
+	
+	float smoothed_value;
+	if (selected_param == P_ROOT_NOTE && selected_mod_src == SRC_BASE) {
+		// For root note, clamp to the actual usable range
+		u8 range = param_range(selected_param);
+		float min_raw = INDEX_TO_RAW(0, range);
+		float max_raw = INDEX_TO_RAW(24, range);
+		smoothed_value = clampf(left_strip_smooth.y2, min_raw - 0.1f, max_raw + 0.1f);
+	} else {
+		bool is_signed = param_signed_or_mod(selected_param, selected_mod_src);
+		smoothed_value = clampf(left_strip_smooth.y2, (is_signed) ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
+	}
 	// value stops exactly halfway when crossing center
 	bool notch_at_50 = (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
 	if (notch_at_50) {
@@ -369,7 +405,14 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 	// snap to index value
 	if (param_is_index(selected_param, selected_mod_src, raw)) {
 		u8 range = param_range(selected_param);
-		raw = INDEX_TO_RAW(raw_to_index(raw, range), range);
+		s16 index = raw_to_index(raw, range);
+		
+		// Special constraint for root note: limit to -12 to +12 (C to C)
+		if (selected_param == P_ROOT_NOTE) {
+			index = clampi(index, 0, 24); // 0 = -12, 24 = +12
+		}
+		
+		raw = INDEX_TO_RAW(index, range);
 	}
 	// save to parameter
 	save_param_raw(selected_param, selected_mod_src, raw);
@@ -480,7 +523,13 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	// indeces: just add/subtract 1 per encoder tick
 	if (range && selected_mod_src == SRC_BASE) {
 		s16 index = raw_to_index(raw, range) + enc_diff;
-		raw = INDEX_TO_RAW(clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1), range);
+		// Special constraint for root note: limit to -12 to +12 (C to C)
+		if (param_id == P_ROOT_NOTE) {
+			index = clampi(index, 0, 24); // 0 = -12, 24 = +12
+		} else {
+			index = clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1);
+		}
+		raw = INDEX_TO_RAW(index, range);
 		// smooth transition between synced and free timing
 		if (range_type[param_id] == R_DUACLK && index < 0)
 			raw = -1;
@@ -655,6 +704,8 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 			return val_buf;
 		case R_LFOSHP:
 			return lfo_shape_name[index];
+		case R_ROOTNT:
+			return root_note_name[index % 12];
 		default:
 			break;
 		}
@@ -757,6 +808,7 @@ void draw_cur_param(void) {
 		case P_SCALE:
 		case P_MICROTONE:
 		case P_COLUMN:
+		case P_ROOT_NOTE:
 			sect_str = I_TOUCH "Pads";
 			break;
 		case P_TEMPO:
@@ -974,7 +1026,41 @@ s16 value_editor_column_led(u8 y) {
 	s16 raw = param_val_raw(param_snap, src_snap);
 	u8 pad_id = 7 - y;
 	u8 range = src_snap == SRC_BASE ? param_range(param_snap) : 0;
-	float pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
+	
+	float pad_pos;
+	// Special handling for root note: map constrained range properly for signed param logic
+	if (param_snap == P_ROOT_NOTE && src_snap == SRC_BASE) {
+		s16 index = raw_to_index(raw, range);
+		index = clampi(index, 0, 24); // Constrain to our usable range
+		// Convert index to a raw value that works with the signed param logic
+		s16 centered_raw = INDEX_TO_RAW(index - 12, 24); // Center around index 12
+		pad_pos = centered_raw * 7 / (float)INDEX_TO_RAW(12, 24); // Scale properly
+	} else {
+		pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
+	}
+	
+	// Complete separate LED handling for root note
+	if (param_snap == P_ROOT_NOTE && src_snap == SRC_BASE) {
+		s16 index = raw_to_index(raw, range);
+		index = clampi(index, 0, 24);
+		
+		// Simple linear mapping: index 0-24 maps to LED positions 0-7
+		float led_pos = index * 7.0f / 24.0f;
+		u8 main_led = (u8)led_pos;
+		float fraction = led_pos - main_led;
+		
+		// Light the main LED position
+		if (main_led == pad_id)
+			return col_led(1.0f - fraction * 0.5f); // Brighter when closer
+		
+		// Light adjacent LED with fade
+		if (main_led + 1 == pad_id && fraction > 0.1f)
+			return col_led(fraction);
+		
+		// All other LEDs are off
+		return col_led(0);
+	}
+	
 	if (is_signed) {
 		// absolute center
 		if (raw == 0 && (y == 3 || y == 4))
