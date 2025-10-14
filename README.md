@@ -58,4 +58,32 @@ This release provides a much cleaner way of interacting with the Plinky by imple
 
 *There are many more improvements in this version, the full list can be found in the [release notes](RELEASE_NOTES.md)*
 
+---
+
+### Roadmap to v1.0.0
+Here's a tentative(!) roadmap for upcoming versions:
+#### v0.4.0 Load/Save
+- Add a manual saving solution
+- Upgrades to the load/save visuals
+#### v0.5.0 Visuals
+- Final pass over all graphics that haven't been updated yet in previous updates
+- Control over the led brightness/business
+#### v0.6.0 Midi & CV
+- More robust midi-in to midi-out pipeline
+- MPE
+- Adjustable pressure-from-midi setting
+- Pitch glide over CV-out
+- Fix displayed notes
+- ...and more
+#### v0.7.0 Arp, Sequencer & LFOs
+- Upgrades to make the sequencer more user-friendly
+- Bring back knob-recording in sequencer
+- Additional arp orders and lfo shapes
+- Iron out some bugs
+- ...and more
+#### v0.8.0 Sampler / Audio
+_to be determined_
+#### v1.0.0 
+- Any finishing touches and cleanups
+- Merge with the OG firmware
 
