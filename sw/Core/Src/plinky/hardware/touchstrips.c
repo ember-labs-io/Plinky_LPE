@@ -5,7 +5,6 @@
 #include "sensor_defs.h"
 #include "synth/audio.h"
 #include "ui/pad_actions.h"
-#include "ui/shift_states.h"
 
 extern TSC_HandleTypeDef htsc;
 

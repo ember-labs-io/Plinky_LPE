@@ -3,7 +3,6 @@
 #include "hardware/memory.h"
 #include "pad_actions.h"
 #include "settings_menu.h"
-#include "shift_states.h"
 #include "synth/lfos.h"
 #include "synth/params.h"
 #include "synth/sampler.h"

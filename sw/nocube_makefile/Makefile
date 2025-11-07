@@ -57,7 +57,6 @@ SRCS = \
 	../Core/Src/plinky/ui/oled_viz.c \
 	../Core/Src/plinky/ui/pad_actions.c \
 	../Core/Src/plinky/ui/settings_menu.c \
-	../Core/Src/plinky/ui/shift_states.c \
 	../Core/Src/plinky/usb/tinyusb/src/tusb.c \
 	../Core/Src/plinky/usb/tinyusb/src/usb_descriptors.c \
 	../Core/Src/plinky/usb/tinyusb/src/usbmidi.c \

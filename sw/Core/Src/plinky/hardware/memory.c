@@ -6,7 +6,7 @@
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
 #include "synth/strings.h"
-#include "ui/shift_states.h"
+#include "ui/pad_actions.h"
 #include "usb/web_editor.h"
 
 // cleanup

@@ -5,7 +5,7 @@
 #include "hardware/midi.h"
 #include "params.h"
 #include "time.h"
-#include "ui/shift_states.h"
+#include "ui/pad_actions.h"
 
 // cleanup
 #include "hardware/adc_dac.h"
