@@ -54,11 +54,18 @@ static char submessage[16] = {};
 static u8 message_font;
 static u32 message_time = 0;
 
-void flash_message(Font fnt, const char* msg, const char* submsg) {
-	strncpy(message, msg, sizeof(message) - 1);
-	message[sizeof(message) - 1] = 0;
-	strncpy(submessage, submsg, sizeof(submessage) - 1);
+void flash_message(Font fnt, const char* msg_fmt, const char* submsg, ...) {
+	va_list args;
+	va_start(args, submsg);
+	vsnprintf(message, sizeof(message), msg_fmt, args);
+	va_end(args);
+
+	if (submsg)
+		strncpy(submessage, submsg, sizeof(submessage) - 1);
+	else
+		submessage[0] = 0;
 	submessage[sizeof(submessage) - 1] = 0;
+
 	message_font = fnt;
 	message_time = millis() + MESSAGE_TIME;
 }
