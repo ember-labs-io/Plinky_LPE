@@ -79,12 +79,11 @@ static bool draw_message(void) {
 		return false;
 	}
 	if (submessage[0]) {
-		draw_str(0, 0, F_12, submessage);
-		draw_str(0, 12, message_font, message);
+		draw_str_ctr(1, F_12, submessage);
+		draw_str_ctr(13, message_font, message);
 		return true;
 	}
-	// vertically centered
-	draw_str(0, 8, message_font, message);
+	draw_str_ctr((OLED_HEIGHT - font_height(message_font)) >> 1, message_font, message);
 	return true;
 }
 
