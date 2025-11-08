@@ -63,7 +63,7 @@ static void set_state(EditorState new_state) {
 		remaining_bytes = HEADER_IS_32BIT ? 10 : 6;
 		break;
 	case RCV_DATA:
-		load_preset(header.idx);
+		load_preset(header.idx, false);
 		receiving_web_preset = true;
 		data_buf = (u8*)&cur_preset + DATA_OFFSET;
 		remaining_bytes = DATA_SIZE;

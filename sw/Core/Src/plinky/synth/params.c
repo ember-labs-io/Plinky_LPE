@@ -17,6 +17,11 @@
 #include "ui/pad_actions.h"
 
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
+#define SELECT_PARAM(param_id)                                                                                         \
+	do {                                                                                                               \
+		selected_param = (param_id);                                                                                   \
+		selected_mod_src = SRC_BASE;                                                                                   \
+	} while (0)
 
 // There are three ranges of parameters:
 // Raw:
@@ -52,14 +57,12 @@ static u16 sample_hold_poly[NUM_STRINGS] = {0, 1 << 12, 2 << 12, 3 << 12, 4 << 1
 
 // editing params
 static Param mem_param = 255; // remembers previous selected_param, used by encoder and A/B shift-presses
-static bool open_edit_mode = false;
-static bool param_from_mem = false;
 static s16 left_strip_start = 0;
 static ValueSmoother left_strip_smooth;
 
 static Touch* touch_pointer[NUM_STRINGS];
 
-// == INLINES == //
+// == UTILS == //
 
 static s32 SATURATE17(s32 a) {
 	int tmp;
@@ -89,33 +92,40 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 	return true;
 }
 
-bool param_signed(Param param_id) {
-	return param_info[range_type[param_id]] & SIGNED;
-}
-
 static bool param_signed_or_mod(Param param_id, ModSource mod_src) {
 	return param_signed(param_id) || mod_src != SRC_BASE;
-}
-
-// == HELPERS == //
-
-const Preset* init_params_ptr() {
-	return &init_params;
 }
 
 static Param get_recent_param(void) {
 	return EDITING_PARAM ? selected_param : mem_param;
 }
 
+const Preset* init_params_ptr() {
+	return &init_params;
+}
+
+bool param_signed(Param param_id) {
+	return param_info[range_type[param_id]] & SIGNED;
+}
+
 // will this strip produce a press for the synth?
 bool strip_available_for_synth(u8 strip_id) {
 	// yes, in the default ui
 	if (ui_mode == UI_DEFAULT
-	    // but not the left-most strip when a parameter is being edited
-	    && !(strip_id == 0 && EDITING_PARAM))
+	    // but not the function strip
+	    && !(strip_id == 8)
+	    // and not the left-most strip when a parameter is being edited
+	    && !(strip_id == 0 && EDITING_PARAM)
+
+	)
 		return true;
 	// in all other modes and situations: no
 	return false;
+}
+
+// is the arp actively being executed?
+bool arp_active(void) {
+	return param_index(P_ARP_TGL) && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
 }
 
 // to prevent redundant calls to get_string_touch(), we save our own list of pointers to the relevant Touch*
@@ -123,11 +133,6 @@ bool strip_available_for_synth(u8 strip_id) {
 void params_update_touch_pointers(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		touch_pointer[string_id] = get_string_touch(string_id);
-}
-
-// is the arp actively being executed?
-bool arp_active(void) {
-	return param_index(P_ARP_TGL) && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
 }
 
 // == MAIN == //
@@ -504,15 +509,59 @@ void save_param_index(Param param_id, s8 index) {
 	save_param_raw(param_id, SRC_BASE, INDEX_TO_RAW(index, range));
 }
 
-// == PAD ACTION == //
+// == PAD ACTIONS == //
 
-void try_left_strip_for_params(u16 position, bool is_press_start) {
+// returns whether we ended up editing a param
+bool try_restore_param(bool mode_a) {
+	// restore from memory
+	if (!EDITING_PARAM && mem_param < NUM_PARAMS) {
+		u8 new_param = mem_param;
+		if ((new_param % 12 < 6) != mode_a) {
+			new_param += mode_a ? -6 : 6;
+			if (range_type[new_param] == R_UNUSED)
+				return false;
+		}
+		SELECT_PARAM(new_param);
+		return true;
+	}
+	// restore other param on same pad
+	if (EDITING_PARAM && (selected_param % 12 < 6) != mode_a) {
+		u8 new_param = selected_param + (mode_a ? -6 : 6);
+		if (range_type[new_param] == R_UNUSED)
+			flash_message(F_20_BOLD, I_CROSS "No Param", 0);
+		else
+			SELECT_PARAM(new_param);
+		return true;
+	}
+	// restore base value
+	if (selected_mod_src != SRC_BASE) {
+		selected_mod_src = SRC_BASE;
+		return true;
+	}
+	// nothing to restore
+	return false;
+}
+
+void close_edit_mode(void) {
+	mem_param = selected_param;
+	clear_last_encoder_use();
+	SELECT_PARAM(NUM_PARAMS);
+}
+
+static void reset_left_strip(void) {
+	left_strip_start = param_val_raw(selected_param, selected_mod_src);
+	set_smoother(&left_strip_smooth, left_strip_start);
+}
+
+void touch_edit_strip(u16 position, bool is_press_start) {
 	static const u16 STRIP_DEADZONE = 256;
 	static const float HALF_CENTER_DEADZONE = 32.f;
 
-	// only if editing a parameter
 	if (!EDITING_PARAM)
 		return;
+
+	if (is_press_start)
+		reset_left_strip();
 
 	// scale the press position to a param size value
 	float press_value =
@@ -559,100 +608,33 @@ void try_left_strip_for_params(u16 position, bool is_press_start) {
 	save_param_raw(selected_param, selected_mod_src, raw);
 }
 
-bool press_param(u8 pad_y, u8 strip_id, bool is_press_start) {
+void press_param_pad(u8 pad_id, bool is_press_start) {
 	u8 prev_param = selected_param;
-	selected_param = pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
+	SELECT_PARAM((pad_id & 7) * 12 + ((pad_id >> 3) - 1) + (ui_mode == UI_EDITING_B ? 6 : 0));
+	// pressed an unused param
 	if (range_type[selected_param] == R_UNUSED) {
-		selected_param = prev_param;
+		SELECT_PARAM(prev_param);
 		flash_message(F_20_BOLD, I_CROSS "No Param", 0);
-		return false;
 	}
 	// parameters that do something the moment they are pressed
-	if (is_press_start) {
+	else if (is_press_start) {
 		// toggle binary params
 		if (range_type[selected_param] == R_BINARY)
 			save_param_index(selected_param, !(cur_preset.params[selected_param][SRC_BASE] >= RAW_HALF));
+		// tap tempo
 		if (selected_param == P_TEMPO)
 			trigger_tap_tempo();
 	}
-
-	// pressing a parameter always reverts to the "base" mod src
-	selected_mod_src = SRC_BASE;
-	return selected_param != prev_param;
+	if (selected_param != prev_param)
+		reset_left_strip();
 }
 
-void select_mod_src(ModSource mod_src) {
+void press_mod_pad(u8 pad_y) {
 	if (selected_param == P_VOLUME) {
 		flash_message(F_20_BOLD, I_CROSS "No Mod", 0);
 		return;
 	}
-	selected_mod_src = mod_src;
-}
-
-void reset_left_strip(void) {
-	left_strip_start = param_val_raw(selected_param, selected_mod_src);
-	set_smoother(&left_strip_smooth, left_strip_start);
-}
-
-// == SHIFT STATE == //
-
-void try_enter_edit_mode(bool mode_a) {
-	if (ui_mode == UI_SETTINGS_MENU) {
-		open_edit_mode = true;
-		return;
-	}
-	u8 new_param;
-	open_edit_mode = false;
-	param_from_mem = false;
-	// enter param edit mode from remembering a param
-	if (!EDITING_PARAM && mem_param < NUM_PARAMS) {
-		open_edit_mode = true;
-		param_from_mem = true;
-		new_param = mem_param;
-		if ((new_param % 12 < 6) != mode_a) {
-			new_param += mode_a ? -6 : 6;
-			if (range_type[new_param] == R_UNUSED)
-				return;
-		}
-		selected_param = new_param;
-		selected_mod_src = SRC_BASE;
-	}
-	// Switch from A to B param, or vice versa
-	else if (EDITING_PARAM && (selected_param % 12 < 6) != mode_a) {
-		open_edit_mode = true;
-		new_param = selected_param + (mode_a ? -6 : 6);
-		if (range_type[new_param] == R_UNUSED) {
-			flash_message(F_20_BOLD, I_CROSS "No Param", 0);
-			return;
-		}
-		selected_param = new_param;
-		selected_mod_src = SRC_BASE;
-	}
-	// Press shift when editing a modulation value
-	else if (selected_mod_src != SRC_BASE) {
-		open_edit_mode = true;
-		selected_mod_src = SRC_BASE;
-	}
-}
-
-void try_exit_edit_mode(bool param_select) {
-	if (ui_mode == UI_SETTINGS_MENU) {
-		if (!param_from_mem)
-			return;
-	}
-	else {
-		// we just opened edit mode => don't exit
-		if (open_edit_mode)
-			return;
-		// we just selected a param => don't exit
-		if (param_select)
-			return;
-	}
-	// otherwise this was a press-and-release while a param was showing => exit and remember the param
-	clear_last_encoder_use();
-	mem_param = selected_param;
-	selected_param = NUM_PARAMS;
-	selected_mod_src = SRC_BASE;
+	selected_mod_src = pad_y;
 }
 
 // == ENCODER == //
@@ -664,7 +646,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 
 	// if this is a precision-edit, keep the param selected
 	if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
-		open_edit_mode = true;
+		pad_actions_keep_edit_mode_open();
 
 	s16 raw = param_val_raw(param_id, selected_mod_src);
 	u8 range = param_range(param_id);
@@ -742,8 +724,6 @@ void params_toggle_default_value(void) {
 	else
 		save_param_raw(param_id, selected_mod_src, saved_val);
 }
-
-// == VISUALS == //
 
 void hold_encoder_for_params(u16 duration) {
 	const static u8 msg_delay = 50;

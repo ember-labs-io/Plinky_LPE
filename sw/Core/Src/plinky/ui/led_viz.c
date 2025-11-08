@@ -120,6 +120,13 @@ static void draw_main_leds(void) {
 			k = maxi(k, seq_press_led(x, y));
 
 			switch (ui_mode) {
+			case UI_PTN_START:
+			case UI_PTN_END:
+				if (ptn_edit_active()) {
+					k = seq_led(x, y, sync_pulse, true);
+					break;
+				}
+				// fall thru
 			case UI_DEFAULT:
 				// draw left column value editor
 				if (x == 0) {
@@ -149,18 +156,17 @@ static void draw_main_leds(void) {
 						k = maxi(k, 96);
 				}
 				// draw sequencer
-				k = maxi(k, seq_led(x, y, sync_pulse));
+				k = maxi(k, seq_led(x, y, sync_pulse, false));
 				break;
 			case UI_EDITING_A:
 			case UI_EDITING_B:
 				k = ui_editing_led(x, y, pulse_half);
 				break;
-			case UI_PTN_START:
-			case UI_PTN_END:
-				k = seq_led(x, y, sync_pulse);
-				break;
 			case UI_LOAD:
 				k = ui_load_led(x, y, pulse_8x);
+				u8 n = ui_load_long_press_led(x, y, pulse_8x);
+				if (n != 0)
+					k = n;
 				break;
 			default:
 				break;

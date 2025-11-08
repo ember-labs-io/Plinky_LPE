@@ -3,38 +3,36 @@
 
 // this module deals with selecting parameters, editing their values, and applying mod-source modulations to them
 
-// helpers
+// utils
 const Preset* init_params_ptr();
 bool param_signed(Param param_id);
 bool strip_available_for_synth(u8 strip_id);
-void params_update_touch_pointers(void);
 bool arp_active(void);
+void params_update_touch_pointers(void);
 
 // main
 bool update_preset(Preset* preset);
 void revert_preset(Preset* preset);
 void params_tick(void);
 
-// param retrieval calls
+// param retrieval
 s32 param_val(Param param_id);
 s32 param_val_poly(Param param_id, u8 string_id);
 s8 param_index(Param param_id);
 s8 param_index_poly(Param param_id, u8 string_id);
 s8 param_index_unmod(Param param_id);
 
-// save param calls
+// param saving
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);
 void save_param_index(Param param_id, s8 index);
 
 // pad action calls
-void try_left_strip_for_params(u16 position, bool is_press_start);
-bool press_param(u8 pad_id, u8 strip_id, bool is_press_start);
-void select_mod_src(ModSource mod_src);
-void reset_left_strip(void);
+bool try_restore_param(bool mode_a);
+void close_edit_mode(void);
 
-// shift state calls
-void try_enter_edit_mode(bool mode_a);
-void try_exit_edit_mode(bool param_select);
+void touch_edit_strip(u16 position, bool is_press_start);
+void press_param_pad(u8 pad_id, bool is_press_start);
+void press_mod_pad(u8 pad_y);
 
 // encoder calls
 void edit_param_from_encoder(s8 enc_diff, float enc_acc);

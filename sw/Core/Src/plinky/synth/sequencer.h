@@ -42,5 +42,5 @@ void seq_release_play(bool short_press);
 void seq_ptn_start_visuals(void);
 void seq_ptn_end_visuals(void);
 void seq_draw_step_recording(void);
-u8 seq_led(u8 x, u8 y, u8 sync_pulse);
+u8 seq_led(u8 x, u8 y, u8 sync_pulse, bool bright);
 u8 seq_press_led(u8 x, u8 y);

@@ -81,43 +81,6 @@ Touch* get_touch_prev(u8 touch_id, u8 frames_back) {
 
 // == MAIN == //
 
-// let's root out some invalid state changes!
-static bool validate_shift_state_change(ShiftState new_state) {
-	// the new state needs to be different
-	if (new_state == shift_state)
-		return false;
-
-	// going from one state to another, apply a bit of hysteresis - dist from old state should be larger than 192
-	Touch* strip_cur = get_touch(8);
-	if ((shift_state != SS_NONE) && (abs((shift_state * 256 + 128) - strip_cur->pos) < 192))
-		return false;
-
-	// pressure needs to be high enough and the position somewhat stable
-	Touch* strip_2back = get_touch_prev(8, 2);
-	if ((strip_2back->pres < 700) || (strip_cur->pres < 700) || (abs(strip_cur->pos - strip_2back->pos) > 60))
-		return false;
-
-	// for a new press, the button needs to be held for at least three frames
-	Touch* strip_1back = get_touch_prev(8, 1);
-	ShiftState state_1back = strip_1back->pos >> 8;
-	ShiftState state_2back = strip_2back->pos >> 8;
-	if ((shift_state == SS_NONE) && (new_state != state_1back || new_state != state_2back))
-		return false;
-
-	// accidental presses: rule out shift state presses if the surrounding synth pads are being pressed
-	Touch* strip_above = get_touch(new_state);
-	Touch* strip_left = get_touch(maxi(0, new_state - 1));
-	Touch* strip_right = get_touch(mini(7, new_state + 1));
-	if ((strip_above->pres > 256 && strip_above->pos >= 6 * 256)    // ~ bottom two pads of strip above
-	    || (strip_left->pres > 256 && strip_left->pos >= 7 * 256)   // ~ bottom pad of strip left
-	    || (strip_right->pres > 256 && strip_right->pos >= 7 * 256) // ~ bottom pad of strip right
-	)
-		return false;
-
-	// valid!
-	return true;
-}
-
 static void process_reading(u8 reading_id) {
 	// raw values
 	s16 raw_pos = sensor_reading_position(reading_id);
@@ -198,28 +161,13 @@ static void process_reading(u8 reading_id) {
 	if (calib_mode == CALIB_CV)
 		return;
 
-	// shift buttons
-	if (touch_id == 8) {
-		ShiftState new_state = cur_touch->pos >> 8;
-		// valid new state? => set
-		if (validate_shift_state_change(new_state))
-			shift_set_state(new_state);
-		// no pressure on strip but we were in a state => release
-		else if (cur_touch->pres <= 0 && shift_state != SS_NONE)
-			shift_release_state();
-		// in any shift state => hold
-		if (shift_state != SS_NONE)
-			shift_hold_state();
-	}
-	// main grid
-	else {
-		// sensor values have been read
+	// sensor values have been read
+	if (touch_id != 8)
 		read_this_frame |= 1 << touch_id;
 
-		// at this point the touchstrip has fully been processed to be used by the synth, which runs on its own time
-		// next, the touchstrip gets handled in the context of parameters and other actions
-		handle_pad_actions(touch_id, get_touch(touch_id));
-	}
+	// at this point the touchstrip has fully been processed to be used by the synth, which runs on its own time
+	// next, the touchstrip gets handled in the context of parameters and other actions
+	handle_pad_actions(touch_id);
 }
 
 // 1. Make sure TSC is set up to read the current phase

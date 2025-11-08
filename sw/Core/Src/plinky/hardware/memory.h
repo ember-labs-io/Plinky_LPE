@@ -1,8 +1,31 @@
 #pragma once
 #include "utils.h"
 
-// this module manages the preset, pattern quarters, SampleInfo and SysParams that are curently loaded into ram
-// it manages retrieving data from, and writing data to onboard flash when needed
+// This module manages ram and internal flash
+//
+// Flash is 256 pages of 2048 bytes each, holding:
+// - 32 presets
+// - 96 pattern quarters (24 patterns x 4)
+// - 8 sample infos
+// - 1 floating preset
+// - 4 floating pattern quarters (1 pattern x 4)
+// - 1 calibration page (fixed page id: 255)
+//
+// The system uses wear leveling to spread the pages out over page id 0-254
+// Each of these pages holds a PageFooter and a recent copy of SysParams
+//
+// At any point, ram holds:
+// - 1 preset
+// - 1 full pattern (4 quarters)
+// - 1 sample info
+// - 1 set system parameters
+//
+// The preset and pattern quarters are floating. This means they do not directly represent any of the preset/pattern
+// slots. Instead they exist as the current state of the device. Users can save the floating preset and pattern to a
+// slot when desired. They can also (re)load saved patterns and preset slots into the floating items
+//
+// The preset, pattern quarters and sample info auto-save to flash when necessary and at set intervals. On each
+// auto-save, a recent copy of sys_params is included
 
 // ram contents
 extern SysParams sys_params;
@@ -16,7 +39,7 @@ void set_sys_param(SysParam param, u16 value);
 
 // web-editor
 u8* preset_flash_ptr(u8 preset_id);
-void load_preset(u8 preset_id);
+void load_preset(u8 preset_id, bool show_message);
 
 // get ram state
 bool preset_outdated(void);  // only for sequencer
@@ -57,8 +80,8 @@ u8 draw_cued_pattern_id(bool with_arp_icon);
 void draw_pattern_id(bool with_arp_icon);
 void draw_preset_name(u8 xtab);
 void draw_sample_id(void);
-void draw_save_load_item(u8 item_id, bool done);
-void draw_clear_item(bool done);
+void draw_save_load_item(u8 item_id);
+void draw_clear_item(void);
 void draw_ui_load_label(void);
 
 u8 ui_load_led(u8 x, u8 y, u8 pulse);

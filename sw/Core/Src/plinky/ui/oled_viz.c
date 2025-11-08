@@ -162,6 +162,20 @@ static void draw_visuals(void) {
 	// build up the regular visuals, per ui mode
 
 	switch (ui_mode) {
+	case UI_PTN_START:
+	case UI_PTN_END:
+		if (ptn_edit_active()) {
+			if (ui_mode == UI_PTN_START) {
+				seq_ptn_start_visuals();
+				return;
+			}
+			if (ui_mode == UI_PTN_END) {
+				seq_ptn_end_visuals();
+				return;
+			}
+			break;
+		}
+		// fall through
 	case UI_DEFAULT:
 		if (USING_SAMPLER)
 			draw_sample_playback(&cur_sample_info);
@@ -187,12 +201,6 @@ static void draw_visuals(void) {
 	case UI_EDITING_A:
 	case UI_EDITING_B:
 		draw_cur_param();
-		break;
-	case UI_PTN_START:
-		seq_ptn_start_visuals();
-		break;
-	case UI_PTN_END:
-		seq_ptn_end_visuals();
 		break;
 	case UI_LOAD:
 		draw_ui_load_label();

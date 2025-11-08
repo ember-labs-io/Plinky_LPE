@@ -478,7 +478,7 @@ void seq_press_right(void) {
 }
 
 void seq_press_clear(void) {
-	if (seq_state() != SEQ_STEP_RECORDING)
+	if (ui_mode != UI_DEFAULT || seq_state() != SEQ_STEP_RECORDING)
 		return;
 	// clear pressures from all substeps, from all strings, for the current step
 	bool data_saved = false;
@@ -599,25 +599,26 @@ void seq_draw_step_recording(void) {
 	}
 }
 
-u8 seq_led(u8 x, u8 y, u8 sync_pulse) {
+u8 seq_led(u8 x, u8 y, u8 sync_pulse, bool bright) {
 	u8 k = 0;
 	u8 step = x + y * 8;
 	// all active steps
 	if (((step - cur_seq_start) & 63) < cur_preset.seq_len)
-		k = maxi(k, ui_mode == UI_DEFAULT ? 48 : 96);
+		k = maxi(k, bright ? 96 : 48);
 	// start/end steps
-	switch (ui_mode) {
-	case UI_PTN_START:
-		if (step == cur_seq_start)
-			k = 255;
-		break;
-	case UI_PTN_END:
-		if (((step + 1) & 63) == ((cur_seq_start + cur_preset.seq_len) & 63))
-			k = 255;
-		break;
-	default:
-		break;
-	}
+	if (bright)
+		switch (ui_mode) {
+		case UI_PTN_START:
+			if (step == cur_seq_start)
+				k = 255;
+			break;
+		case UI_PTN_END:
+			if (((step + 1) & 63) == ((cur_seq_start + cur_preset.seq_len) & 63))
+				k = 255;
+			break;
+		default:
+			break;
+		}
 	// playhead
 	if (step == cur_seq_step)
 		k = maxi(k, sync_pulse);

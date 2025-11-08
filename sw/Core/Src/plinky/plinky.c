@@ -126,8 +126,8 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 	u8 read_phase = read_touchstrips();
 	// once per touchstrip read cycle:
 	if (!read_phase) {
-		handle_pad_action_long_presses();
 		encoder_tick();
+		pad_actions_frame();
 	}
 	// update all leds
 	leds_update();

@@ -6,6 +6,7 @@
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
 #include "synth/strings.h"
+#include "ui/oled_viz.h"
 #include "ui/pad_actions.h"
 #include "usb/web_editor.h"
 
@@ -551,6 +552,7 @@ static bool need_flash_write(MemSegment seg, u32 now) {
 }
 
 void memory_frame(void) {
+	bool message_flashed = false;
 	MemItemType item_type = get_item_type(edit_item_id & 63);
 	// clear requested
 	if (edit_item_id != 255 && (edit_item_id & 128)) {
@@ -561,6 +563,8 @@ void memory_frame(void) {
 			// clear floating preset
 			memcpy(&cur_preset, init_params_ptr(), sizeof(Preset));
 			log_ram_edit(SEG_PRESET);
+			flash_message(F_16_BOLD, "Preset %d", "Initialized", edit_item_id + 1);
+			message_flashed = true;
 			break;
 		case MEM_PATTERN:
 			// clear floating pattern
@@ -569,11 +573,14 @@ void memory_frame(void) {
 			log_ram_edit(SEG_PAT1);
 			log_ram_edit(SEG_PAT2);
 			log_ram_edit(SEG_PAT3);
+			flash_message(F_16_BOLD, "Pattern %d", "Cleared", edit_item_id - PATTERNS_START + 1);
+			message_flashed = true;
 			break;
 		case MEM_SAMPLE:
 			// clear current sample info
 			memset(&cur_sample_info, 0, sizeof(SampleInfo));
 			log_ram_edit(SEG_SAMPLE_INFO);
+			flash_message(F_16_BOLD, "Sample %d", "Cleared", edit_item_id - SAMPLES_START + 1);
 			break;
 		default:
 			break;
@@ -589,6 +596,8 @@ void memory_frame(void) {
 			flash_write_page(edit_item_id, &cur_preset);
 			// make selected preset active - the fast loop will retrieve this when necessary
 			load_preset_id = edit_item_id;
+			if (!message_flashed)
+				flash_message(F_16_BOLD, "Preset %d", "Saved", edit_item_id + 1);
 			break;
 		case MEM_PATTERN: {
 			// update sys_params before writing to flash
@@ -600,11 +609,15 @@ void memory_frame(void) {
 				flash_write_page(base_id + qtr, &cur_pattern_qtr[qtr]);
 			// make selected pattern active in preset - the fast loop will retrieve this when necessary
 			save_param_index(P_PATTERN, pattern_id);
+			if (!message_flashed)
+				flash_message(F_16_BOLD, "Pattern %d", "Saved", pattern_id + 1);
 		} break;
 		default:
 			// sample saving is handled elsewhere
 			break;
 		}
+		// update clear item
+		clear_item = edit_item_id;
 	}
 	// clear edit item
 	edit_item_id = 255;
@@ -776,32 +789,52 @@ void update_sample_ram(void) {
 
 // == SAVE / LOAD == //
 
-void load_preset(u8 preset_id) {
+void load_preset(u8 preset_id, bool show_message) {
 	if (receiving_web_preset)
 		return;
 	load_preset_id = preset_id;
 	force_load_preset = true;
 	update_preset_ram();
 	clear_item = preset_id;
+	if (show_message)
+		flash_message(F_16_BOLD, "Preset %d", "Loaded", preset_id + 1);
 }
 
-static void load_pattern(u8 pattern_id) {
+static void load_pattern(u8 pattern_id, bool show_message) {
 	save_param_index(P_PATTERN, pattern_id);
 	force_load_pattern = true;
 	update_pattern_ram();
+	clear_item = pattern_id + PATTERNS_START;
+	if (show_message)
+		flash_message(F_16_BOLD, "Pattern %d", "Loaded", pattern_id + 1);
+}
+
+static void load_sample(u8 sample_id, bool show_message) {
+	save_param_index(P_SAMPLE, sample_id);
+	update_sample_ram();
+	if (sample_id == NO_SAMPLE)
+		clear_item = ram_preset_id;
+	else
+		clear_item = sample_id + SAMPLES_START;
+	if (show_message) {
+		if (sample_id == NO_SAMPLE)
+			flash_message(F_16_BOLD, "Sample Off", 0);
+		else
+			flash_message(F_16_BOLD, "Sample %d", "Loaded", sample_id + 1);
+	}
 }
 
 void apply_cued_mem_items(void) {
 	if (cued_preset_id != 255) {
-		load_preset(cued_preset_id);
+		load_preset(cued_preset_id, false);
 		cued_preset_id = 255;
 	}
 	if (cued_pattern_id != 255) {
-		load_pattern(cued_pattern_id);
+		load_pattern(cued_pattern_id, false);
 		cued_pattern_id = 255;
 	}
 	if (cued_sample_id != load_sample_id && cued_sample_id != 255) {
-		save_param_index(P_SAMPLE, cued_sample_id);
+		load_sample(cued_sample_id, false);
 		cued_sample_id = 255;
 	}
 }
@@ -809,51 +842,56 @@ void apply_cued_mem_items(void) {
 void cue_mem_item(u8 item_id) {
 	switch (get_item_type(item_id)) {
 	case MEM_PRESET:
+		// load immediately
+		if (!seq_playing() || item_id == cued_preset_id) {
+			load_preset(item_id, true);
+			cued_preset_id = 255;
+			return;
+		}
 		// want to cue identical preset => cancel cue
 		if (item_id == load_preset_id && sys_params.preset_aligned) {
 			cued_preset_id = 255;
 			return;
 		}
-		// load immediately
-		if (!seq_playing() || item_id == cued_preset_id) {
-			load_preset(item_id);
-			cued_preset_id = 255;
-			return;
-		}
 		// cue
 		cued_preset_id = item_id;
+		flash_message(F_16_BOLD, "Preset %d", "Cued", item_id + 1);
 		break;
 	case MEM_PATTERN: {
 		u8 pattern_id = item_id - PATTERNS_START;
+		// load immediately
+		if (!seq_playing() || pattern_id == cued_pattern_id) {
+			load_pattern(pattern_id, true);
+			cued_pattern_id = 255;
+			return;
+		}
 		// want to cue identical pattern => cancel cue
 		if (pattern_id == load_pattern_id && sys_params.pattern_aligned) {
 			cued_pattern_id = 255;
 			return;
 		}
-		// load immediately
-		if (!seq_playing() || pattern_id == cued_pattern_id) {
-			load_pattern(pattern_id);
-			cued_pattern_id = 255;
-			return;
-		}
 		// cue
 		cued_pattern_id = pattern_id;
+		flash_message(F_16_BOLD, "Pattern %d", "Cued", pattern_id + 1);
 		break;
 	}
 	case MEM_SAMPLE: {
 		u8 sample_id = item_id - SAMPLES_START;
 		// pressing the current sample cues turning it off
-		if (sample_id == ram_sample_id)
+		if (sample_id == load_sample_id)
 			sample_id = NO_SAMPLE;
 		// load immediately
 		if (!seq_playing() || sample_id == cued_sample_id) {
-			save_param_index(P_SAMPLE, sample_id);
-			update_sample_ram();
+			load_sample(sample_id, true);
 			cued_sample_id = 255;
 			return;
 		}
 		// cue
 		cued_sample_id = sample_id;
+		if (sample_id == NO_SAMPLE)
+			flash_message(F_16_BOLD, "Sample Off", "Cued");
+		else
+			flash_message(F_16_BOLD, "Sample %d", "Cued", sample_id + 1);
 		break;
 	}
 	default:
@@ -869,8 +907,11 @@ void long_press_load_item(u8 item_id) {
 	// holding shift pad
 	if (shift_state == SS_LOAD)
 		// sample => open sampler
-		if (is_sample)
-			open_sampler(item_id & 7);
+		if (is_sample) {
+			u8 sample_id = item_id & 7;
+			open_sampler(sample_id);
+			flash_message(F_16_BOLD, "Sample %d", "Editing", sample_id + 1);
+		}
 		// preset or pattern => cue to save
 		else
 			edit_item_id = item_id;
@@ -972,60 +1013,46 @@ void draw_sample_id(void) {
 	fdraw_str(-128, 16, F_20_BOLD, load_sample_id == NO_SAMPLE ? I_WAVE "Off" : I_WAVE "%d", load_sample_id + 1);
 }
 
-void draw_save_load_item(u8 item_id, bool done) {
+void draw_save_load_item(u8 item_id) {
 	switch (get_item_type(item_id)) {
 	case MEM_PRESET:
-		if (shift_state == SS_LOAD)
-			fdraw_str(0, 0, F_16_BOLD, done ? "Saved\n " I_PRESET "preset %d" : "Save\n" I_PRESET "preset %d?",
-			          item_id + 1);
-		else
-			fdraw_str(0, 0, F_16_BOLD, done ? "Loaded\n " I_PRESET "preset %d" : "Load\n" I_PRESET "preset %d?",
-			          item_id + 1);
+		fdraw_str_ctr(1, F_12, "%s", shift_state == SS_LOAD ? "Save" : "Load");
+		fdraw_str_ctr(13, F_16_BOLD, "Preset %d?", item_id + 1);
 		break;
 	case MEM_PATTERN:
-		if (shift_state == SS_LOAD)
-			fdraw_str(0, 0, F_16_BOLD, done ? "Saved\n " I_SEQ "pattern %d" : "Save\n" I_SEQ "pattern %d?",
-			          item_id - PATTERNS_START + 1);
-		else
-			fdraw_str(0, 0, F_16_BOLD, done ? "Loaded\n " I_SEQ "pattern %d" : "Load\n" I_SEQ "pattern %d?",
-			          item_id - PATTERNS_START + 1);
+		fdraw_str_ctr(1, F_12, "%s", shift_state == SS_LOAD ? "Save" : "Load");
+		fdraw_str_ctr(13, F_16_BOLD, "Pattern %d?", item_id - PATTERNS_START + 1);
 		break;
-	case MEM_SAMPLE:
-		if (shift_state == SS_LOAD)
-			fdraw_str(0, 0, F_16_BOLD, "Edit\n" I_WAVE "sample %d?", item_id - SAMPLES_START + 1);
+	case MEM_SAMPLE: {
+		u8 sample_id = item_id - SAMPLES_START;
+		if (sample_id == ram_sample_id && shift_state != SS_LOAD) {
+			draw_str_ctr(1, F_12, "Deactivate");
+			draw_str_ctr(13, F_16_BOLD, "Sample?");
+		}
 		else {
-			if (done) {
-				if (load_sample_id == NO_SAMPLE)
-					fdraw_str(0, 0, F_16_BOLD, "Deactivated\n " I_WAVE "sample");
-				else
-					fdraw_str(0, 0, F_16_BOLD, "Loaded\n " I_WAVE "sample %d", item_id - SAMPLES_START + 1);
-			}
-			else {
-				if (item_id - SAMPLES_START == ram_sample_id)
-					fdraw_str(0, 0, F_16_BOLD, "Deactivate\n" I_WAVE "sample?");
-				else
-					fdraw_str(0, 0, F_16_BOLD, "Load\n" I_WAVE "sample %d?", item_id - SAMPLES_START + 1);
-			}
+			fdraw_str_ctr(1, F_12, "%s", shift_state == SS_LOAD ? "Edit" : "Load");
+			fdraw_str_ctr(13, F_16_BOLD, "Sample %d?", sample_id + 1);
 		}
 		break;
+	}
 	default:
 		break;
 	}
 }
 
-void draw_clear_item(bool done) {
+void draw_clear_item(void) {
 	switch (get_item_type(clear_item)) {
 	case MEM_PRESET:
-		fdraw_str(0, 0, F_16_BOLD, done ? "cleared\n" I_PRESET "Preset %d" : "initialize\n" I_PRESET "Preset %d?",
-		          clear_item + 1);
+		fdraw_str_ctr(1, F_12, "Initialize");
+		fdraw_str_ctr(13, F_16_BOLD, "Preset %d?", clear_item + 1);
 		break;
 	case MEM_PATTERN:
-		fdraw_str(0, 0, F_16_BOLD, done ? "cleared\n" I_SEQ "Pattern %d." : "Clear\n" I_SEQ "Pattern %d?",
-		          clear_item - PATTERNS_START + 1);
+		fdraw_str_ctr(1, F_12, "Clear");
+		fdraw_str_ctr(13, F_16_BOLD, "Pattern %d?", clear_item - PATTERNS_START + 1);
 		break;
 	case MEM_SAMPLE:
-		fdraw_str(0, 0, F_16_BOLD, done ? "cleared\n" I_WAVE "Sample %d." : "Clear\n" I_WAVE "Sample %d?",
-		          clear_item - SAMPLES_START + 1);
+		fdraw_str_ctr(1, F_12, "Clear");
+		fdraw_str_ctr(13, F_16_BOLD, "Sample %d?", clear_item - SAMPLES_START + 1);
 		break;
 	default:
 		break;
