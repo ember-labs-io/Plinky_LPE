@@ -21,6 +21,7 @@ void half_rectangle(int x1, int y1, int x2, int y2);
 void inverted_rectangle(int x1, int y1, int x2, int y2);
 
 int draw_icon(int x, int y, unsigned char c, int textcol);
+void draw_load_bar(u16 position, u16 range);
 
 int str_width(Font f, const char* buf);
 int font_height(Font f);
