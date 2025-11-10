@@ -334,11 +334,12 @@ void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_incre
 	}
 
 	// holding clear sets the pressure to zero, which effectively clears the sequencer at this point
-	u8 seq_pres = shift_state == SS_CLEAR ? 0 : pres_compress(pressure);
-	u8 seq_pos = shift_state == SS_CLEAR ? 0 : pos_compress(position);
+	bool holding_clear = function_pressed == FN_CLEAR;
+	u8 seq_pres = holding_clear ? 0 : pres_compress(pressure);
+	u8 seq_pos = holding_clear ? 0 : pos_compress(position);
 
 	// are we touching something to record?
-	if ((seq_pres > 0 && pres_increasing) || shift_state == SS_CLEAR) {
+	if ((seq_pres > 0 && pres_increasing) || holding_clear) {
 		// live recording => just record over whatever substep we are currently on
 		if (seq_flags.playing)
 			rec_substep(string_step, substep, seq_pres, seq_pos);
@@ -367,7 +368,7 @@ void seq_try_rec_touch(u8 string_id, s16 pressure, s16 position, bool pres_incre
 // try receiving touch data from sequencer
 void seq_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	// exit if we're not playing a sequencer note
-	if (!c_step.play_step || shift_state == SS_CLEAR)
+	if (!c_step.play_step || function_pressed == FN_CLEAR)
 		return;
 	PatternStringStep* string_step = string_step_ptr(string_id, true, cur_seq_step);
 	// exit if there is no data in the step

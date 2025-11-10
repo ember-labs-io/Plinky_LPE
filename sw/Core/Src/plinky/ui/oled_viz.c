@@ -154,7 +154,7 @@ static void draw_visuals(void) {
 
 	if (draw_message())
 		return;
-	if (shift_states_oled_visuals())
+	if (oled_function_visuals())
 		return;
 	if (pad_actions_oled_visuals())
 		return;

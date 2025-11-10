@@ -904,8 +904,8 @@ void cue_mem_item(u8 item_id) {
 
 void long_press_load_item(u8 item_id) {
 	bool is_sample = get_item_type(item_id) == MEM_SAMPLE;
-	// holding shift pad
-	if (shift_state == SS_LOAD)
+	// holding function pad
+	if (function_pressed == FN_LOAD)
 		// sample => open sampler
 		if (is_sample) {
 			u8 sample_id = item_id & 7;
@@ -915,7 +915,7 @@ void long_press_load_item(u8 item_id) {
 		// preset or pattern => cue to save
 		else
 			edit_item_id = item_id;
-	// not holding shift pad: cue item for loading
+	// not holding function pad: cue item for loading
 	else
 		cue_mem_item(item_id);
 }
@@ -1016,21 +1016,21 @@ void draw_sample_id(void) {
 void draw_save_load_item(u8 item_id) {
 	switch (get_item_type(item_id)) {
 	case MEM_PRESET:
-		fdraw_str_ctr(1, F_12, "%s", shift_state == SS_LOAD ? "Save" : "Load");
+		fdraw_str_ctr(1, F_12, "%s", function_pressed == FN_LOAD ? "Save" : "Load");
 		fdraw_str_ctr(13, F_16_BOLD, "Preset %d?", item_id + 1);
 		break;
 	case MEM_PATTERN:
-		fdraw_str_ctr(1, F_12, "%s", shift_state == SS_LOAD ? "Save" : "Load");
+		fdraw_str_ctr(1, F_12, "%s", function_pressed == FN_LOAD ? "Save" : "Load");
 		fdraw_str_ctr(13, F_16_BOLD, "Pattern %d?", item_id - PATTERNS_START + 1);
 		break;
 	case MEM_SAMPLE: {
 		u8 sample_id = item_id - SAMPLES_START;
-		if (sample_id == ram_sample_id && shift_state != SS_LOAD) {
+		if (sample_id == ram_sample_id && function_pressed != FN_LOAD) {
 			draw_str_ctr(1, F_12, "Deactivate");
 			draw_str_ctr(13, F_16_BOLD, "Sample?");
 		}
 		else {
-			fdraw_str_ctr(1, F_12, "%s", shift_state == SS_LOAD ? "Edit" : "Load");
+			fdraw_str_ctr(1, F_12, "%s", function_pressed == FN_LOAD ? "Edit" : "Load");
 			fdraw_str_ctr(13, F_16_BOLD, "Sample %d?", sample_id + 1);
 		}
 		break;
@@ -1062,7 +1062,7 @@ void draw_clear_item(void) {
 void draw_ui_load_label(void) {
 	const u8 x0 = 101;
 	const u8 x1 = OLED_WIDTH - 1;
-	fdraw_str(x0 + 5, 1, F_8_BOLD, "%s", shift_state == SS_LOAD ? "SAVE" : "LOAD");
+	fdraw_str(x0 + 5, 1, F_8_BOLD, "%s", function_pressed == FN_LOAD ? "SAVE" : "LOAD");
 	vline(x0, 0, 9, 1);
 	vline(x1, 0, 9, 1);
 	hline(x0, 9, x1 + 1, 1);

@@ -257,17 +257,17 @@ typedef enum ClockType {
 	CLK_CV,
 } ClockType;
 
-typedef enum ShiftState {
-	SS_NONE = -1,
-	SS_SHIFT_A,
-	SS_SHIFT_B,
-	SS_LOAD,
-	SS_LEFT,
-	SS_RIGHT,
-	SS_CLEAR,
-	SS_RECORD,
-	SS_PLAY,
-} ShiftState;
+typedef enum FunctionPad {
+	FN_NONE = -1,
+	FN_SHIFT_A,
+	FN_SHIFT_B,
+	FN_LOAD,
+	FN_LEFT,
+	FN_RIGHT,
+	FN_CLEAR,
+	FN_RECORD,
+	FN_PLAY,
+} FunctionPad;
 
 typedef enum SamplerMode {
 	SM_PREVIEW,   // previewing a recorded sample

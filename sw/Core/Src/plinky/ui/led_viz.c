@@ -177,7 +177,7 @@ static void draw_main_leds(void) {
 	}
 }
 
-static void draw_shift_leds(void) {
+static void draw_function_leds(void) {
 	switch (ui_mode) {
 	case UI_SAMPLE_EDIT:
 		SampleInfo* s = &cur_sample_info;
@@ -187,34 +187,34 @@ static void draw_shift_leds(void) {
 		// sample flags
 		if (sampler_mode == SM_PREVIEW) {
 			if (s->pitched)
-				leds[8][SS_SHIFT_A] = 255;
+				leds[8][FN_SHIFT_A] = 255;
 			if (s->loop & 1)
-				leds[8][SS_SHIFT_B] = 255;
+				leds[8][FN_SHIFT_B] = 255;
 		}
 		// record pad
-		leds[8][SS_RECORD] = sampler_mode == SM_PREVIEW     ? pulse       //
+		leds[8][FN_RECORD] = sampler_mode == SM_PREVIEW     ? pulse       //
 		                     : sampler_mode == SM_RECORDING ? 255         //
 		                                                    : pulse_half; //
 		break;
 	// case UI_SETTINGS_MENU:
-	// 	leds[8][SS_SHIFT_A] = 32 + (pulse_eighth >> 3);
-	// 	leds[8][SS_SHIFT_B] = 32 + ((255 - pulse_eighth) >> 3);
+	// 	leds[8][FN_SHIFT_A] = 32 + (pulse_eighth >> 3);
+	// 	leds[8][FN_SHIFT_B] = 32 + ((255 - pulse_eighth) >> 3);
 	// 	// always light up the active shift state
-	// 	if (shift_state >= 0)
-	// 		leds[8][shift_state] = maxi(leds[8][shift_state], 128);
+	// 	if (function_pressed >= 0)
+	// 		leds[8][function_pressed] = maxi(leds[8][function_pressed], 128);
 	// 	break;
 	default:
-		param_shift_leds(pulse_half); // shift a & b
-		leds[8][SS_LOAD] = (ui_mode == UI_LOAD) ? 255 : 0;
-		leds[8][SS_LEFT] = (ui_mode == UI_PTN_START) ? 255 : 0;
-		leds[8][SS_RIGHT] = (ui_mode == UI_PTN_END) ? 255 : 0;
-		leds[8][SS_CLEAR] = 0;
-		leds[8][SS_RECORD] = seq_recording() ? 255 : 0;
-		leds[8][SS_PLAY] = seq_flags.playing && !seq_flags.stop_at_next_step ? led_add_gamma(sync_pulse) : 0;
+		param_function_leds(pulse_half); // shift a & b
+		leds[8][FN_LOAD] = (ui_mode == UI_LOAD) ? 255 : 0;
+		leds[8][FN_LEFT] = (ui_mode == UI_PTN_START) ? 255 : 0;
+		leds[8][FN_RIGHT] = (ui_mode == UI_PTN_END) ? 255 : 0;
+		leds[8][FN_CLEAR] = 0;
+		leds[8][FN_RECORD] = seq_recording() ? 255 : 0;
+		leds[8][FN_PLAY] = seq_flags.playing && !seq_flags.stop_at_next_step ? led_add_gamma(sync_pulse) : 0;
 
-		// always light up the active shift state
-		if (shift_state >= 0)
-			leds[8][shift_state] = maxi(leds[8][shift_state], 128);
+		// always light up the pressed function pad
+		if (function_pressed > FN_NONE)
+			leds[8][function_pressed] = maxi(leds[8][function_pressed], 128);
 		break;
 	}
 }
@@ -227,5 +227,5 @@ void draw_led_visuals(void) {
 	sync_pulse = maxi(96, 255 - seq_substep(256 - 96));
 
 	draw_main_leds();
-	draw_shift_leds();
+	draw_function_leds();
 }

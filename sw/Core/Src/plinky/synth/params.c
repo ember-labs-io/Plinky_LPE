@@ -645,7 +645,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		return;
 
 	// if this is a precision-edit, keep the param selected
-	if (shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B)
+	if (function_pressed == FN_SHIFT_A || function_pressed == FN_SHIFT_B)
 		pad_actions_keep_edit_mode_open();
 
 	s16 raw = param_val_raw(param_id, selected_mod_src);
@@ -667,7 +667,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	}
 
 	// holding shift disables acceleration
-	enc_acc = shift_state == SS_SHIFT_A || shift_state == SS_SHIFT_B ? 1.f : maxf(1.f, enc_acc * enc_acc);
+	enc_acc = function_pressed == FN_SHIFT_A || function_pressed == FN_SHIFT_B ? 1.f : maxf(1.f, enc_acc * enc_acc);
 	raw += floorf(enc_diff * enc_acc + 0.5f);
 	switch (param_id) {
 	case P_PITCH:
@@ -1356,11 +1356,11 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 	return k;
 }
 
-void param_shift_leds(u8 pulse) {
-	leds[8][SS_SHIFT_A] = (ui_mode == UI_EDITING_A)                                                     ? 255
+void param_function_leds(u8 pulse) {
+	leds[8][FN_SHIFT_A] = (ui_mode == UI_EDITING_A)                                                     ? 255
 	                      : (ui_mode == UI_DEFAULT && param_snap < NUM_PARAMS && (param_snap % 12) < 6) ? pulse
 	                                                                                                    : 0;
-	leds[8][SS_SHIFT_B] = (ui_mode == UI_EDITING_B)                                                      ? 255
+	leds[8][FN_SHIFT_B] = (ui_mode == UI_EDITING_B)                                                      ? 255
 	                      : (ui_mode == UI_DEFAULT && param_snap < NUM_PARAMS && (param_snap % 12) >= 6) ? pulse
 	                                                                                                     : 0;
 }

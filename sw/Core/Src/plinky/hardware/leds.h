@@ -4,8 +4,8 @@
 // Main columns are numbered 0-7, left-to-right
 // Pads are numbered 0-7, top-to-bottom
 
-// Shift-pads are on column 8
-// Shift-pads are numbered 0-7, left-to-right (Plinky) or top-to-bottom (Plinky+)
+// Function pads are on column 8
+// Function pads are numbered 0-7, left-to-right (Plinky) or top-to-bottom (Plinky+)
 
 extern u8 leds[NUM_TOUCHSTRIPS][PADS_PER_STRIP];
 

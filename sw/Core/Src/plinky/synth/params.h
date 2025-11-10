@@ -49,4 +49,4 @@ void draw_latch_flag(void);
 bool is_snap_param(u8 x, u8 y);
 s16 value_editor_column_led(u8 y);
 u8 ui_editing_led(u8 x, u8 y, u8 pulse);
-void param_shift_leds(u8 pulse);
+void param_function_leds(u8 pulse);
