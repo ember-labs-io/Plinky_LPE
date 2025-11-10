@@ -228,6 +228,13 @@ static void generate_string_touch(u8 string_id) {
 void generate_string_touches(void) {
 	static bool do_second_half = false;
 	static u8 strings_phys_touch_1back = 0;
+	static bool prev_latch = false;
+
+	// end latch when necessary
+	bool cur_latch = param_index(P_LATCH_TGL);
+	if (prev_latch && !cur_latch)
+		clear_latch();
+	prev_latch = cur_latch;
 
 	// update half of the strings (0 - 3 / 4 - 7)
 	for (u8 string_id = 0; string_id < NUM_STRINGS / 2; ++string_id)

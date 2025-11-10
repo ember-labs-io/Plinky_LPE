@@ -485,10 +485,6 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	case P_VOLUME:
 		set_sys_param(SYS_VOLUME, data);
 		return;
-	case P_LATCH_TGL:
-		if (data >> 9 == 0)
-			clear_latch();
-		break;
 	default:
 		break;
 	}
