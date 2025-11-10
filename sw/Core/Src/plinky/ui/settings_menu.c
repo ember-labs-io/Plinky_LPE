@@ -148,6 +148,8 @@ void settings_menu_actions(void) {
 	// actions
 	switch (cur_item) {
 	case I_REBOOT:
+		oled_clear();
+		oled_flip();
 		HAL_NVIC_SystemReset();
 		break;
 	case I_TOUCH_CALIB:
