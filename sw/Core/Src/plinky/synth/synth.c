@@ -150,6 +150,7 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 		goal_lpg = get_string_touch(voice_id)->pres * 1.f / TOUCH_MAX_POS * sens * sens;
 		if (goal_lpg < 0.f)
 			goal_lpg = 0.f;
+		goal_lpg *= goal_lpg;
 		goal_lpg *= 1.f + ((voice->osc[2].pitch - 43000) * (1.f / 65536.f)); // pitch compensation
 	}
 
