@@ -99,7 +99,7 @@ static void generate_string_touch(u8 string_id) {
 
 	// === TOUCH INPUT === //
 
-	if (strip_available_for_synth(string_id) || ui_mode == UI_SAMPLE_EDIT) {
+	if (strip_available_for_synth(string_id)) {
 		// read touch values
 		pressure = touch->pres;
 		position = touch->pos;

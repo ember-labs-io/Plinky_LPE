@@ -9,6 +9,7 @@
 #include "hardware/memory.h"
 #include "lfos.h"
 #include "param_defs.h"
+#include "sampler.h"
 #include "sequencer.h"
 #include "strings.h"
 #include "synth.h"
@@ -110,16 +111,16 @@ bool param_signed(Param param_id) {
 
 // will this strip produce a press for the synth?
 bool strip_available_for_synth(u8 strip_id) {
-	// yes, in the default ui
-	if (ui_mode == UI_DEFAULT
-	    // but not the function strip
-	    && !(strip_id == 8)
-	    // and not the left-most strip when a parameter is being edited
-	    && !(strip_id == 0 && EDITING_PARAM)
-
-	)
+	// never for the function strip
+	if (strip_id == 8)
+		return false;
+	// yes in the default ui, but not the left-most strip when a parameter is being edited
+	if (ui_mode == UI_DEFAULT && !(strip_id == 0 && EDITING_PARAM))
 		return true;
-	// in all other modes and situations: no
+	// yes in the preview mode of the sample editor with a sample loaded
+	if (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER)
+		return true;
+	// in all other situations: no
 	return false;
 }
 
