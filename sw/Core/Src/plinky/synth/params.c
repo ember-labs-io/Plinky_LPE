@@ -530,11 +530,6 @@ bool try_restore_param(bool mode_a) {
 			SELECT_PARAM(new_param);
 		return true;
 	}
-	// restore base value
-	if (selected_mod_src != SRC_BASE) {
-		selected_mod_src = SRC_BASE;
-		return true;
-	}
 	// nothing to restore
 	return false;
 }
