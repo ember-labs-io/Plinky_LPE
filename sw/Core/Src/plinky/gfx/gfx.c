@@ -205,7 +205,7 @@ int draw_icon(int x, int y, unsigned char c, int text_color) {
 }
 
 void draw_load_bar(u16 position, u16 range) {
-	inverted_rectangle(0, 28, OLED_WIDTH * position / range, OLED_HEIGHT);
+	inverted_rectangle(0, 29, OLED_WIDTH * position / range, OLED_HEIGHT);
 }
 
 // STRINGS

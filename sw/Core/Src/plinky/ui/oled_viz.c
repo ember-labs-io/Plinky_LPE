@@ -156,8 +156,6 @@ static void draw_visuals(void) {
 		return;
 	if (oled_function_visuals())
 		return;
-	if (pad_actions_oled_visuals())
-		return;
 
 	// build up the regular visuals, per ui mode
 
@@ -203,20 +201,7 @@ static void draw_visuals(void) {
 		draw_cur_param();
 		break;
 	case UI_LOAD:
-		draw_ui_load_label();
-
-		// top-left, priority: cued preset, current preset
-		u8 xtab = draw_cued_preset_id();
-		if (!xtab)
-			xtab = draw_preset_id();
-		draw_preset_name(xtab);
-
-		// bottom left priority: cued pattern, current pattern
-		xtab = draw_cued_pattern_id(param_index(P_ARP_TGL));
-		if (!xtab)
-			draw_pattern_id(param_index(P_ARP_TGL));
-
-		draw_sample_id();
+		draw_ui_load_visuals();
 		break;
 	case UI_SAMPLE_EDIT:
 		sampler_oled_visuals();

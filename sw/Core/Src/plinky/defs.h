@@ -16,6 +16,12 @@
 #define TOUCH_MIN_PRES -2048
 #define TOUCH_FULL_PRES 2047
 
+// in ms
+#define PRESS_DELAY 50
+#define SHORT_PRESS_TIME 300
+#define LONG_PRESS_TIME 1000
+#define POST_PRESS_DELAY 150
+
 // AUDIO
 #define SAMPLE_RATE 31250
 #define SAMPLES_PER_TICK 64
@@ -743,6 +749,8 @@ const static u8 font_y_offset[NUM_FONTS] = {
 #define I_PHONES "\xb9"
 #define I_JACK "\xba"
 #define I_ENV "\xbb"
+#define I_LOAD "\xbc"
+#define I_SAVE "\xbd"
 
 // == NAMES == //
 

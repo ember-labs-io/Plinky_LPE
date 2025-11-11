@@ -9,11 +9,6 @@
 #include "synth/strings.h"
 #include "synth/time.h"
 
-// in ms
-#define PRESS_DELAY 50
-#define SHORT_PRESS_TIME 300
-#define LONG_PRESS_TIME 1000
-
 FunctionPad function_pressed = FN_NONE;
 
 static u8 action_press_on_strip = 0; // does the strip have an action press? (mask)
@@ -24,14 +19,14 @@ static bool keep_ui_open = false;
 static bool keep_edit_mode_open = false;
 
 // keep track of (long) presses on the main grid
-static u8 main_press_pad = 255;
+u8 main_press_pad = 255;
 static u32 main_press_start = 0;
-static u32 main_press_ms = 0;
+u32 main_press_ms = 0;
 
 // keep track of (long) presses on the function pads
 static bool function_press_used_up = false;
 static u32 function_press_start = 0;
-static u32 function_press_ms = 0;
+u32 function_press_ms = 0;
 
 // == UTILS == //
 
@@ -214,7 +209,7 @@ static void hold_function(void) {
 			break;
 		case FN_CLEAR:
 			// clear item
-			if (function_press_ms >= PRESS_DELAY + LONG_PRESS_TIME) {
+			if (function_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
 				clear_mem_item();
 				use_function_press();
 			}
@@ -226,7 +221,7 @@ static void hold_function(void) {
 	case UI_SAMPLE_EDIT:
 		// long-pressing record or play in sampler preview mode records a new sample
 		if (sampler_mode == SM_PREVIEW && (function_pressed == FN_RECORD || function_pressed == FN_PLAY)
-		    && function_press_ms >= PRESS_DELAY + LONG_PRESS_TIME) {
+		    && function_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
 			start_erasing_sample_buffer();
 		}
 		break;
@@ -361,6 +356,10 @@ void handle_pad_actions(u8 strip_id) {
 				seq_set_end_step(pad_y * 8 + strip_id);
 			keep_ui_open = false;
 			break;
+		case UI_LOAD:
+			if (is_press_start)
+				update_clear_item(pad_id);
+			break;
 		case UI_SAMPLE_EDIT:
 			if (is_press_start && function_pressed == FN_NONE)
 				switch (sampler_mode) {
@@ -402,9 +401,10 @@ void pad_actions_frame(void) {
 	}
 	main_press_ms = millis() - main_press_start;
 	// actions on long press
-	if (ui_mode == UI_LOAD && main_press_ms >= PRESS_DELAY + LONG_PRESS_TIME) {
+	if (ui_mode == UI_LOAD && main_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
 		long_press_load_item(main_press_pad);
 		main_press_pad = 255;
+		main_press_ms = 0;
 	}
 }
 
@@ -426,32 +426,15 @@ bool mod_action_pressed(void) {
 }
 
 // returns whether this produced screen-filling graphics
-bool pad_actions_oled_visuals(void) {
-	if (ui_mode == UI_LOAD && main_press_ms > 0) {
-		draw_save_load_item(main_press_pad);
-		draw_load_bar(main_press_ms, LONG_PRESS_TIME);
-		return true;
-	}
-	return false;
-}
-
-// returns whether this produced screen-filling graphics
 bool oled_function_visuals(void) {
 	switch (ui_mode) {
 	case UI_SAMPLE_EDIT:
 		if (function_pressed == FN_RECORD && sampler_mode == SM_PREVIEW && function_press_ms >= PRESS_DELAY) {
 			draw_str(0, 0, F_32, "record?");
-			draw_load_bar(function_press_ms, PRESS_DELAY + LONG_PRESS_TIME);
+			draw_load_bar(function_press_ms - PRESS_DELAY, LONG_PRESS_TIME);
 			return true;
 		}
 		break;
-	case UI_LOAD:
-		if (function_pressed == FN_CLEAR && function_press_ms >= PRESS_DELAY) {
-			draw_clear_item();
-			draw_load_bar(function_press_ms, PRESS_DELAY + LONG_PRESS_TIME);
-			return true;
-		}
-		// fall thru
 	default:
 		switch (function_pressed) {
 		case FN_CLEAR:
@@ -475,8 +458,8 @@ bool oled_function_visuals(void) {
 	return false;
 }
 
-u8 ui_load_long_press_led(u8 x, u8 y, u8 pulse_8x) {
+u8 ui_load_long_press_led(u8 x, u8 y, u8 pulse) {
 	if ((action_press_on_strip & (1 << x)) && main_press_pad == x * 8 + y)
-		return maxi(pulse_8x, 1);
+		return maxi(pulse, 1);
 	return 0;
 }

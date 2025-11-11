@@ -12,6 +12,7 @@
 static u8 pulse_eighth;
 static u8 pulse_half;
 static u8 pulse;
+static u8 pulse_2x;
 static u8 pulse_8x;
 static u8 sync_pulse;
 
@@ -163,10 +164,9 @@ static void draw_main_leds(void) {
 				k = ui_editing_led(x, y, pulse_half);
 				break;
 			case UI_LOAD:
-				k = ui_load_led(x, y, pulse_8x);
-				u8 n = ui_load_long_press_led(x, y, pulse_8x);
-				if (n != 0)
-					k = n;
+				k = ui_load_long_press_led(x, y, pulse_2x);
+				if (k == 0)
+					k = ui_load_led(x, y, pulse, pulse_half);
 				break;
 			default:
 				break;
@@ -213,7 +213,7 @@ static void draw_function_leds(void) {
 		leds[8][FN_PLAY] = seq_flags.playing && !seq_flags.stop_at_next_step ? led_add_gamma(sync_pulse) : 0;
 
 		// always light up the pressed function pad
-		if (function_pressed > FN_NONE)
+		if (function_pressed > FN_NONE && function_pressed != FN_LOAD)
 			leds[8][function_pressed] = maxi(leds[8][function_pressed], 128);
 		break;
 	}
@@ -223,6 +223,7 @@ void draw_led_visuals(void) {
 	pulse_eighth = triangle(millis() / 8);
 	pulse_half = triangle(millis() / 2);
 	pulse = triangle(millis());
+	pulse_2x = triangle(millis() * 2);
 	pulse_8x = triangle(millis() * 8);
 	sync_pulse = maxi(96, 255 - seq_substep(256 - 96));
 

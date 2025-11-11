@@ -64,6 +64,7 @@ void apply_cued_mem_items(void);
 void cue_mem_item(u8 item_id);
 
 // ui
+void update_clear_item(u8 item_id);
 void long_press_load_item(u8 item_id);
 void save_preset(void);
 void clear_mem_item(void);
@@ -74,14 +75,10 @@ void flash_write_calib(FlashCalibType flash_calib_type);
 
 // visuals
 u8 draw_cued_preset_id(void);
-u8 draw_high_note(void);
 u8 draw_preset_id(void);
 u8 draw_cued_pattern_id(bool with_arp_icon);
 void draw_pattern_id(bool with_arp_icon);
 void draw_preset_name(u8 xtab);
-void draw_sample_id(void);
-void draw_save_load_item(u8 item_id);
-void draw_clear_item(void);
-void draw_ui_load_label(void);
+void draw_ui_load_visuals(void);
 
-u8 ui_load_led(u8 x, u8 y, u8 pulse);
+u8 ui_load_led(u8 x, u8 y, u8 pulse1, u8 pulse2);
