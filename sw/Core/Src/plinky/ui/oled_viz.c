@@ -156,6 +156,8 @@ static void draw_visuals(void) {
 		return;
 	if (oled_function_visuals())
 		return;
+	if (mod_clear_visuals())
+		return;
 
 	// build up the regular visuals, per ui mode
 

@@ -40,6 +40,8 @@ void params_toggle_default_value(void);
 void hold_encoder_for_params(u16 duration);
 
 // visuals
+bool mod_clear_visuals(void);
+
 void take_param_snapshots(void);
 bool params_want_to_draw(void);
 void draw_cur_param(void);

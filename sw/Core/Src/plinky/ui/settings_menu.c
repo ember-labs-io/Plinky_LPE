@@ -62,7 +62,7 @@ static Item cur_item = 0;
 static Section cur_section;
 static u8 cur_value = 0;
 static bool value_selected = false;
-static u8 screen_fill = 0;
+static u8 fill_start = OLED_WIDTH;
 static bool perform_action = false;
 
 static void select_item(Item item, bool force) {
@@ -171,8 +171,8 @@ void settings_menu_actions(void) {
 void settings_encoder_press(bool pressed, u16 duration) {
 	static bool enc_pressed = false;
 	if (cur_section == S_ACTIONS) {
-		screen_fill = pressed ? mini(duration, OLED_WIDTH) : 0;
-		if (duration >= OLED_WIDTH + 30)
+		fill_start = pressed ? maxi(OLED_WIDTH * (LONG_PRESS_TIME - duration) / LONG_PRESS_TIME, 0) : OLED_WIDTH;
+		if (duration >= LONG_PRESS_TIME + POST_PRESS_DELAY)
 			perform_action = true;
 	}
 	else if (pressed && !enc_pressed)
@@ -241,8 +241,8 @@ void draw_settings_menu(void) {
 	if (cur_section == S_ACTIONS) {
 		draw_str(1, 17, font, item_name[cur_item]);
 		draw_str(OLED_WIDTH - 32, 15, font, I_TOUCH);
-		if (screen_fill)
-			inverted_rectangle(OLED_WIDTH - screen_fill, 0, OLED_WIDTH, OLED_HEIGHT);
+		if (fill_start < OLED_WIDTH)
+			inverted_rectangle(fill_start, 0, OLED_WIDTH, OLED_HEIGHT);
 		return;
 	}
 	// selection arrow

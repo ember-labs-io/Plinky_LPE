@@ -4,11 +4,13 @@
 #include "synth/sampler.h"
 #include "ui/settings_menu.h"
 
-volatile s8 encoder_value = 0;
 volatile bool encoder_pressed = false;
+static volatile s8 encoder_value = 0;
 
-static u8 prev_hardware_state; // should live in encoder_irq() if init_encoder() is removed
+static u8 prev_hardware_state;
 static float encoder_acc;
+static u32 encoder_press_start;
+static u16 encoder_press_duration;
 static u32 last_encoder_use = 0;
 
 bool enc_recently_used(void) {
@@ -20,8 +22,6 @@ void clear_last_encoder_use(void) {
 }
 
 void init_encoder(void) {
-	// rj: I've taken this from main.c, not quite sure why it is necessary - one inaccurate tick of the encoder on
-	// startup can't hurt anything can it?
 	prev_hardware_state = (GPIOC->IDR >> 14) & 3;
 	encoder_value = 2;
 }
@@ -49,21 +49,22 @@ void encoder_irq(void) {
 }
 
 void encoder_tick(void) {
-	static u16 encoder_press_duration = 0;
 	static bool prev_encoder_pressed;
 
+	// extract and consume difference since last tick
 	s8 enc_diff = encoder_value >> 2;
-
-	// hold time
-	if (encoder_pressed)
-		encoder_press_duration++;
-
-	if ((enc_diff || encoder_pressed || prev_encoder_pressed)) {
-		// log time
-		last_encoder_use = millis();
+	if (enc_diff || encoder_pressed || prev_encoder_pressed) {
 		encoder_value -= enc_diff << 2;
+		last_encoder_use = millis(); // log usage
 	}
 
+	// update timer
+	if (encoder_pressed && !prev_encoder_pressed)
+		encoder_press_start = millis();
+	if (encoder_pressed)
+		encoder_press_duration = millis() - encoder_press_start;
+
+	// execute actions
 	switch (ui_mode) {
 	case UI_DEFAULT:
 	case UI_EDITING_A:
@@ -71,7 +72,7 @@ void encoder_tick(void) {
 		if (enc_diff)
 			edit_param_from_encoder(enc_diff, encoder_acc);
 		// release of a short encoder press
-		else if (!encoder_pressed && prev_encoder_pressed && encoder_press_duration <= 50)
+		else if (!encoder_pressed && prev_encoder_pressed && encoder_press_duration <= SHORT_PRESS_TIME)
 			params_toggle_default_value();
 		hold_encoder_for_params(encoder_press_duration);
 		break;
@@ -92,7 +93,7 @@ void encoder_tick(void) {
 		break;
 	}
 
-	if (!encoder_pressed)
+	if (!encoder_pressed && prev_encoder_pressed)
 		encoder_press_duration = 0;
 	prev_encoder_pressed = encoder_pressed;
 }

@@ -48,6 +48,8 @@ static ModSource selected_mod_src = SRC_BASE;
 // stable snapshots for drawing oled and led visuals
 static Param param_snap;
 static ModSource src_snap;
+// enables clear modulation message
+static u32 clear_mods_duration = 0;
 
 // modulation values
 static s32 param_with_lfo[NUM_PARAMS];
@@ -718,20 +720,47 @@ void params_toggle_default_value(void) {
 }
 
 void hold_encoder_for_params(u16 duration) {
-	const static u8 msg_delay = 50;
-	const static u8 clear_delay = 150;
+	static bool press_used_up = false;
+	static u32 last_seen_duration = 0;
+
+	clear_mods_duration = 0;
+
+	// no param selected
 	if (!EDITING_PARAM)
 		return;
-	if (duration == clear_delay)
+
+	// new press
+	if (duration < last_seen_duration)
+		press_used_up = false;
+	last_seen_duration = duration;
+
+	if (press_used_up)
+		return;
+
+	// draw warning
+	if (duration >= SHORT_PRESS_TIME)
+		clear_mods_duration = duration - SHORT_PRESS_TIME;
+
+	// execute clearing mods
+	if (duration >= LONG_PRESS_TIME + SHORT_PRESS_TIME + POST_PRESS_DELAY) {
 		for (ModSource mod_src = SRC_ENV2; mod_src < NUM_MOD_SOURCES; ++mod_src)
 			save_param_raw(selected_param, mod_src, 0);
-	if (duration >= clear_delay)
-		flash_message(F_20_BOLD, I_RIGHT "Cleared!", 0);
-	else if (duration >= msg_delay)
-		flash_message(F_20_BOLD, I_RIGHT "Clear mods?", 0);
+		flash_message(F_16_BOLD, "all modulation", "Cleared");
+		press_used_up = true;
+	}
 }
 
 // == VISUALS == //
+
+bool mod_clear_visuals(void) {
+	if (clear_mods_duration) {
+		draw_str_ctr(1, F_12, "Clear");
+		draw_str_ctr(13, F_16_BOLD, "all modulation?");
+		draw_load_bar(clear_mods_duration, LONG_PRESS_TIME);
+		return true;
+	}
+	return false;
+}
 
 void take_param_snapshots(void) {
 	param_snap = selected_param;
