@@ -374,7 +374,7 @@ void sampler_playing_tick(void) {
 		int prio = gprio[i];
 		int fi = prio & 7;
 		int len = (prio >> 3) & 255;
-		// we only budget for MAX_SPI_STATE transfers. so after that, len goes to 0. also helps CPU load
+		// we only budget for LAST_GRAIN_SPI_STATE transfers. so after that, len goes to 0. also helps CPU load
 		if (i < 8 - MAX_SAMPLE_VOICES)
 			len = 0;
 		else if (voices[fi].env1_lvl <= 0.01f && !(string_touched & (1 << fi)))

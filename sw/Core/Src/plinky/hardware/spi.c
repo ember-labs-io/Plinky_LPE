@@ -5,7 +5,7 @@
 
 extern SPI_HandleTypeDef hspi2;
 
-#define MAX_SPI_STATE 32
+#define LAST_GRAIN_SPI_STATE 32
 #define CHECK_RV(spi_rv, msg)                                                                                          \
 	if (spi_rv != 0)                                                                                                   \
 		DebugLog("SPI ERROR %d " msg "\r\n", spi_rv);
@@ -112,8 +112,8 @@ static void setup_spi_alex_dma(u32 tx_addr, u32 rx_addr, int len) { // len is in
 
 static void spi_update_dac(int dac_chan) {
 	static u16 dac_dummy;
-	u16 dac_cmd;
-	spi_state = MAX_SPI_STATE + dac_chan + 1; // the NEXT state
+	static u16 dac_cmd;
+	spi_state = LAST_GRAIN_SPI_STATE + dac_chan + 1; // the NEXT state
 	u16 data = get_expander_lfo_data(dac_chan & 3);
 	dac_cmd = (2 << 14) + ((dac_chan & 3) << 12) + (data & 0xfff);
 	dac_cmd = (dac_cmd >> 8) | (dac_cmd << 8);
@@ -143,7 +143,7 @@ again:
 	int len = grain_buf_end[grain_id] - start;
 
 	if (len <= 2) {
-		if (spi_state == MAX_SPI_STATE) {
+		if (spi_state == LAST_GRAIN_SPI_STATE) {
 			spi_update_dac(0);
 			return 0;
 		}
@@ -184,13 +184,13 @@ void alex_dma_done(void) {
 		__HAL_DMA_DISABLE_IT(hdma, DMA_IT_TE | DMA_IT_TC | DMA_IT_HT);
 		hdma->DmaBaseAddress->IFCR =
 		    (DMA_ISR_TCIF1 << (hdma->ChannelIndex & 0x1CU)); /* Clear the transfer complete flag */
-		if (spi_state >= MAX_SPI_STATE) {
+		if (spi_state >= LAST_GRAIN_SPI_STATE) {
 			GPIOA->BSRR = 1 << 8; // DAC cs high
-			if (spi_state == MAX_SPI_STATE + 4) {
+			if (spi_state == LAST_GRAIN_SPI_STATE + 4) {
 				reset_spi_state();
 			}
 			else {
-				int dac_chan = spi_state - MAX_SPI_STATE;
+				int dac_chan = spi_state - LAST_GRAIN_SPI_STATE;
 				if (dac_chan < 4 && dac_chan >= 0)
 					spi_update_dac(dac_chan);
 			}
