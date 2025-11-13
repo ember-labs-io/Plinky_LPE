@@ -215,12 +215,12 @@ bool update_preset(Preset* preset) {
 			case P_LATCH_TGL:
 				lpe_raw = (preset->pad & 0b10) << 8;
 				break;
-			// synced lfos added, remap lfo rate
+			// synced lfos added, remap lfo rate from (-1024, 1024) to (-1024, -1)
 			case P_A_RATE:
 			case P_B_RATE:
 			case P_X_RATE:
 			case P_Y_RATE:
-				lpe_raw = ((og_raw + RAW_SIZE + 1) >> 1) - RAW_SIZE;
+				lpe_raw = -RAW_SIZE + ((og_raw + RAW_SIZE) * 1023 + 1024) / 2048;
 				break;
 			// delay time - invert polarity
 			case P_DLY_TIME:
@@ -281,12 +281,12 @@ void revert_preset(Preset* preset) {
 				lpe_raw = map_s16(lpe_raw, -1, -1024, -45, -1024);
 			og_raw = -lpe_raw;
 			break;
-		// no synced lfos
+		// no synced lfos, remap lfo rate from (-1024, -1) to (-1024, 1024)
 		case P_A_RATE:
 		case P_B_RATE:
 		case P_X_RATE:
 		case P_Y_RATE:
-			og_raw = (-abs(lpe_raw) << 1) + RAW_SIZE;
+			og_raw = -RAW_SIZE + ((lpe_raw + RAW_SIZE) * 2048 + 511) / 1023;
 			break;
 		default:
 			// indeces - map to center of range
