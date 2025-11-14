@@ -198,6 +198,12 @@ void set_sys_param(SysParam param, u16 value) {
 	case SYS_CV_QUANT:
 		saved_value = sys_params.cv_quant;
 		break;
+	case SYS_CV_PPQN_IN:
+		saved_value = sys_params.cv_in_ppqn;
+		break;
+	case SYS_CV_PPQN_OUT:
+		saved_value = sys_params.cv_out_ppqn;
+		break;
 	case SYS_REVERSE_ENCODER:
 		saved_value = sys_params.reverse_encoder;
 		break;
@@ -228,6 +234,12 @@ void set_sys_param(SysParam param, u16 value) {
 		break;
 	case SYS_CV_QUANT:
 		sys_params.cv_quant = value;
+		break;
+	case SYS_CV_PPQN_IN:
+		sys_params.cv_in_ppqn = value;
+		break;
+	case SYS_CV_PPQN_OUT:
+		sys_params.cv_out_ppqn = value;
 		break;
 	case SYS_REVERSE_ENCODER:
 		sys_params.reverse_encoder = value;
@@ -473,6 +485,11 @@ void init_memory(void) {
 	case REV_SYS_PARAMS_VERSION:
 		// initialized but volume in OG mapping - remap volume
 		set_sys_param(SYS_VOLUME, clampi(((s8)sys_params.volume_lsb + 45) << 4, 0, RAW_SIZE));
+		// fall through for further updating
+	case 16:
+		// added cv ppqn
+		sys_params.cv_in_ppqn = 2;  // 4 ppqn
+		sys_params.cv_out_ppqn = 2; // 4 ppqn
 
 		// finalize
 		sys_params.version = LPE_SYS_PARAMS_VERSION;

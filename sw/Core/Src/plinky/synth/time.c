@@ -1,5 +1,6 @@
 #include "time.h"
 #include "hardware/adc_dac.h"
+#include "hardware/memory.h"
 #include "hardware/midi.h"
 #include "params.h"
 #include "sequencer.h"
@@ -20,6 +21,7 @@ u16 counter_32nds = 0;   // counts 32nd notes, rolls over at SYNC_DIVS_LCM
 
 // global
 static u32 clock_32nds_q21 = 0;
+static u32 pos_in_32nd_q21;
 static ValueSmoother bpm_smoother;
 static bool reset_clock_next_tick = false;
 
@@ -33,15 +35,14 @@ static bool start_seq_from_midi_start = false;
 static bool start_seq_from_midi_continue = false;
 
 // cv clock
-static volatile u8 cv_pulse = 0;
-static u8 cv_pulse_counter = 0;
-static u8 cv_ppqn = 4;
-static u32 ticks_since_cv_pulse = 0;
-static u32 last_cv_pulse_ticks = 0;
-static bool cv_pulse_handled = false;
+static volatile u8 cv_irq_pulse = 0;
+static bool cv_irq_pulse_handled = false;
+static u8 cv_in_pulse_counter = 0;
+static u32 ticks_since_cv_in_pulse = 0;
+static u32 last_cv_in_pulse_ticks = 0;
 
 // swing
-static u32 const max_swing_q21 = (u32)(MAX_SWING * (1 << 21));
+static const u32 MAX_SWING_Q21 = (u32)(MAX_SWING * (1 << 21));
 static s32 cur_32nd_start_q21;
 static u32 length_32nd_q21;
 
@@ -56,7 +57,7 @@ u32 clock_pos_q16(u16 loop_32nds) {
 }
 
 void trigger_cv_clock(void) {
-	cv_pulse++;
+	cv_irq_pulse++;
 }
 
 void trigger_tap_tempo(void) {
@@ -109,7 +110,7 @@ static void set_clock_type(ClockType new_type) {
 		}
 		// playing => sync up with the running clock
 		else
-			cv_pulse_counter = CUR_PULSE_COUNT(cv_ppqn);
+			cv_in_pulse_counter = CUR_PULSE_COUNT(ppqn_values[sys_params.cv_in_ppqn]);
 		break;
 	}
 	// going from internal to external => set the displayed bpm value
@@ -119,16 +120,16 @@ static void set_clock_type(ClockType new_type) {
 }
 
 static void cleanup_clock_flags(void) {
-	if (cv_pulse_handled)
-		cv_pulse--;
-	cv_pulse_handled = false;
+	if (cv_irq_pulse_handled)
+		cv_irq_pulse--;
+	cv_irq_pulse_handled = false;
 	midi_pulse = false;
 }
 
-static void calculate_swing(bool get_param) {
+static void calc_position(bool get_param) {
 	static s32 swing_param;
-	static u32 swing_q21;  // offset caused by swing, per 32nd note
-	static u8 swing_32nds; // number of 32nd notes in a full cycle of two swung notes
+	static u32 swing_q21;      // offset caused by swing, per 32nd note
+	static u8 num_swing_32nds; // number of 32nd notes in a full cycle of two swung notes
 
 	// unswung values
 	cur_32nd_start_q21 = (counter_32nds & 31) << 21;
@@ -138,21 +139,22 @@ static void calculate_swing(bool get_param) {
 		swing_param = param_val(P_SWING);
 		if (swing_param != 0) {
 			// scale param by max
-			swing_q21 = (u64)abs(param_val(P_SWING)) * max_swing_q21 >> 16;
+			swing_q21 = (u64)abs(param_val(P_SWING)) * MAX_SWING_Q21 >> 16;
 			// negative swing param means 1/16th swing, positive means 1/8th note swing
-			swing_32nds = swing_param < 0 ? 4 : 8;
+			num_swing_32nds = swing_param < 0 ? 4 : 8;
 		}
 	}
 
-	// no swing
-	if (swing_param == 0)
-		return;
+	// apply swing
+	if (swing_param != 0) {
+		u8 cur_swing_32nd = counter_32nds & (num_swing_32nds - 1);
+		bool first_half = cur_swing_32nd < (num_swing_32nds >> 1);
+		cur_32nd_start_q21 += (first_half ? cur_swing_32nd : num_swing_32nds - cur_swing_32nd) * swing_q21;
+		length_32nd_q21 += first_half ? swing_q21 : -swing_q21;
+	}
 
-	// apply swing offset
-	u8 cur_32nd = counter_32nds & (swing_32nds - 1);
-	bool first_half = cur_32nd < (swing_32nds >> 1);
-	cur_32nd_start_q21 += (first_half ? cur_32nd : swing_32nds - cur_32nd) * swing_q21;
-	length_32nd_q21 += first_half ? swing_q21 : -swing_q21;
+	// define position
+	pos_in_32nd_q21 = clock_32nds_q21 - cur_32nd_start_q21;
 }
 
 void cue_clock_reset(void) {
@@ -161,15 +163,13 @@ void cue_clock_reset(void) {
 
 void clock_reset(void) {
 	cleanup_clock_flags();
-	cv_pulse_counter = 0;
+	cv_in_pulse_counter = 0;
 	midi_pulse_counter = 0;
 	clock_32nds_q21 = 0;
 	counter_32nds = 0;
-	calculate_swing(true);
+	calc_position(true);
 	pulse_32nd = true; // this is the start of a 32nd
-	if (seq_playing())
-		send_cv_clock(true); // this is the start of a 16th (4 ppqn)
-	midi_send_clock();       // this is the start of a 24 ppqn pulse
+	midi_send_clock(); // this is the start of a 24 ppqn pulse
 	reset_clock_next_tick = false;
 }
 
@@ -190,22 +190,23 @@ void clock_tick(void) {
 
 	// increase ticks
 	synth_tick++;
-	ticks_since_cv_pulse++;
+	ticks_since_cv_in_pulse++;
 	ticks_since_midi_pulse++;
 
-	if (cv_pulse) {
+	if (cv_irq_pulse) {
 		// track pulses
-		last_cv_pulse_ticks = ticks_since_cv_pulse;
-		ticks_since_cv_pulse = 0;
-		cv_pulse_counter++;
-		cv_pulse_handled = true;
+		last_cv_in_pulse_ticks = ticks_since_cv_in_pulse;
+		ticks_since_cv_in_pulse = 0;
+		cv_in_pulse_counter++;
+		cv_irq_pulse_handled = true;
 		// check clock priority
 		if (clock_type != CLK_CV)
 			set_clock_type(CLK_CV);
 	}
 
 	// cv clock timeout
-	if (clock_type == CLK_CV && ticks_since_cv_pulse > MAX_CLOCK_GAP_TICKS(cv_ppqn))
+	u8 cv_in_ppqn = ppqn_values[sys_params.cv_in_ppqn];
+	if (clock_type == CLK_CV && ticks_since_cv_in_pulse > MAX_CLOCK_GAP_TICKS(cv_in_ppqn))
 		set_clock_type(CLK_MIDI);
 
 	if (midi_pulse) {
@@ -250,19 +251,19 @@ void clock_tick(void) {
 	// handle global accumulator clock
 	switch (clock_type) {
 	case CLK_CV: {
-		u32 max_gap = MAX_CLOCK_GAP_TICKS(cv_ppqn);
+		u32 max_gap = MAX_CLOCK_GAP_TICKS(cv_in_ppqn);
 		// cv pulse => snap the clock to the pulse position
-		if (cv_pulse) {
-			clock_32nds_q21 = (cv_pulse_counter << 24) / cv_ppqn;
-			cv_pulse_counter = cv_pulse_counter % (cv_ppqn << 2);
-			if (last_cv_pulse_ticks <= max_gap && ticks_since_cv_pulse <= max_gap)
+		if (cv_irq_pulse) {
+			clock_32nds_q21 = (cv_in_pulse_counter << 24) / cv_in_ppqn;
+			cv_in_pulse_counter = cv_in_pulse_counter % (cv_in_ppqn << 2);
+			if (last_cv_in_pulse_ticks <= max_gap && ticks_since_cv_in_pulse <= max_gap)
 				// we only calculate the bmp to show on the display
-				calc_bmp_from_ext(last_cv_pulse_ticks, ticks_since_cv_pulse, cv_ppqn);
+				calc_bmp_from_ext(last_cv_in_pulse_ticks, ticks_since_cv_in_pulse, cv_in_ppqn);
 			break;
 		}
 		// valid last pulse length => calculate clock from previous pulse
-		else if (last_cv_pulse_ticks <= max_gap) {
-			clock_32nds_q21 += (1 << 24) / (cv_ppqn * last_cv_pulse_ticks);
+		else if (last_cv_in_pulse_ticks <= max_gap) {
+			clock_32nds_q21 += (1 << 24) / (cv_in_ppqn * last_cv_in_pulse_ticks);
 			break;
 		}
 	} // no valid pulse length => progress by midi clock
@@ -297,27 +298,38 @@ void clock_tick(void) {
 	if (((clock_32nds_q21 & ((1 << 21) - 1)) * ppqn_out >> 24) != ((prev_clock & ((1 << 21) - 1)) * ppqn_out >> 24))
 		midi_send_clock();
 
-	// swing
-	calculate_swing(true);
+	calc_position(true);
 
 	// check for 32nd note pulse
-	if (clock_32nds_q21 >= cur_32nd_start_q21 + length_32nd_q21) {
+	if (pos_in_32nd_q21 >= length_32nd_q21) {
 		pulse_32nd = true;
 		counter_32nds = (counter_32nds + 1) % SYNC_DIVS_LCM;
-		calculate_swing(false);
-
-		// while playing sequencer, send cv clock on 16th pulses (4 ppqn)
-		if (seq_playing())
-			send_cv_clock((counter_32nds & 1) == 0);
 
 		// the clock rolls over at 32 32nd notes
 		if (clock_32nds_q21 >= (1 << 26))
 			clock_32nds_q21 &= (1 << 26) - 1;
 
-		return;
+		// recalculate position in new 32nd note
+		calc_position(false);
 	}
+	else
+		pulse_32nd = false;
 
-	pulse_32nd = false;
+	// check for cv out pulse
+	bool send_cv_pulse = false;
+	if (seq_playing()) {
+		u8 cv_out_ppqn = ppqn_values[sys_params.cv_out_ppqn];
+		// ppqn aligns with 32nd notes
+		if (cv_out_ppqn < 8) {
+			u8 num_32nds_in_pulse = 8 / cv_out_ppqn;
+			if ((counter_32nds % num_32nds_in_pulse) < (num_32nds_in_pulse >> 1))
+				send_cv_pulse = true;
+		}
+		// ppqn faster than/equal to 32nd notes
+		else if (((pos_in_32nd_q21 * cv_out_ppqn / (length_32nd_q21 << 2)) & 1) == 0)
+			send_cv_pulse = true;
+	}
+	send_cv_clock(send_cv_pulse);
 }
 
 void clock_rcv_midi(u8 midi_status) {
