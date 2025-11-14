@@ -191,7 +191,7 @@ typedef struct SysParams {
 	u8 pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
 	u8 cv_in_ppqn : 3;
 	u8 cv_out_ppqn : 3;
-	u8 paddy : 2;
+	u8 midi_in_clock_mult : 2; // 0 = 1/2x, 1 = 1x, 2 = 2x
 	u8 pad[16 - 7];
 	u8 version;
 } SysParams;
@@ -364,6 +364,7 @@ typedef enum SysParam {
 	SYS_REVERSE_ENCODER,
 	SYS_PRESET_ALIGNED,
 	SYS_PATTERN_ALIGNED,
+	SYS_MID_CLOCK_IN_MULT,
 } SysParam;
 
 // PITCH

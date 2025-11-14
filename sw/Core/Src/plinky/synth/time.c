@@ -11,6 +11,7 @@
 // amount of ticks for one pulse at the lowest allowable bpm
 #define MAX_CLOCK_GAP_TICKS(ppqn) ((600 * SAMPLE_RATE) / (ppqn * MIN_BPM_10X * SAMPLES_PER_TICK))
 #define CUR_PULSE_COUNT(ppqn) ((ppqn * clock_32nds_q21) >> 24)
+#define MIDI_PPQN (48 >> sys_params.midi_in_clock_mult)
 
 ClockType clock_type = CLK_INTERNAL;
 u32 synth_tick = 0;     // global synth_tick counter
@@ -28,7 +29,6 @@ static bool reset_clock_next_tick = false;
 // midi clock
 static bool midi_pulse = false;
 static u8 midi_pulse_counter = 0;
-static u8 midi_ppqn = 24;
 static u32 ticks_since_midi_pulse = 0;
 static u32 last_midi_pulse_ticks = 0;
 static bool start_seq_from_midi_start = false;
@@ -98,7 +98,7 @@ static void set_clock_type(ClockType new_type) {
 		break;
 	case CLK_MIDI:
 		flash_message(F_20_BOLD, "Midi in", "Clock");
-		midi_pulse_counter = CUR_PULSE_COUNT(midi_ppqn); // sync up with the running clock
+		midi_pulse_counter = CUR_PULSE_COUNT(MIDI_PPQN); // sync up with the running clock
 		break;
 	case CLK_CV:
 		flash_message(F_20_BOLD, "CV in", "Clock");
@@ -237,6 +237,7 @@ void clock_tick(void) {
 	}
 
 	// midi clock timeout
+	u8 midi_ppqn = MIDI_PPQN;
 	if (clock_type == CLK_MIDI && ticks_since_midi_pulse > MAX_CLOCK_GAP_TICKS(midi_ppqn))
 		set_clock_type(CLK_INTERNAL);
 
@@ -245,8 +246,6 @@ void clock_tick(void) {
 		clock_reset();
 		return;
 	}
-
-	u32 prev_clock = clock_32nds_q21;
 
 	// handle global accumulator clock
 	switch (clock_type) {
@@ -271,7 +270,7 @@ void clock_tick(void) {
 		u32 max_gap = MAX_CLOCK_GAP_TICKS(midi_ppqn);
 		// midi pulse => snap the clock to the pulse position
 		if (midi_pulse && clock_type == CLK_MIDI) {
-			clock_32nds_q21 = (midi_pulse_counter << 24) / midi_ppqn;
+			clock_32nds_q21 = (midi_pulse_counter << 24) / (u32)midi_ppqn;
 			midi_pulse_counter = midi_pulse_counter % (midi_ppqn << 2);
 			if (last_midi_pulse_ticks <= max_gap && ticks_since_midi_pulse <= max_gap)
 				// we only calculate the bmp to show on the display
@@ -293,10 +292,13 @@ void clock_tick(void) {
 
 	cleanup_clock_flags();
 
-	// check for midi pulse
-	const u8 ppqn_out = 24;
-	if (((clock_32nds_q21 & ((1 << 21) - 1)) * ppqn_out >> 24) != ((prev_clock & ((1 << 21) - 1)) * ppqn_out >> 24))
+	// check for midi out pulse
+	static u8 prev_midi_out_pulse = 0;
+	u8 midi_out_pulse = (clock_32nds_q21 & ((1 << 21) - 1)) * 24 >> 24;
+	if (midi_out_pulse != prev_midi_out_pulse) {
 		midi_send_clock();
+		prev_midi_out_pulse = midi_out_pulse;
+	}
 
 	calc_position(true);
 
