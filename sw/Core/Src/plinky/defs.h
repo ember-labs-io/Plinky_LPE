@@ -65,7 +65,7 @@
 
 #define OG_SYS_PARAMS_VERSION 0
 #define REV_SYS_PARAMS_VERSION 15
-#define LPE_SYS_PARAMS_VERSION 16
+#define LPE_SYS_PARAMS_VERSION 17
 
 #define PATTERNS_START NUM_PRESETS
 #define SAMPLES_START (PATTERNS_START + NUM_PATTERNS)
@@ -82,8 +82,10 @@
 #define MIN_BPM_10X 300
 #define MAX_SWING 0.5f // 0.3333f represents triplet-feel swing
 #define NUM_SYNC_DIVS 28
+#define NUM_PPQN_VALUES 7
 static u16 const sync_divs_32nds[NUM_SYNC_DIVS] = {1,  2,  3,  4,  5,   6,   8,   10,  12,  16,  20,  24,  32,  40,
                                                    48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512, 640, 768, 1024};
+static u8 const ppqn_values[NUM_PPQN_VALUES] = {1, 2, 4, 8, 16, 24, 48};
 
 // GRAPHICS
 
@@ -187,7 +189,10 @@ typedef struct SysParams {
 	u8 reverse_encoder : 1;
 	u8 preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
 	u8 pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
-	u8 pad[16 - 6];
+	u8 cv_in_ppqn : 3;
+	u8 cv_out_ppqn : 3;
+	u8 paddy : 2;
+	u8 pad[16 - 7];
 	u8 version;
 } SysParams;
 
@@ -354,6 +359,8 @@ typedef enum SysParam {
 	SYS_ACCEL_SENS,
 	SYS_VOLUME,
 	SYS_CV_QUANT,
+	SYS_CV_PPQN_IN,
+	SYS_CV_PPQN_OUT,
 	SYS_REVERSE_ENCODER,
 	SYS_PRESET_ALIGNED,
 	SYS_PATTERN_ALIGNED,
