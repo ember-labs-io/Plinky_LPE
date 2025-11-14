@@ -22,6 +22,7 @@ typedef enum Item {
 	// midi
 	I_MIDI_IN_CH = S_MIDI * 8,
 	I_MIDI_OUT_CH,
+	I_MIDI_CLOCK_IN_MULT,
 	// cv
 	I_CV_QUANT = S_CV * 8,
 	I_CV_PPQN_IN,
@@ -40,6 +41,7 @@ const static u8 num_options[NUM_ITEMS] = {
     [I_ENC_DIR] = 2,
     [I_MIDI_IN_CH] = 16,
     [I_MIDI_OUT_CH] = 16,
+    [I_MIDI_CLOCK_IN_MULT] = 3,
     [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
     [I_CV_PPQN_IN] = NUM_PPQN_VALUES,
     [I_CV_PPQN_OUT] = NUM_PPQN_VALUES,
@@ -57,10 +59,18 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 };
 
 const static char* item_name[NUM_ITEMS] = {
-    [I_ACCEL_SENS] = "Acc sens",     [I_ENC_DIR] = "Enc dir",       [I_MIDI_IN_CH] = "In channel",
-    [I_MIDI_OUT_CH] = "Out channel", [I_CV_QUANT] = "Quant",        [I_CV_PPQN_IN] = "PPQN in",
-    [I_CV_PPQN_OUT] = "PPQN out",    [I_REBOOT] = "Reboot",         [I_TOUCH_CALIB] = "Touch Calib",
-    [I_CV_CALIB] = "CV Calib",       [I_OG_PRESETS] = "OG Presets",
+    [I_ACCEL_SENS] = "Acc sens",
+    [I_ENC_DIR] = "Enc dir",
+    [I_MIDI_IN_CH] = "In channel",
+    [I_MIDI_OUT_CH] = "Out channel",
+    [I_MIDI_CLOCK_IN_MULT] = "Clock in mult",
+    [I_CV_QUANT] = "Quant",
+    [I_CV_PPQN_IN] = "PPQN in",
+    [I_CV_PPQN_OUT] = "PPQN out",
+    [I_REBOOT] = "Reboot",
+    [I_TOUCH_CALIB] = "Touch Calib",
+    [I_CV_CALIB] = "CV Calib",
+    [I_OG_PRESETS] = "OG Presets",
 };
 
 static Item cur_item = 0;
@@ -87,6 +97,9 @@ static void select_item(Item item, bool force) {
 		break;
 	case I_MIDI_OUT_CH:
 		cur_value = sys_params.midi_out_chan;
+		break;
+	case I_MIDI_CLOCK_IN_MULT:
+		cur_value = sys_params.midi_in_clock_mult;
 		break;
 	case I_CV_QUANT:
 		cur_value = sys_params.cv_quant;
@@ -116,6 +129,9 @@ static void save_value(u8 value) {
 		break;
 	case I_MIDI_OUT_CH:
 		set_sys_param(SYS_MIDI_OUT_CHAN, value);
+		break;
+	case I_MIDI_CLOCK_IN_MULT:
+		set_sys_param(SYS_MID_CLOCK_IN_MULT, value);
 		break;
 	case I_CV_QUANT:
 		set_sys_param(SYS_CV_QUANT, value);
@@ -236,6 +252,16 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MIDI_IN_CH:
 	case I_MIDI_OUT_CH:
 		sprintf(val_buf, "%d", value + 1);
+		return val_buf;
+	case I_MIDI_CLOCK_IN_MULT:
+		switch (value) {
+		case 0:
+			return "1/2";
+		case 1:
+			return "x1";
+		case 2:
+			return "x2";
+		}
 		return val_buf;
 	case I_CV_QUANT:
 		return cv_quant_name[value];

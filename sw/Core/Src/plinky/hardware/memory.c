@@ -212,6 +212,10 @@ void set_sys_param(SysParam param, u16 value) {
 		break;
 	case SYS_PATTERN_ALIGNED:
 		saved_value = sys_params.pattern_aligned;
+		break;
+	case SYS_MID_CLOCK_IN_MULT:
+		saved_value = sys_params.midi_in_clock_mult;
+		break;
 	}
 	if (value == saved_value)
 		return;
@@ -249,6 +253,9 @@ void set_sys_param(SysParam param, u16 value) {
 		break;
 	case SYS_PATTERN_ALIGNED:
 		sys_params.pattern_aligned = value;
+		break;
+	case SYS_MID_CLOCK_IN_MULT:
+		sys_params.midi_in_clock_mult = value;
 		break;
 	}
 	log_ram_edit(SEG_SYS_PARAMS);
@@ -487,9 +494,10 @@ void init_memory(void) {
 		set_sys_param(SYS_VOLUME, clampi(((s8)sys_params.volume_lsb + 45) << 4, 0, RAW_SIZE));
 		// fall through for further updating
 	case 16:
-		// added cv ppqn
-		sys_params.cv_in_ppqn = 2;  // 4 ppqn
-		sys_params.cv_out_ppqn = 2; // 4 ppqn
+		// added ppqn
+		sys_params.cv_in_ppqn = 2;         // 4 ppqn
+		sys_params.cv_out_ppqn = 2;        // 4 ppqn
+		sys_params.midi_in_clock_mult = 1; // x1
 
 		// finalize
 		sys_params.version = LPE_SYS_PARAMS_VERSION;
