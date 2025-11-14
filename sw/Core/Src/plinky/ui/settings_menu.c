@@ -24,6 +24,8 @@ typedef enum Item {
 	I_MIDI_OUT_CH,
 	// cv
 	I_CV_QUANT = S_CV * 8,
+	I_CV_PPQN_IN,
+	I_CV_PPQN_OUT,
 	// actions
 	I_REBOOT = S_ACTIONS * 8,
 	I_TOUCH_CALIB,
@@ -39,6 +41,8 @@ const static u8 num_options[NUM_ITEMS] = {
     [I_MIDI_IN_CH] = 16,
     [I_MIDI_OUT_CH] = 16,
     [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
+    [I_CV_PPQN_IN] = NUM_PPQN_VALUES,
+    [I_CV_PPQN_OUT] = NUM_PPQN_VALUES,
     [I_REBOOT] = 1,
     [I_TOUCH_CALIB] = 1,
     [I_CV_CALIB] = 1,
@@ -53,9 +57,10 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 };
 
 const static char* item_name[NUM_ITEMS] = {
-    [I_ACCEL_SENS] = "Acc sens",     [I_ENC_DIR] = "Enc dir",   [I_MIDI_IN_CH] = "In channel",
-    [I_MIDI_OUT_CH] = "Out channel", [I_CV_QUANT] = "Quant",    [I_REBOOT] = "Reboot",
-    [I_TOUCH_CALIB] = "Touch Calib", [I_CV_CALIB] = "CV Calib", [I_OG_PRESETS] = "OG Presets",
+    [I_ACCEL_SENS] = "Acc sens",     [I_ENC_DIR] = "Enc dir",       [I_MIDI_IN_CH] = "In channel",
+    [I_MIDI_OUT_CH] = "Out channel", [I_CV_QUANT] = "Quant",        [I_CV_PPQN_IN] = "PPQN in",
+    [I_CV_PPQN_OUT] = "PPQN out",    [I_REBOOT] = "Reboot",         [I_TOUCH_CALIB] = "Touch Calib",
+    [I_CV_CALIB] = "CV Calib",       [I_OG_PRESETS] = "OG Presets",
 };
 
 static Item cur_item = 0;
@@ -86,6 +91,12 @@ static void select_item(Item item, bool force) {
 	case I_CV_QUANT:
 		cur_value = sys_params.cv_quant;
 		break;
+	case I_CV_PPQN_IN:
+		cur_value = sys_params.cv_in_ppqn;
+		break;
+	case I_CV_PPQN_OUT:
+		cur_value = sys_params.cv_out_ppqn;
+		break;
 	default:
 		break;
 	}
@@ -108,6 +119,12 @@ static void save_value(u8 value) {
 		break;
 	case I_CV_QUANT:
 		set_sys_param(SYS_CV_QUANT, value);
+		break;
+	case I_CV_PPQN_IN:
+		set_sys_param(SYS_CV_PPQN_IN, value);
+		break;
+	case I_CV_PPQN_OUT:
+		set_sys_param(SYS_CV_PPQN_OUT, value);
 		break;
 	default:
 		break;
@@ -222,6 +239,11 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return val_buf;
 	case I_CV_QUANT:
 		return cv_quant_name[value];
+	// ppqns
+	case I_CV_PPQN_IN:
+	case I_CV_PPQN_OUT:
+		sprintf(val_buf, "%d", ppqn_values[value]);
+		return val_buf;
 	default:
 		sprintf(val_buf, "%d", value);
 		return val_buf;
