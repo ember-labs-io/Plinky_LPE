@@ -1,95 +1,283 @@
+// include tinyusb, undo their bool def
+#include "tusb.h"
+#undef bool
+
 #include "midi.h"
+// regular includes
 #include "memory.h"
 #include "synth/params.h"
+#include "synth/pitch_tools.h"
 #include "synth/strings.h"
+#include "synth/synth.h"
 #include "synth/time.h"
-#include "tusb.h"
 
 // midi uart, lives in main.c
 extern UART_HandleTypeDef huart3;
 
-#define NUM_14BIT_CCS 32
 #define MIDI_BUFFER_SIZE 16
+#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + pitchbend / 8)
 
-u8 midi_chan_pressure[NUM_MIDI_CHANNELS];
-s16 midi_chan_pitchbend[NUM_MIDI_CHANNELS];
-u8 midi_goal_note[NUM_STRINGS]; // the string is playing this note
+typedef enum MidiStringState {
+	MS_UNUSED,
+	MS_PRESSED,
+	MS_SUSTAINED,
+	MS_RINGING_OUT,
+} MidiStringState;
 
-void set_midi_goal_note(u8 string_id, u8 midi_note) {
-	midi_goal_note[string_id] = midi_note;
-}
+typedef struct MidiString {
+	MidiStringState state;
+	u8 note; // played note
+	u8 velocity;
+	u8 pressure;
+	bool suppressed; // suppressed by other touch
 
-static u8 clocks_to_send;
-static MidiMessageType send_transport;
+	// midi out
+	u8 goal_note;          // note we want to send to midi out
+	u16 position;          // position on string
+	u8 last_sent_note;     // last sent midi note
+	u8 note_on_pressure;   // pressure/velocity sent on note on
+	u8 aftertouch;         // last sent poly aftertouch
+	u8 last_sent_position; // last sent position CC
+	u8 last_sent_pressure; // last sent pressure CC
+} MidiString;
 
-void midi_send_clock(void) {
-	clocks_to_send++;
-}
+static const MidiString midi_init_string = {MS_UNUSED, 255, 0, 0, false, 255, 0, 255, 0, 0, 0, 0};
 
-void midi_send_transport(MidiMessageType transport_type) {
-	if (transport_type < MIDI_TIMING_CLOCK)
-		return;
-	send_transport = transport_type;
-}
-
-// buffers
-static u8 midi_receive_buffer[MIDI_BUFFER_SIZE];
+// buffers - double sized to allow linearizing cross-boundary reads/writes
+static u8 midi_receive_buffer[2 * MIDI_BUFFER_SIZE];
 static u8 midi_send_buffer[2 * MIDI_BUFFER_SIZE];
 static u8 midi_send_head;
 static u8 midi_send_tail;
 
-void init_midi(void) {
-	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, sizeof(midi_receive_buffer));
+// midi state
+static u8 channel_pressure;
+static s16 pitchbend;
+static bool sustain_pressed = false;
+static MidiString midi_string[NUM_STRINGS];
+
+// cue midi out
+static u8 clocks_to_send;
+static MidiMessageType send_transport;
+
+// == UTILS == //
+
+void midi_clear_all(void) {
+	memset(&midi_receive_buffer, 0, 2 * MIDI_BUFFER_SIZE);
+	memset(&midi_send_buffer, 0, 2 * MIDI_BUFFER_SIZE);
+	midi_send_head = 0;
+	midi_send_tail = 0;
+	channel_pressure = 0;
+	pitchbend = 0;
+	sustain_pressed = false;
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+		memcpy(&midi_string[string_id], &midi_init_string, sizeof(MidiString));
 }
 
-// === OUTPUT LOOP === //
+bool midi_string_used(u8 string_id) {
+	return midi_string[string_id].state != MS_UNUSED && !midi_string[string_id].suppressed;
+}
 
-// throw send buffer to the uart
-static void midi_buffer_to_uart(void) {
-	if (huart3.TxXferCount == 0 && midi_send_head != midi_send_tail) {
-		u8 from = midi_send_tail & 15;
-		u8 to = midi_send_head & 15;
-		if (to > from) {
-			midi_send_tail += (to - from);
-			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, to - from);
+void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
+	// midi strings are suppressed by any existing pressure (from touch, sequencer, etc)
+	midi_string[string_id].suppressed = *pressure > 0;
+
+	// not touched or suppressed => exit
+	if (midi_string[string_id].state == MS_UNUSED || midi_string[string_id].state == MS_RINGING_OUT
+	    || midi_string[string_id].suppressed)
+		return;
+
+	// a midi note is playing this string => get touch
+	*pressure = 1 + (midi_string[string_id].velocity + maxi(midi_string[string_id].pressure, channel_pressure)) * 16;
+	*position = midi_string[string_id].position;
+}
+
+s32 midi_get_pitch(u8 string_id) {
+	return PITCH_OFFSET_FROM_NOTE(midi_string[string_id].note);
+}
+
+// a midi note ends when it's ringing out and it's gone quiet, or overwritten by a different press
+void midi_try_end_note(u8 string_id) {
+	if (midi_string[string_id].state == MS_RINGING_OUT
+	    && (voices[string_id].env1_lvl < 0.001f || midi_string[string_id].suppressed))
+		midi_string[string_id].state = MS_UNUSED;
+}
+
+// == MAIN == //
+
+void init_midi(void) {
+	midi_clear_all();
+	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
+}
+
+static s32 string_pitch_at_pad(u8 string_id, u8 pad_y) {
+	Scale scale = param_index_poly(P_SCALE, string_id);
+	return pitch_at_step(scale, param_index_poly(P_DEGREE, string_id) + scale_steps_at_string(scale, string_id) + pad_y)
+	       + 12 * ((param_index_poly(P_OCT, string_id) << 9) + (param_val_poly(P_PITCH, string_id) >> 7));
+}
+
+static s32 string_center_pitch(u8 string_id) {
+	return (string_pitch_at_pad(string_id, 0) + string_pitch_at_pad(string_id, 7)) >> 1;
+}
+
+static u8 string_playing_note(u8 note) {
+	for (u8 string_id = 0; string_id < 8; ++string_id)
+		if (midi_string[string_id].state != MS_UNUSED && midi_string[string_id].note == note)
+			return string_id;
+	return 255;
+}
+
+// apply midi messages to plinky
+static void process_midi_msg(u8 status, u8 data1, u8 data2) {
+	MidiMessageType type = status & MIDI_TYPE_MASK;
+
+	// out of the system messages we only implement the time-related ones => forward to clock
+	if (type == MIDI_SYSTEM_COMMON_MSG) {
+		clock_rcv_midi(status);
+		return;
+	}
+
+	// channel voice messages: only listen on the chosen channel
+	if ((status & MIDI_CHANNEL_MASK) != sys_params.midi_in_chan)
+		return;
+
+	// turn silent note ons into note offs
+	if (type == MIDI_NOTE_ON && data2 == 0)
+		type = MIDI_NOTE_OFF;
+
+	switch (type) {
+	case MIDI_PROGRAM_CHANGE:
+		if (data1 < NUM_PRESETS)
+			cue_mem_item(data1);
+		break;
+	case MIDI_NOTE_OFF: {
+		u8 string_id = string_playing_note(data1);
+		if (string_id < NUM_STRINGS)
+			midi_string[string_id].state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
+	} break;
+	case MIDI_NOTE_ON: {
+		// try to map to existing string
+		u8 string_id = string_playing_note(data1);
+		// none found => find new string
+		if (string_id == 255) {
+			s32 midi_pitch = 12 *
+			                     // pitch from octave parameter
+			                     ((param_index(P_OCT) << 9)
+			                      // pitch from pitch parameter
+			                      + (param_val(P_PITCH) >> 7))
+			                 // pitch from midi note
+			                 + PITCH_OFFSET_FROM_NOTE(data1);
+			// find the best string for this midi note
+			u8 desired_string = 0;
+			// pitch falls below center of bottom string
+			if (midi_pitch < string_center_pitch(0))
+				desired_string = 0;
+			// pitch falls above center of top string
+			else if (midi_pitch >= string_center_pitch(7))
+				desired_string = 7;
+			// find the string with the closest center pitch
+			else {
+				s32 min_dist = __INT32_MAX__;
+				for (u8 i = 0; i < NUM_STRINGS; i++) {
+					u32 pitch_dist = abs(string_center_pitch(i) - midi_pitch);
+					if (pitch_dist < min_dist) {
+						min_dist = pitch_dist;
+						desired_string = i;
+					}
+				}
+			}
+			// find closest non-sounding string
+			u8 min_string_dist = 255;
+			for (u8 i = 0; i < NUM_VOICES; i++) {
+				u8 dist = abs(i - desired_string);
+				if (midi_string[i].state == MS_UNUSED && voices[i].env1_lvl < 0.001f && dist < min_string_dist) {
+					min_string_dist = dist;
+					string_id = i;
+				}
+			}
+			// none found => find quietest non-pressed string
+			float min_vol = __FLT_MAX__;
+			if (string_id == 255) {
+				for (u8 i = 0; i < NUM_VOICES; i++) {
+					float vol = voices[i].env1_lvl;
+					if ((midi_string[i].state == MS_UNUSED || midi_string[i].state == MS_RINGING_OUT)
+					    && !(string_touched & (1 << i)) && vol < min_vol) {
+						min_vol = vol;
+						string_id = i;
+					}
+				}
+			}
+			// collect position on found string
+			if (string_id < NUM_STRINGS) {
+				midi_string[string_id].position = 7 << 8;
+				for (u8 pad = 7; pad > 0; pad--)
+					if (midi_pitch >= string_pitch_at_pad(string_id, pad))
+						midi_string[string_id].position = (7 - pad) << 8;
+			}
 		}
-		else if (to < from) {
-			// wrapped! send from->16, and 0->to
-			u8 send_len = (MIDI_BUFFER_SIZE - from) + to;
-			// copy looped part to end so we can send it all in one go! good on us.
-			memcpy(midi_send_buffer + MIDI_BUFFER_SIZE, midi_send_buffer, to);
-			midi_send_tail += send_len;
-			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, send_len);
+		// save in string
+		if (string_id < NUM_STRINGS)
+			midi_string[string_id] = (MidiString){MS_PRESSED, data1, data2};
+	} break;
+	case MIDI_POLY_KEY_PRESSURE: {
+		u8 string_id = string_playing_note(data1);
+		if (string_id < NUM_STRINGS)
+			midi_string[string_id].pressure = data2;
+	} break;
+	case MIDI_PITCH_BEND:
+		pitchbend = (data1 + (data2 << 7)) - 0x2000;
+		break;
+	case MIDI_CHANNEL_PRESSURE:
+		channel_pressure = data1;
+		break;
+	case MIDI_CONTROL_CHANGE:
+		// sustain
+		if (data1 == 64) {
+			bool new_sustain = data2 >= 64;
+			if (new_sustain != sustain_pressed) {
+				sustain_pressed = new_sustain;
+				// on a sustain release, release all midi notes that were held by the sustain
+				if (!sustain_pressed) {
+					for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+						if (midi_string[string_id].state == MS_SUSTAINED)
+							midi_string[string_id].state = MS_RINGING_OUT;
+				}
+			}
 		}
+		// update parameters from ccs
+		else
+			params_rcv_cc(data1, data2);
+		break;
+	default:
+		break;
 	}
 }
 
-// add midi bytes to the send buffer
-static bool send_midi_serial(const u8* data, int len) {
-	if (len <= 0)
-		return true;
-	if (midi_send_head - midi_send_tail + len > MIDI_BUFFER_SIZE)
-		return false; // full
-	while (len--)
-		midi_send_buffer[(midi_send_head++) & 15] = *data++;
-	return true;
+static u8 num_midi_bytes(u8 status) {
+	if (status >= MIDI_TUNE_REQUEST)
+		return 1;
+	if ((status & MIDI_TYPE_MASK) == MIDI_PROGRAM_CHANGE || (status & MIDI_TYPE_MASK) == MIDI_CHANNEL_PRESSURE
+	    || status == MIDI_TIME_CODE || status == MIDI_SONG_SELECT)
+		return 2;
+	return 3;
 }
 
 // send midi msg to uart and usb, returns false if serial too full
 static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	// prepare message
-	u8 num_bytes = 3;
-	if (status == MIDI_PROGRAM_CHANGE || status == MIDI_CHANNEL_PRESSURE)
-		num_bytes = 2;
+	u8 num_bytes = num_midi_bytes(status);
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
 		status += sys_params.midi_out_chan;
+	// midi buffer full
+	if (midi_send_head - midi_send_tail + num_bytes > MIDI_BUFFER_SIZE)
+		return false;
+	// prepare usb packet
 	u8 buf[4] = {status >> 4, status, data1, data2};
 
 #ifndef DEBUG_LOG
 	// send to serial
-	if (!send_midi_serial(buf + 1, num_bytes)) {
-		return false;
-	}
+	const u8* src = buf + 1;
+	while (num_bytes--)
+		midi_send_buffer[(midi_send_head++) & 15] = *src++;
 #endif
 
 	// send to usb
@@ -98,18 +286,13 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 }
 
 // outgoing midi gets processed once and sent out identically to serial and usb
-void process_all_midi_out(void) {
+static void cue_midi_out(void) {
 // exit if uart is used for debug logging
 #ifdef DEBUG_LOG
 	return;
 #endif
 
 	static u8 string_id = 0;
-	static u8 note[NUM_STRINGS];             // last sent midi note
-	static u8 note_on_pressure[NUM_STRINGS]; // pressure/velocity sent on note on
-	static u8 aftertouch[NUM_STRINGS];       // last sent poly aftertouch
-	static u8 position[NUM_STRINGS];         // last sent position CC
-	static u8 pressure[NUM_STRINGS];         // last sent pressure CC
 
 	// exit if the uart is not ready
 	if (huart3.TxXferCount)
@@ -135,7 +318,7 @@ void process_all_midi_out(void) {
 		bool pos_stable = abs(prevsynthf->pos - synthf->pos) < 32;
 		bool pres_significant = synthf->pres > 200;
 		// these are our targets
-		u8 target_note = midi_goal_note[string_id];
+		u8 target_note = midi_string[string_id].goal_note;
 		u8 target_pressure = clampi((synthf->pres - 100) / 48, 0, 127);
 
 		// take out some undesired note/pressure values
@@ -145,223 +328,131 @@ void process_all_midi_out(void) {
 			target_note = 0;
 
 		// one loop checks all needed outgoing midi messages for one voice
-		bool sent = false;
-		u8 cur_note = note[string_id];
+		u8 initial_head = midi_send_head;
+		MidiString* str = &midi_string[string_id];
+		u8 cur_note = str->last_sent_note;
 		// note has changed
 		if (target_note != cur_note) {
 			// we were playing a note => send note off
 			if (cur_note) {
 				if (!send_midi_msg(MIDI_NOTE_OFF, cur_note, 0))
 					return; // if the buffer is full, we exit the function and try again next time
-				note[string_id] = 0;
-				aftertouch[string_id] = 0;
-				sent = true;
+				str->last_sent_note = 0;
+				str->aftertouch = 0;
 			}
 			// we start playing a new note => send note on
-			if (target_note != 0 && pos_stable && pres_stable) {
+			if (target_note && pos_stable && pres_stable) {
 				// we use the current pressure as the note velocity
 				if (!send_midi_msg(MIDI_NOTE_ON, target_note, target_pressure))
 					return;
-				note[string_id] = target_note;
-				note_on_pressure[string_id] = target_pressure;
-				aftertouch[string_id] = 0;
-				sent = true;
+				str->last_sent_note = target_note;
+				str->note_on_pressure = target_pressure;
+				str->aftertouch = 0;
 			}
 		}
 		// we define aftertouch as any pressure on top of the pressure when the note started
-		u8 goal_aftertouch = maxi(target_pressure - note_on_pressure[string_id], 0);
-		if (abs(goal_aftertouch - aftertouch[string_id]) > 4) {
+		u8 goal_aftertouch = maxi(target_pressure - str->note_on_pressure, 0);
+		if (abs(goal_aftertouch - str->aftertouch) > 4) {
 			// poly aftertouch (only when pressure difference is larger than 4)
 			if (!send_midi_msg(MIDI_POLY_KEY_PRESSURE, cur_note, goal_aftertouch))
 				return;
-			aftertouch[string_id] = goal_aftertouch;
-			sent = true;
+			str->aftertouch = goal_aftertouch;
 		}
 		// voice position, CC32 - CC39
 		u8 goal_position = clampi(127 - (synthf->pos / 13 - 16), 0, 127);
-		if (abs(goal_position - position[string_id]) > 1 && pres_significant && pres_stable) {
+		if (abs(goal_position - str->last_sent_position) > 1 && pres_significant && pres_stable) {
 			if (!send_midi_msg(MIDI_CONTROL_CHANGE, 32 + string_id, goal_position))
 				return;
-			position[string_id] = goal_position;
-			sent = true;
+			str->last_sent_position = goal_position;
 		}
 		// voice pressure, CC40 - CC47
-		if (abs(target_pressure - pressure[string_id]) > 1) {
+		if (abs(target_pressure - str->last_sent_pressure) > 1) {
 			if (!send_midi_msg(MIDI_CONTROL_CHANGE, 40 + string_id, target_pressure))
 				return;
-			pressure[string_id] = target_pressure;
-			sent = true;
+			str->last_sent_pressure = target_pressure;
 		}
 
 		// jump to next voice
 		string_id = (string_id + 1) & 7;
 
-		// if we sent any midi message for this voice, send the midi buffer to the uart and exit the function
+		// if we sent any midi message for this voice, exit the function
 		// the next time we enter the function again, string_id will be set to the next voice
-		if (sent) {
-			midi_buffer_to_uart();
-			return;
-		}
-	}
-}
-
-// === INPUT LOOP === //
-
-// apply midi messages to plinky
-static void process_midi_msg(u8 status, u8 d1, u8 d2) {
-	u8 chan = status & 0x0F;              // save the channel
-	MidiMessageType type = status & 0xF0; // take the channel out
-
-	// allow only selected channel and system msgs
-	if (chan != sys_params.midi_in_chan && type != MIDI_SYSTEM_COMMON_MSG)
-		return;
-
-	// turn silent note ons into note offs
-	if (type == MIDI_NOTE_ON && d2 == 0) {
-		status = MIDI_NOTE_OFF | chan;
-		type = MIDI_NOTE_OFF;
-	}
-
-	switch (type) {
-	case MIDI_PROGRAM_CHANGE:
-		if (d1 < NUM_PRESETS)
-			cue_mem_item(d1);
-		break;
-	// note related: to the strings!
-	case MIDI_NOTE_OFF:
-	case MIDI_NOTE_ON:
-	case MIDI_POLY_KEY_PRESSURE:
-		strings_rcv_midi(status, d1, d2);
-		break;
-	case MIDI_PITCH_BEND:
-		midi_chan_pitchbend[chan] = (d1 + (d2 << 7)) - 0x2000;
-		break;
-	case MIDI_CHANNEL_PRESSURE:
-		midi_chan_pressure[chan] = d1;
-		break;
-	case MIDI_CONTROL_CHANGE:
-		// sustain is sent to the strings
-		if (d1 == 64) {
-			strings_rcv_midi(status, d1, d2);
+		if (midi_send_head != initial_head)
 			break;
-		}
-
-		// CCs 0 through 31 are treated as regular 7 bit CCs by default
-		// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
-		// treated as 14 bit CCs
-		static u8 cc14[NUM_14BIT_CCS][2];
-		static bool seen_14bit = false;
-		Param param_id;
-		s16 value;
-
-		if (!seen_14bit && d1 >= NUM_14BIT_CCS && d1 < 2 * NUM_14BIT_CCS)
-			seen_14bit = true;
-
-		// 14 bit CCs
-		if (seen_14bit && d1 < 2 * NUM_14BIT_CCS) {
-			u8 param_cc = d1 % NUM_14BIT_CCS;
-			param_id = midi_cc_table[param_cc];
-			if (param_id == NUM_PARAMS)
-				break;
-			cc14[param_cc][d1 / NUM_14BIT_CCS] = d2;
-			value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * RAW_SIZE / 16383;
-		}
-		// 7 bit CCs
-		else {
-			param_id = midi_cc_table[d1];
-			if (param_id == NUM_PARAMS)
-				return;
-			// save in cc14 array in case the second byte comes in later
-			if (d1 < NUM_14BIT_CCS)
-				cc14[d1][0] = d2;
-			value = d2 * RAW_SIZE / 127;
-		}
-
-		// scale from unsigned to signed
-		if (param_signed(param_id))
-			value = value * 2 - RAW_SIZE;
-
-		// save
-		save_param_raw(param_id, SRC_BASE, value);
-		break;
-	// out of the system messages we only implement the time-related ones => forward to clock
-	case MIDI_SYSTEM_COMMON_MSG:
-		clock_rcv_midi(status);
-		break;
-	default:
-		break;
 	}
 }
 
-// read bytes from *buf and put them into midi messages
-static void midi_bytes_to_msg(const u8* buf, u8 len) {
+void process_midi(void) {
+	cue_midi_out();
+
+	// send to uart
+	if (midi_send_head != midi_send_tail) {
+		u8 from = midi_send_tail & 15;
+		u8 to = midi_send_head & 15;
+		if (to > from) {
+			midi_send_tail += (to - from);
+			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, to - from);
+		}
+		else {
+			u8 send_len = (MIDI_BUFFER_SIZE - from) + to;
+			memcpy(midi_send_buffer + MIDI_BUFFER_SIZE, midi_send_buffer, to);
+			midi_send_tail += send_len;
+			HAL_UART_Transmit_DMA(&huart3, midi_send_buffer + from, send_len);
+		}
+	}
+
+	// serial midi in
+	static u8 last_read_pos = 0;
 	static u8 state = 0;
 	static u8 msg[3] = {0};
-	for (; len--;) {
-		u8 data = *buf++;
-		// status byte
-		if (data & 0x80) {
-			// real-time msg
-			if ((data & 0xF8) == 0xF8) {
-				// handle immediately
-				process_midi_msg(data, 0, 0);
-			}
-			// channel mode msg
-			else if ((data & 0xF0) == 0xF0) {
-				// cancels running status, no further processing
-				msg[0] = 0;
-			}
-			// channel voice msg, start new
-			else {
-				msg[0] = data;
-				state = 1;
-			}
-		}
-		// data byte
-		else {
-			// not gathering a channel voice msg, ignore
-			if (msg[0] == 0) {
-				continue;
-			}
-			// running status
-			if (state == 3) {
-				state = 1;
-			}
-			// save data
-			msg[state++] = data;
-			// program change and channel pressure only have one data byte
-			if (state == 2 && ((msg[0] & 0xF0) == MIDI_PROGRAM_CHANGE || (msg[0] & 0xF0) == MIDI_CHANNEL_PRESSURE)) {
-				process_midi_msg(msg[0], msg[1], 0);
-			}
-			// we received a full midi msg, process
-			else if (state == 3) {
-				process_midi_msg(msg[0], msg[1], msg[2]);
-			}
-		}
-	}
-}
-
-// handles up to one buffer (16 bytes) of incoming serial midi data
-static void process_serial_midi_in(void) {
-	// pass the midi out buffer to the uart
-	// rj: why is this in the midi in function?
-	midi_buffer_to_uart();
-	// get midi bytes from buffer and pass them to midi_bytes_to_msg()
-	static u8 last_read_pos = 0;
 	u8 read_pos = MIDI_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(huart3.hdmarx);
 	if (read_pos != last_read_pos) {
-		if (read_pos > last_read_pos) {
-			midi_bytes_to_msg(&midi_receive_buffer[last_read_pos], read_pos - last_read_pos);
-		}
+		u8 len;
+		if (read_pos > last_read_pos)
+			len = read_pos - last_read_pos;
+		// linearize read across buffer boundary
 		else {
-			midi_bytes_to_msg(&midi_receive_buffer[last_read_pos], MIDI_BUFFER_SIZE - last_read_pos);
-			midi_bytes_to_msg(&midi_receive_buffer[0], read_pos);
+			len = read_pos - last_read_pos + MIDI_BUFFER_SIZE;
+			memcpy(midi_receive_buffer + MIDI_BUFFER_SIZE, midi_receive_buffer, read_pos);
 		}
+		const u8* buf = &midi_receive_buffer[last_read_pos];
+		for (; len--;) {
+			u8 data = *buf++;
+			// status byte
+			if (data & MIDI_STATUS_BYTE_MASK) {
+				// real-time msg
+				if ((data & MIDI_REAL_TIME_MASK) == MIDI_REAL_TIME_MASK)
+					// handle immediately
+					process_midi_msg(data, 0, 0);
+				// channel mode msg
+				else if ((data & 0xF0) == 0xF0)
+					// cancels running status, no further processing
+					msg[0] = 0;
+				// channel voice msg, start new
+				else {
+					msg[0] = data;
+					state = 1;
+				}
+			}
+			// data byte
+			else {
+				// not gathering a channel voice msg, ignore
+				if (msg[0] == 0)
+					continue;
+				// running status
+				if (state == 3)
+					state = 1;
+				// save data
+				msg[state++] = data;
+				// received enough bytes
+				if (state == num_midi_bytes(msg[0]))
+					process_midi_msg(msg[0], msg[1], msg[2]);
+			}
+		}
+		last_read_pos = read_pos;
 	}
-	last_read_pos = read_pos;
-}
 
-static void process_usb_midi_in(void) {
+	// usb midi in
 	const static u8 max_packets_per_call = 2;
 	u8 midi_packet[4];
 	u8 packets_handled = 0;
@@ -373,10 +464,20 @@ static void process_usb_midi_in(void) {
 	} while (packets_handled < max_packets_per_call);
 }
 
-void process_midi(void) {
-	process_all_midi_out();
-	process_serial_midi_in();
-	process_usb_midi_in();
+// == CUE MIDI OUT == //
+
+void midi_send_clock(void) {
+	clocks_to_send++;
+}
+
+void midi_send_transport(MidiMessageType transport_type) {
+	if (transport_type < MIDI_TIMING_CLOCK)
+		return;
+	send_transport = transport_type;
+}
+
+void midi_set_goal_note(u8 string_id, u8 midi_note) {
+	midi_string[string_id].goal_note = midi_note;
 }
 
 // == AUX == //
@@ -397,13 +498,6 @@ void debug_log(const char* format, ...) {
 	midi_send_buffer[(midi_send_head++) & 15] = '\n';
 }
 
-// panic
-static void midi_panic(void) {
-	memset(midi_chan_pressure, 0, sizeof(midi_chan_pressure));
-	memset(midi_chan_pitchbend, 0, sizeof(midi_chan_pitchbend));
-	strings_clear_midi();
-}
-
 // from https://community.st.com/s/question/0D50X00009XkflR/haluartirqhandler-bug
 // what a trash fire
 // USART Error Handler
@@ -414,6 +508,6 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart) {
 	/* Disable the UART Error Interrupt: (Frame error, noise error, overrun error) */
 	__HAL_UART_DISABLE_IT(huart, UART_IT_ERR);
 	// The most important thing when UART framing error occur/any error is restart the RX process
-	midi_panic();
-	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, sizeof(midi_receive_buffer));
+	midi_clear_all();
+	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
 }
