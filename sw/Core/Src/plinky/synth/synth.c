@@ -5,9 +5,15 @@
 #include "gfx/gfx.h"
 #include "hardware/adc_dac.h"
 #include "hardware/memory.h"
+#include "hardware/midi.h"
+#include "params.h"
 #include "pitch_tools.h"
 #include "sampler.h"
 #include "strings.h"
+
+#define PITCH_PER_SEMI 512
+#define PITCH_BASE ((32768 - (12 << 9)) + 512 + 101) // pitch value for C4
+#define PITCH_TO_SCALE_STEPS(pitch, scale) (((pitch / 512) * scale_table[scale][0] + 1) / 12)
 
 Voice voices[NUM_VOICES];
 
@@ -36,7 +42,6 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	// since we already have an expression of the max pressure on the pressure CV out - should we make gate out binary?
 	cv_gate_value = maxi(cv_gate_value, (int)(pres_scaled * 65536.f));
 
-	u8 mask = 1 << string_id;
 	s32 note_pitch = 0;   // pitch offset caused by the played note
 	s32 fine_pitch = 0;   // pitch offset caused by micro_tone / spread
 	s32 osc_pitch = 0;    // resulting pitch of current oscillator
@@ -59,10 +64,11 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	// scale step from rotate parameter
 	s8 string_step_offset = param_index_poly(P_DEGREE, string_id);
 
+	bool using_midi = midi_string_used(string_id);
+
 	// for midi
-	if ((midi_pitch_override & mask) && !(midi_suppress & mask)) {
-		note_pitch = midi_note_to_pitch_offset(midi_note[string_id], midi_channel[string_id]);
-	}
+	if (using_midi)
+		note_pitch = midi_get_pitch(string_id);
 	// for touch
 	else {
 		scale = param_index_poly(P_SCALE, string_id);
@@ -75,7 +81,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 		// cv
 		s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
 		if (sys_params.cv_quant == CVQ_SCALE)
-			cv_step_offset = pitch_to_scale_steps(cv_pitch, scale); // quantized cv
+			cv_step_offset = PITCH_TO_SCALE_STEPS(cv_pitch, scale); // quantized cv
 		else
 			cv_pitch_offset = cv_pitch; // unquantized cv
 	}
@@ -86,10 +92,9 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	// loop through oscillators
 	for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
 		// for midi
-		if ((midi_pitch_override & mask) && !(midi_suppress & mask)) {
+		if (using_midi)
 			// generate pitch spread
 			fine_pitch = (osc_id - 2) * 64 * param_val_poly(P_MICROTONE, string_id) >> 16;
-		}
 		// for touch
 		else {
 			u16 position = s_touch_sort->pos; // touch position
@@ -133,7 +138,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	high_string_pitch = summed_pitch;
 	got_high_pitch = true;
 	// the outgoing midi note is generated from oscillator pitch
-	set_midi_goal_note(string_id, quad_pitch_to_midi_note(summed_pitch));
+	midi_set_goal_note(string_id, clampi((summed_pitch + 2 * PITCH_PER_SEMI) / (4 * PITCH_PER_SEMI) + 24, 0, 127));
 }
 
 static float update_envelope(u8 voice_id, Voice* voice) {
@@ -352,7 +357,6 @@ static void apply_subtractive_lpg_noise(u8 voice_id, Voice* voice, float goal_lp
 }
 
 static void run_voice(u8 voice_id, u32* dst) {
-	u8 mask = 1 << voice_id;
 	Voice* voice = &voices[voice_id];
 	Touch* s_touch = get_string_touch(voice_id);
 
@@ -360,12 +364,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 	if (s_touch->pres > synth_max_pres)
 		synth_max_pres = s_touch->pres;
 
-	// midi note is released but still playing
-	// and it's being suppressed by touch/latch/seq or its release phase has rung out
-	if (((midi_pitch_override & mask) && !(midi_pressure_override & mask))
-	    && ((midi_suppress & mask) || (voice->env1_lvl < 0.001f)))
-		// disable pitch override, this truly turns off the note
-		midi_pitch_override &= ~mask;
+	// turn off midi note on this voice when needed
+	midi_try_end_note(voice_id);
 
 	// generate oscillators
 	generate_oscs(voice_id, voice);

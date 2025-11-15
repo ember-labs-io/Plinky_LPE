@@ -1,19 +1,6 @@
 #pragma once
-#include "hardware/midi.h"
 #include "params.h"
 #include "utils.h"
-
-#define PITCH_PER_SEMI 512
-#define PITCH_BASE ((32768 - (12 << 9)) + 512 + 101) // pitch value for C4
-
-// center-map pitch 0 to midi note 24
-#define quad_pitch_to_midi_note(quad_pitch)                                                                            \
-	clampi((quad_pitch + 2 * PITCH_PER_SEMI) / (4 * PITCH_PER_SEMI) + 24, 0, 127)
-
-#define midi_note_to_pitch_offset(midi_note, midi_channel)                                                             \
-	(((midi_note - 24) << 9) + midi_chan_pitchbend[midi_channel] / 8)
-
-#define pitch_to_scale_steps(pitch, scale) (((pitch / 512) * scale_table[scale][0] + 1) / 12)
 
 #define steps_in_scale(scale) scale_table[scale][0]
 
@@ -82,32 +69,4 @@ static inline u8 scale_steps_at_string(Scale scale, u8 string_id) {
 		}
 	}
 	return scale_steps[string_id];
-}
-
-static inline int string_pitch_at_pad(u8 string_id, u8 pad_y) {
-	Scale scale = param_index_poly(P_SCALE, string_id);
-	// pitch calculation:
-	return
-	    // calculate pitch offset, based on
-	    pitch_at_step(
-	        // the scale
-	        scale,
-	        // the step-offset set by "degree"
-	        param_index_poly(P_DEGREE, string_id) +
-	            // the step-offset of this string based on "column"
-	            scale_steps_at_string(scale, string_id) +
-	            // the step-offset caused by the pad_id on the string
-	            pad_y)
-	    +
-	    // add this to the pitch of the bottom-left pad_id
-	    12
-	        * (
-	            // octave offset
-	            (param_index_poly(P_OCT, string_id) << 9) +
-	            // pitch offset
-	            (param_val_poly(P_PITCH, string_id) >> 7));
-}
-
-static inline int string_center_pitch(u8 string_id) {
-	return (string_pitch_at_pad(string_id, 0) + string_pitch_at_pad(string_id, 7)) / 2;
 }

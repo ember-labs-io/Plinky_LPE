@@ -35,7 +35,7 @@ extern SampleInfo cur_sample_info;
 
 // utils
 u32 get_sample_address(void);
-void set_sys_param(SysParam param, u16 value);
+bool set_sys_param(SysParam param, u16 value);
 
 // web-editor
 u8* preset_flash_ptr(u8 preset_id);
