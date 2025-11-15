@@ -4,6 +4,7 @@
 #include "hardware/memory.h"
 #include "pad_actions.h"
 #include "settings_menu.h"
+#include "synth/params.h"
 #include "synth/pitch_tools.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"

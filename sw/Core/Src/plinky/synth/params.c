@@ -7,6 +7,7 @@
 #include "hardware/encoder.h"
 #include "hardware/leds.h"
 #include "hardware/memory.h"
+#include "hardware/midi.h"
 #include "lfos.h"
 #include "param_defs.h"
 #include "sampler.h"
@@ -95,6 +96,10 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 	return true;
 }
 
+static bool param_signed(Param param_id) {
+	return param_info[range_type[param_id]] & SIGNED;
+}
+
 static bool param_signed_or_mod(Param param_id, ModSource mod_src) {
 	return param_signed(param_id) || mod_src != SRC_BASE;
 }
@@ -105,10 +110,6 @@ static Param get_recent_param(void) {
 
 const Preset* init_params_ptr() {
 	return &init_params;
-}
-
-bool param_signed(Param param_id) {
-	return param_info[range_type[param_id]] & SIGNED;
 }
 
 // will this strip produce a press for the synth?
@@ -136,6 +137,46 @@ bool arp_active(void) {
 void params_update_touch_pointers(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		touch_pointer[string_id] = get_string_touch(string_id);
+}
+
+void params_rcv_cc(u8 d1, u8 d2) {
+	// CCs 0 through 31 are treated as regular 7 bit CCs by default
+	// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
+	// treated as 14 bit CCs
+	static u8 cc14[NUM_14BIT_CCS][2];
+	static bool seen_14bit = false;
+	Param param_id;
+	s16 value;
+
+	if (!seen_14bit && d1 >= NUM_14BIT_CCS && d1 < 2 * NUM_14BIT_CCS)
+		seen_14bit = true;
+
+	// 14 bit CCs
+	if (seen_14bit && d1 < 2 * NUM_14BIT_CCS) {
+		u8 param_cc = d1 % NUM_14BIT_CCS;
+		param_id = midi_cc_table[param_cc];
+		if (param_id == NUM_PARAMS)
+			return;
+		cc14[param_cc][d1 / NUM_14BIT_CCS] = d2;
+		value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * RAW_SIZE / 16383;
+	}
+	// 7 bit CCs
+	else {
+		param_id = midi_cc_table[d1];
+		if (param_id == NUM_PARAMS)
+			return;
+		// save in cc14 array in case the second byte comes in later
+		if (d1 < NUM_14BIT_CCS)
+			cc14[d1][0] = d2;
+		value = d2 * RAW_SIZE / 127;
+	}
+
+	// scale from unsigned to signed
+	if (param_signed(param_id))
+		value = value * 2 - RAW_SIZE;
+
+	// save
+	save_param_raw(param_id, SRC_BASE, value);
 }
 
 // == MAIN == //

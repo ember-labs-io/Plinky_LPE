@@ -3,6 +3,7 @@
 #include "hardware/adc_dac.h"
 #include "hardware/leds.h"
 #include "hardware/memory.h"
+#include "hardware/midi.h"
 #include "hardware/touchstrips.h"
 
 #define NUM_ITEMS 64
@@ -125,10 +126,12 @@ static void save_value(u8 value) {
 		set_sys_param(SYS_REVERSE_ENCODER, value);
 		break;
 	case I_MIDI_IN_CH:
-		set_sys_param(SYS_MIDI_IN_CHAN, value);
+		if (set_sys_param(SYS_MIDI_IN_CHAN, value))
+			midi_clear_all();
 		break;
 	case I_MIDI_OUT_CH:
-		set_sys_param(SYS_MIDI_OUT_CHAN, value);
+		if (set_sys_param(SYS_MIDI_OUT_CHAN, value))
+			midi_clear_all();
 		break;
 	case I_MIDI_CLOCK_IN_MULT:
 		set_sys_param(SYS_MID_CLOCK_IN_MULT, value);

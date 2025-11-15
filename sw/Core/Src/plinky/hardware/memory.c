@@ -177,7 +177,8 @@ u8* preset_flash_ptr(u8 preset_id) {
 	return (u8*)fp;
 }
 
-void set_sys_param(SysParam param, u16 value) {
+// returns whether this saved the new value
+bool set_sys_param(SysParam param, u16 value) {
 	s32 saved_value = 0;
 	switch (param) {
 	case SYS_PRESET_ID:
@@ -218,7 +219,7 @@ void set_sys_param(SysParam param, u16 value) {
 		break;
 	}
 	if (value == saved_value)
-		return;
+		return false;
 	switch (param) {
 	case SYS_PRESET_ID:
 		sys_params.preset_id = value;
@@ -259,6 +260,7 @@ void set_sys_param(SysParam param, u16 value) {
 		break;
 	}
 	log_ram_edit(SEG_SYS_PARAMS);
+	return true;
 }
 
 // == FLASH WRITING == //

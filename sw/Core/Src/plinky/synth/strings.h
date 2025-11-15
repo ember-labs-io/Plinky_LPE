@@ -9,12 +9,6 @@
 extern u8 string_touched; // sampler & params
 extern u8 env_trig_mask;  // arp
 
-extern u8 midi_note[NUM_STRINGS];
-extern u8 midi_channel[NUM_STRINGS];
-extern u8 midi_pressure_override;
-extern u8 midi_pitch_override;
-extern u8 midi_suppress;
-
 Touch* get_string_touch(u8 string_id);
 Touch* sorted_string_touch_ptr(u8 string_id);
 
@@ -22,7 +16,5 @@ void clean_string(u8 string_id);
 void clear_latch(void);
 
 void generate_string_touches(void);
-void strings_rcv_midi(u8 status, u8 d1, u8 d2);
-void strings_clear_midi(void);
 // this only exists for midi output - remove after midi cleanup
 Touch* get_string_touch_prev(u8 string_id, u8 frames_back);
