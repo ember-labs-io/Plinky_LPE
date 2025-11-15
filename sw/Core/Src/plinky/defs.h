@@ -196,7 +196,8 @@ typedef struct SysParams {
 	u8 cv_in_ppqn : 3;
 	u8 cv_out_ppqn : 3;
 	u8 midi_in_clock_mult : 2; // 0 = 1/2x, 1 = 1x, 2 = 2x
-	u8 pad[16 - 7];
+	u8 midi_in_vel_balance;    // balance between incoming velocity and pressure
+	u8 pad[16 - 8];
 	u8 version;
 } SysParams;
 
@@ -369,6 +370,7 @@ typedef enum SysParam {
 	SYS_PRESET_ALIGNED,
 	SYS_PATTERN_ALIGNED,
 	SYS_MID_CLOCK_IN_MULT,
+	SYS_MIDI_VEL_PRES_BALANCE,
 } SysParam;
 
 // PITCH
