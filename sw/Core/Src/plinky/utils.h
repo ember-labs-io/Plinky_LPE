@@ -101,6 +101,7 @@ static inline s32 map_s32(s32 value, s32 in_min, s32 in_max, s32 out_min, s32 ou
 
 // debug
 void gfx_debug(u8 row, const char* fmt, ...);
+void debug_log(const char* format, ...);
 static inline void DebugLog(const char* fmt, ...) {
 }
 

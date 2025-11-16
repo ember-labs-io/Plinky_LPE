@@ -10,3 +10,5 @@ void set_midi_goal_note(u8 string_id, u8 midi_note);
 
 void midi_send_clock(void);
 void midi_send_transport(MidiMessageType transport_type);
+
+void debug_log(const char* format, ...);
