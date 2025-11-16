@@ -109,11 +109,11 @@ void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noi
 		sizejit = param_val_poly(P_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
 		gratejit = param_val_poly(P_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
 	}
-	int trig = env_trig_mask & (1 << voice_id);
+	int trig = envelope_trigger & (1 << voice_id);
 
 	int prevsliceidx = voice->slice_id;
 	bool gp = ui_mode == UI_SAMPLE_EDIT;
-	u16 touch_pos = get_string_touch(voice_id)->pos;
+	u16 touch_pos = get_string_pos(voice_id);
 
 	// decide on the sample for the NEXT frame
 	if (trig) { // on trigger frames, we FADE out the old grains! then the next dma fetch will be the new sample and

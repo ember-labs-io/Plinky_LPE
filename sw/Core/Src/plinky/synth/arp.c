@@ -250,6 +250,9 @@ u8 arp_tick(u8 string_touch_mask) {
 		}
 	}
 
+	// arp overrides envelope triggers
+	envelope_trigger = 0;
+
 	// no touch
 	if (!string_touch_mask) {
 		arp_touch_mask = 0;
@@ -268,13 +271,9 @@ u8 arp_tick(u8 string_touch_mask) {
 	// suppress touches if required by conditional step
 	if (!c_step.play_step)
 		arp_touch_mask = 0;
-	// all arp triggers clean the string to make sure no remnants of the previous note are heard
-	for (u8 i = 0; i < NUM_STRINGS; i++)
-		if (arp_touch_mask & (1 << i))
-			clean_string(i);
-	// (re)trigger envelopes
+	// trigger envelopes
 	if (c_step.advance_step)
-		env_trig_mask |= arp_touch_mask;
+		envelope_trigger = arp_touch_mask;
 	return arp_touch_mask;
 }
 

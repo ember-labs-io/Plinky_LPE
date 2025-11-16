@@ -259,7 +259,7 @@ void cv_calib(void) {
 
 		// use touch to change cv_out values
 		for (u8 column = 0; column < 4; ++column) {
-			Touch* touch = get_touch_prev(column, 0);
+			const Touch* touch = get_touch(column, 0);
 			if (touch->pres >= 500) {
 				// touch start
 				if (pres_1back[column] < 500) {

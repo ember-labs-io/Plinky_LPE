@@ -43,13 +43,13 @@ static void osc_generation_init(void) {
 
 // take string values, calculate osc pitches and write them to voice
 void generate_oscs(u8 string_id, Voice* voice) {
-	float pres_scaled = get_string_touch(string_id)->pres * 1.f / TOUCH_MAX_POS;
+	s16 pressure = get_string_pres(string_id);
 
 	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes
 	// against eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value
 	// of this is, since we already have an expression of the max pressure on the pressure CV out - should we make
 	// gate out binary?
-	cv_gate_value = maxi(cv_gate_value, (int)(pres_scaled * 65536.f));
+	cv_gate_value = maxi(cv_gate_value, (s32)(pressure * 65536.f / TOUCH_FULL_PRES));
 
 	s32 note_pitch = 0;   // pitch offset caused by the played note
 	s32 fine_pitch = 0;   // pitch offset caused by micro_tone / spread
@@ -94,7 +94,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 
 	// we discard the two highest and lowest positions and use elements 2 through 5 to generate our oscillator
 	// pitches
-	Touch* s_touch_sort = sorted_string_touch_ptr(string_id) + 2;
+	const Touch* s_touch_sort = sorted_string_touch_ptr(string_id) + 2;
 
 	// loop through oscillators
 	for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
@@ -104,8 +104,8 @@ void generate_oscs(u8 string_id, Voice* voice) {
 			fine_pitch = (osc_id - 2) * 64 * param_val_poly(P_MICROTONE, string_id) >> 16;
 		// for touch
 		else {
-			u16 position = s_touch_sort->pos; // touch position
-			u8 pad_y = 7 - (position >> 8);   // pad on string
+			u16 position = s_touch_sort++->pos; // touch position
+			u8 pad_y = 7 - (position >> 8);     // pad on string
 			// pitch at step + cv
 			note_pitch = pitch_at_step(string_step_offset + pad_y + cv_step_offset, scale) + cv_pitch_offset;
 
@@ -134,8 +134,11 @@ void generate_oscs(u8 string_id, Voice* voice) {
 		voice->osc[osc_id].pitch = osc_pitch;
 		voice->osc[osc_id].goal_phase_diff =
 		    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
-		++s_touch_sort;
 	}
+
+	// only save pitches when string is pressed
+	if (pressure <= 0)
+		return;
 
 	// these are saving respectively the lowest and highest string that are pressed
 	if (!got_low_pitch) {
@@ -155,7 +158,7 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 	// calc goal lpg
 	if (string_touched & mask) {
 		float sens = param_val_poly(P_ENV_LVL1, voice_id) * (2.f / 65536.f);
-		goal_lpg = get_string_touch(voice_id)->pres * 1.f / TOUCH_MAX_POS * sens * sens;
+		goal_lpg = get_string_pres(voice_id) * 1.f / TOUCH_MAX_POS * sens * sens;
 		if (goal_lpg < 0.f)
 			goal_lpg = 0.f;
 		goal_lpg *= goal_lpg;
@@ -172,7 +175,7 @@ static float update_envelope(u8 voice_id, Voice* voice) {
 	float env_lvl = voice->env1_lvl;
 
 	// new touch: start new envelope
-	if (env_trig_mask & mask) {
+	if (envelope_trigger & mask) {
 		env_lvl *= sustain;
 		voice->env1_decaying = false;
 		voice->env1_peak = goal_lpg;
@@ -365,11 +368,11 @@ static void apply_subtractive_lpg_noise(u8 voice_id, Voice* voice, float goal_lp
 
 static void run_voice(u8 voice_id, u32* dst) {
 	Voice* voice = &voices[voice_id];
-	Touch* s_touch = get_string_touch(voice_id);
 
 	// track max pressure
-	if (s_touch->pres > synth_max_pres)
-		synth_max_pres = s_touch->pres;
+	s16 string_pres = get_string_pres(voice_id);
+	if (string_pres > synth_max_pres)
+		synth_max_pres = string_pres;
 
 	// turn off midi note on this voice when needed
 	midi_try_end_note(voice_id);

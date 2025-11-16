@@ -11,7 +11,7 @@
 
 FunctionPad function_pressed = FN_NONE;
 
-static u8 action_press_on_strip = 0; // does the strip have an action press? (mask)
+static u8 action_on_main_strip = 0; // does the strip have an action press? (mask)
 
 // ui & edit mode switching
 static u8 press_start_ui_mode = UI_DEFAULT;
@@ -216,19 +216,15 @@ static void hold_function(void) {
 	}
 }
 
-static bool validate_function_change(FunctionPad new_function, Touch* touch) {
+static bool validate_function_change(FunctionPad new_function) {
 	if (new_function == function_pressed)
-		return false;
-
-	// going from one function to another, apply hysteresis - dist from old pad should be larger than 192
-	if (function_pressed != FN_NONE && abs((function_pressed * 256 + 128) - touch->pos) < 192)
 		return false;
 
 	// accidental presses: rule out function presses if the surrounding synth pads are being pressed
 	if (hw_version == HW_PLINKY) {
-		Touch* strip_above = get_touch_prev(new_function, 0);
-		Touch* strip_left = get_touch_prev(maxi(0, new_function - 1), 0);
-		Touch* strip_right = get_touch_prev(mini(7, new_function + 1), 0);
+		const Touch* strip_above = get_touch(new_function, 0);
+		const Touch* strip_left = get_touch(maxi(0, new_function - 1), 0);
+		const Touch* strip_right = get_touch(mini(7, new_function + 1), 0);
 		if ((strip_above->pres > 256 && strip_above->pos >= 6 * 256)    // ~ bottom two pads of strip above
 		    || (strip_left->pres > 256 && strip_left->pos >= 7 * 256)   // ~ bottom pad of strip left
 		    || (strip_right->pres > 256 && strip_right->pos >= 7 * 256) // ~ bottom pad of strip right
@@ -241,44 +237,34 @@ static bool validate_function_change(FunctionPad new_function, Touch* touch) {
 
 void handle_pad_actions(u8 strip_id) {
 	static const u8 STABLE_PRESS_RANGE = 60;
-	static const u8 STABLE_POS_RANGE = 32;
-	static const u16 PRESS_TRESH = 400;
+	static const u8 SLIDE_HYSTERESIS = 192; // cover at least 25% of next pad
 
-	static u16 prev_valid_touch;
+	static u8 prev_action_pad[NUM_TOUCHSTRIPS] = {255, 255, 255, 255, 255, 255, 255, 255, 255};
 
-	u16 strip_mask = 1 << strip_id;
+	u16 mask = 1 << strip_id;
 	bool is_press_start = false;
-	Touch* touch = get_touch_prev(strip_id, 0);
-	Touch* touch_1back = get_touch_prev(strip_id, 1);
-	Touch* touch_2back = get_touch_prev(strip_id, 2);
+	const Touch* touch = get_touch(strip_id, 0);
+	const Touch* touch_1back = get_touch(strip_id, 1);
+	const Touch* touch_2back = get_touch(strip_id, 2);
 
+	bool valid_action = (strip_touched & mask) && !strip_available_for_synth(strip_id);
 	u8 pad_y = touch->pos >> 8;       // local pad (on strip, 0 - 7)
 	u8 pad_id = strip_id * 8 + pad_y; // global pad (on plate, 0 - 71)
 
-	bool touching = prev_valid_touch & strip_mask;
-	bool valid_touch =
-	    // pad not used for synth
-	    !strip_available_for_synth(strip_id)
-	    // pressing the same pad for the third frame
-	    && pad_y == touch_1back->pos >> 8
-	    && pad_y == touch_2back->pos >> 8
-	    // enough pressure (with hysteresis)
-	    && touch->pres > (touching ? 0 : PRESS_TRESH)
-	    // stable position for three frames (only on touch start)
-	    && (touching
-	        || (abs(touch_1back->pos - touch->pos) <= STABLE_POS_RANGE
-	            && abs(touch_2back->pos - touch->pos) <= STABLE_POS_RANGE));
-
-	if (valid_touch)
-		prev_valid_touch |= strip_mask;
-	else
-		prev_valid_touch &= ~strip_mask;
+	u8 prev_pad_y = prev_action_pad[strip_id];
+	// action tries to slide from one pad to the next
+	if (valid_action && prev_pad_y != 255
+	    && pad_y != prev_pad_y
+	    // apply position hysteresis, stay on same pad if failed
+	    && abs((prev_pad_y * 256 + 128) - touch->pos) < SLIDE_HYSTERESIS)
+		pad_y = prev_pad_y;
+	prev_action_pad[strip_id] = pad_y;
 
 	// function pads
 	if (strip_id == 8) {
-		if (valid_touch && validate_function_change(pad_y, touch))
+		if (valid_action && validate_function_change(pad_y))
 			press_function(pad_y);
-		else if (touch->pres <= 0 && function_pressed != FN_NONE)
+		else if (!valid_action && function_pressed != FN_NONE)
 			release_function();
 		// any function pressed => hold
 		if (function_pressed != FN_NONE)
@@ -287,25 +273,25 @@ void handle_pad_actions(u8 strip_id) {
 	}
 
 	// main grid
-	if (valid_touch) {
+	if (valid_action) {
 		// track main press
-		if (!action_press_on_strip) {
+		if (!action_on_main_strip) {
 			main_press_pad = pad_id;
 			main_press_start = millis();
 			main_press_ms = 0;
 			main_press_canceled = false;
 		}
 		// track press start
-		if (!(action_press_on_strip & strip_mask)) {
+		if (!(action_on_main_strip & mask)) {
 			is_press_start = true;
-			action_press_on_strip |= strip_mask;
+			action_on_main_strip |= mask;
 		}
 	}
 	else
-		action_press_on_strip &= ~strip_mask;
+		action_on_main_strip &= ~mask;
 
 	// actions
-	if (action_press_on_strip & strip_mask) {
+	if (action_on_main_strip & mask) {
 		switch (ui_mode) {
 		case UI_DEFAULT:
 		case UI_EDITING_A:
@@ -379,7 +365,7 @@ void handle_pad_actions(u8 strip_id) {
 
 void pad_actions_frame(void) {
 	// handle long presses - we're looking for exactly one strip being pressed
-	if (main_press_pad == 255 || !action_press_on_strip || !ispow2(action_press_on_strip)) {
+	if (main_press_pad == 255 || !action_on_main_strip || !ispow2(action_on_main_strip)) {
 		main_press_ms = 0;
 		return;
 	}
@@ -406,7 +392,7 @@ bool ptn_edit_active(void) {
 }
 
 bool mod_action_pressed(void) {
-	return action_press_on_strip & 128;
+	return action_on_main_strip & 128;
 }
 
 // returns whether this produced screen-filling graphics
@@ -443,7 +429,7 @@ bool oled_function_visuals(void) {
 }
 
 u8 ui_load_long_press_led(u8 x, u8 y, u8 pulse) {
-	if ((action_press_on_strip & (1 << x)) && main_press_pad == x * 8 + y && !main_press_canceled)
+	if ((action_on_main_strip & (1 << x)) && main_press_pad == x * 8 + y && !main_press_canceled)
 		return maxi(pulse, 1);
 	return 0;
 }
