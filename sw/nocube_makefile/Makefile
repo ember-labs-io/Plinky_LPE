@@ -138,6 +138,9 @@ CFLAGS = $(CFLAGS_COMMON) -Og -g3 -D_DEBUG -DDEBUG -gdwarf-2
 LDFLAGS = $(LDFLAGS_COMMON)
 endif
 
+# enable debug logging
+# CFLAGS += -DDEBUG_LOG
+
 # Print build type
 $(info Building in $(BUILD_TYPE) mode)
 

@@ -84,12 +84,15 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
 		status += sys_params.midi_out_chan;
 	u8 buf[4] = {status >> 4, status, data1, data2};
+
+#ifndef DEBUG_LOG
 	// send to serial
 	if (!send_midi_serial(buf + 1, num_bytes)) {
 		return false;
 	}
-	// if serial was successful, send to usb
-	// we assume this succeeds as it's so much faster than serial midi
+#endif
+
+	// send to usb
 	tud_midi_packet_write(buf);
 	return true;
 }
@@ -372,6 +375,21 @@ void process_midi(void) {
 }
 
 // == AUX == //
+
+// we debug log through the midi serial
+void debug_log(const char* format, ...) {
+#ifndef DEBUG_LOG
+	return;
+#endif
+
+	char buf[128];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(buf, sizeof(buf), format, args);
+	va_end(args);
+	for (u16 i = 0; buf[i] != '\0'; i++)
+		midi_send_buffer[(midi_send_head++) & 15] = buf[i];
+}
 
 // panic
 static void midi_panic(void) {
