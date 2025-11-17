@@ -36,10 +36,6 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	// since we already have an expression of the max pressure on the pressure CV out - should we make gate out binary?
 	cv_gate_value = maxi(cv_gate_value, (int)(pres_scaled * 65536.f));
 
-	// only recalculate the oscillator pitches if the string is touched
-	if (pres_scaled < 0.001f)
-		return;
-
 	u8 mask = 1 << string_id;
 	s32 note_pitch = 0;   // pitch offset caused by the played note
 	s32 fine_pitch = 0;   // pitch offset caused by micro_tone / spread

@@ -216,9 +216,10 @@ static void generate_string_touch(u8 string_id) {
 	}
 	pres_1back[string_id] = s_touch->pres;
 
-	// save resulting touch to main array
+	// save resulting touch to main array, the position is only valid if the string was touched
 	s_touch->pres = pressure;
-	s_touch->pos = position;
+	if (pressure > 0)
+		s_touch->pos = position;
 
 	// sort string's frames by position
 	sort8((int*)string_touch_sorted[string_id], (int*)string_touch[string_id]);
