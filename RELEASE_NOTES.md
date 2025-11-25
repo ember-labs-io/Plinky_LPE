@@ -1,10 +1,54 @@
 # Release notes
 
+[v0.4.0 - *The one with the manual saving*](#v040---the-one-with-the-manual-saving)  
 [v0.3.1](#v031)  
 [v0.3.0 - *The one with the parameters*](#v030---the-one-with-the-parameters)  
 [v0.2.1](#v021)  
 [v0.2.0 - *The one with the timing*](#v020---the-one-with-the-timing)  
 [About the refactor (LPE v0.0.0)](#about-the-refactor-lpe-v000)
+
+---
+
+## v0.4.0 - *The one with the manual saving*
+*Released on 26 November 2025*
+### New Save/Load UI
+- The currently active preset and pattern are no longer automatically saved
+- Changes to the currently active preset and pattern do survive a reboot
+- The load UI screen has been redesigned to make better use of the entire display
+- In the load UI, one of the brightly lit pads (selected preset, pattern or sample) softly pulses. This indicates that this item will get cleared when long-pressing the Clear-pad. (Previously there was no way to see which item would be cleared)
+- The load UI now works as follows:
+    - Short press
+        - Select this section to be cleared with the Clear pad
+    - Long press (arrow at the right edge of the screen points up)
+        - Load the pressed preset
+        - Load the pressed pattern
+        - Load/deactivate the pressed sample
+    - Hold the Load-pad + long-press (arrow at the right edge of the screen points down)
+        - Save current preset to selected slot
+        - Save current pattern to selected slot
+        - Open pressed sample in sample editor
+### General UI
+- Most long-press animations have been changed from fullscreen to a loading bar at the bottom of the screen
+- All delay times for short/long presses have been centralized and are now identical across the system
+- Renamed the strip with "shift pads" to "function pads" as only two of the eight pads are actually shifts
+- Part of the noise filtering for presses has been centralized. All non-synth presses now have the same noise filtering strategy. (Previously function pads were filtered differently from parameter pads)
+- Noise filtering on non-synth perssesis a little less strict, making them more responsive
+- Precision-editing modulation amounts (shift + encoder turn) is now more intuitive
+### Fixes
+- Lfo rate matches properly when upgrading presets from OG to LPE firmware
+- Latch properly clears when turned of by modulation
+- Restored correct timing for synced delay time
+- Restored exponential mapping of the sensitivity parameter to the depth of envelope 1
+- Restored CV output for mod sources
+- Restored modulation of voice parameters while the voice's envelope is in the release stage
+- Shape only uses saw when its value is exactly 0.0
+- Modulated shape value correctly stays within bounds of the same shape type
+- Shape type is shown in the parameter name
+- v0.3.0 removed the blocking deadzone at the center of the edit strip for bipolar parameters, this update implements a non-blocking deadzone in its place
+- No leds light up when holding either of the Shift-pads when no parameter is selected
+- Plinky blocks changing presets while it is receiving preset data from the web editor
+- No synth note plays when opening the sample editor
+- Display is cleared when rebooting from the settings menu 
 
 ---
 
