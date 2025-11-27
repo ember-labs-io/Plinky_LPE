@@ -213,11 +213,23 @@ bool set_sys_param(SysParam param, u16 value) {
 	case SYS_PATTERN_ALIGNED:
 		saved_value = sys_params.pattern_aligned;
 		break;
-	case SYS_MID_CLOCK_IN_MULT:
+	case SYS_MIDI_IN_CLOCK_MULT:
 		saved_value = sys_params.midi_in_clock_mult;
 		break;
-	case SYS_MIDI_VEL_PRES_BALANCE:
+	case SYS_MIDI_IN_VEL_BALANCE:
 		saved_value = sys_params.midi_in_vel_balance;
+		break;
+	case SYS_MIDI_OUT_VEL_BALANCE:
+		saved_value = sys_params.midi_out_vel_balance;
+		break;
+	case SYS_MIDI_IN_PRES_TYPE:
+		saved_value = sys_params.midi_in_pres_type;
+		break;
+	case SYS_MIDI_OUT_PRES_TYPE:
+		saved_value = sys_params.midi_out_pres_type;
+		break;
+	case SYS_MIDI_OUT_CCS:
+		saved_value = sys_params.midi_out_ccs;
 		break;
 	}
 	if (value == saved_value)
@@ -257,11 +269,23 @@ bool set_sys_param(SysParam param, u16 value) {
 	case SYS_PATTERN_ALIGNED:
 		sys_params.pattern_aligned = value;
 		break;
-	case SYS_MID_CLOCK_IN_MULT:
+	case SYS_MIDI_IN_CLOCK_MULT:
 		sys_params.midi_in_clock_mult = value;
 		break;
-	case SYS_MIDI_VEL_PRES_BALANCE:
+	case SYS_MIDI_IN_VEL_BALANCE:
 		sys_params.midi_in_vel_balance = value;
+		break;
+	case SYS_MIDI_OUT_VEL_BALANCE:
+		sys_params.midi_out_vel_balance = value;
+		break;
+	case SYS_MIDI_IN_PRES_TYPE:
+		sys_params.midi_in_pres_type = value;
+		break;
+	case SYS_MIDI_OUT_PRES_TYPE:
+		sys_params.midi_out_pres_type = value;
+		break;
+	case SYS_MIDI_OUT_CCS:
+		sys_params.midi_out_ccs = value;
 		break;
 	}
 	log_ram_edit(SEG_SYS_PARAMS);
@@ -499,10 +523,15 @@ void init_memory(void) {
 		set_sys_param(SYS_VOLUME, clampi(((s8)sys_params.volume_lsb + 45) << 4, 0, RAW_SIZE));
 		// fall through for further updating
 	case 16:
-		// added ppqn
-		sys_params.cv_in_ppqn = 2;         // 4 ppqn
-		sys_params.cv_out_ppqn = 2;        // 4 ppqn
-		sys_params.midi_in_clock_mult = 1; // x1
+		// added system settings
+		sys_params.cv_in_ppqn = 2;            // 4 ppqn
+		sys_params.cv_out_ppqn = 2;           // 4 ppqn
+		sys_params.midi_in_clock_mult = 1;    // x1
+		sys_params.midi_in_vel_balance = 64;  // 50/50
+		sys_params.midi_out_vel_balance = 64; // 50/50
+		sys_params.midi_in_pres_type = MP_CHANNEL_PRESSURE;
+		sys_params.midi_out_pres_type = MP_CHANNEL_PRESSURE;
+		sys_params.midi_out_ccs = 0; // off
 
 		// finalize
 		sys_params.version = LPE_SYS_PARAMS_VERSION;

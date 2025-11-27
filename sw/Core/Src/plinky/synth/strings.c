@@ -52,10 +52,6 @@ Touch* get_string_touch_prev(u8 string_id, u8 frames_back) {
 	return &string_touch[string_id][(strings_write_frame - frames_back) & 7];
 }
 
-const Touch* get_string_touch(u8 string_id) {
-	return GET_STRING_TOUCH(string_id);
-}
-
 u16 get_string_pos(u8 string_id) {
 	return GET_STRING_TOUCH(string_id)->pos;
 }
