@@ -97,144 +97,6 @@ static u8 const ppqn_values[NUM_PPQN_VALUES] = {1, 2, 4, 8, 16, 24, 48};
 #define OLED_HEIGHT 32
 #define NUM_ICONS 64
 
-// == TYPEDEFS == //
-
-typedef struct ValueSmoother {
-	float y1;
-	float y2;
-} ValueSmoother;
-
-typedef struct Touch {
-	s16 pres;
-	u16 pos;
-} Touch;
-
-typedef struct TouchCalibData {
-	u16 pres[PADS_PER_STRIP];
-	s16 pos[PADS_PER_STRIP];
-} TouchCalibData;
-
-typedef struct ADC_DAC_Calib {
-	float bias;
-	float scale;
-} ADC_DAC_Calib;
-
-typedef struct SeqFlags {
-	bool playing : 1;
-	bool recording : 1;
-	bool previewing : 1;
-	bool playing_backwards : 1;
-	bool stop_at_next_step : 1;
-	bool is_first_pulse : 1;
-	bool do_manual_step : 1;
-	bool unused : 1;
-} SeqFlags;
-
-typedef struct ConditionalStep {
-	s8 euclid_len;
-	u8 euclid_trigs;
-	s32 density;
-	bool play_step;
-	bool advance_step;
-} ConditionalStep;
-
-typedef struct Osc {
-	u32 phase;
-	u32 prev_sample;
-	s32 phase_diff;
-	s32 goal_phase_diff;
-	s32 pitch;
-} Osc;
-
-typedef struct GrainPair {
-	int fpos24;
-	int pos[2];
-	int vol24;
-	int dvol24;
-	int dpos24;
-	float grate_ratio;
-	float multisample_grate;
-	int bufadjust; // for reverse grains, we adjust the dma buffer address by this many samples
-	int outflags;
-} GrainPair;
-
-typedef struct Voice {
-	// oscillator (sampler only uses the pitch value)
-	Osc osc[OSCS_PER_VOICE];
-	// env 1
-	float env1_lvl;
-	bool env1_decaying;
-	ValueSmoother lpg_smoother[2];
-	// env 1 visuals
-	float env1_peak;
-	float env1_norm;
-	// env 2
-	float env2_lvl;
-	u16 env2_lvl16;
-	bool env2_decaying;
-	// noise
-	float noise_lvl;
-	// sampler state
-	GrainPair grain_pair[2];
-	int playhead8;
-	u8 slice_id;
-	u16 touch_pos_start;
-	ValueSmoother touch_pos;
-} Voice;
-
-typedef struct SysParams {
-	u8 preset_id;
-	u8 midi_in_chan : 4;
-	u8 midi_out_chan : 4;
-	u8 accel_sens;
-	u8 volume_lsb;
-	u8 volume_msb : 3; // add 3 bits to make editing in 0-1024 range possible
-	u8 cv_quant : 2;
-	u8 reverse_encoder : 1;
-	u8 preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
-	u8 pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
-	u8 cv_in_ppqn : 3;
-	u8 cv_out_ppqn : 3;
-	u8 midi_in_clock_mult : 2; // 0 = 1/2x, 1 = 1x, 2 = 2x
-	u8 midi_in_vel_balance;    // balance between incoming velocity and pressure
-	u8 pad[16 - 8];
-	u8 version;
-} SysParams;
-
-typedef struct Preset {
-	s16 params[96][8];
-	u8 pad;
-	u8 seq_start;
-	u8 seq_len;
-	u8 paddy[3];
-	u8 version;
-	u8 category;
-	u8 name[8];
-} Preset;
-static_assert((sizeof(Preset) & 15) == 0, "?");
-
-typedef struct PatternStringStep {
-	u8 pos[PTN_SUBSTEPS / 2];
-	u8 pres[PTN_SUBSTEPS];
-} PatternStringStep;
-
-typedef struct PatternQuarter {
-	PatternStringStep steps[PTN_STEPS_PER_QTR][NUM_STRINGS];
-	s8 autoknob[PTN_STEPS_PER_QTR * PTN_SUBSTEPS][NUM_KNOBS];
-} PatternQuarter;
-static_assert((sizeof(PatternQuarter) & 15) == 0, "?");
-
-typedef struct SampleInfo {
-	u8 waveform4_b[1024]; // 4 bits x 2048 points, every 1024 samples
-	int splitpoints[8];
-	int samplelen; // must be after splitpoints, so that splitpoints[8] is always the length.
-	s8 notes[8];
-	u8 pitched;
-	u8 loop; // bottom bit: loop; next bit: slice vs all
-	u8 paddy[2];
-} SampleInfo;
-static_assert((sizeof(SampleInfo) & 15) == 0, "?");
-
 // == ENUMS == //
 
 // MODULE ENUMS
@@ -369,9 +231,20 @@ typedef enum SysParam {
 	SYS_REVERSE_ENCODER,
 	SYS_PRESET_ALIGNED,
 	SYS_PATTERN_ALIGNED,
-	SYS_MID_CLOCK_IN_MULT,
-	SYS_MIDI_VEL_PRES_BALANCE,
+	SYS_MIDI_IN_CLOCK_MULT,
+	SYS_MIDI_IN_VEL_BALANCE,
+	SYS_MIDI_OUT_VEL_BALANCE,
+	SYS_MIDI_IN_PRES_TYPE,
+	SYS_MIDI_OUT_PRES_TYPE,
+	SYS_MIDI_OUT_CCS,
 } SysParam;
+
+typedef enum MidiPressureType {
+	MP_NONE,
+	MP_CHANNEL_PRESSURE,
+	MP_POLY_AFTERTOUCH,
+	NUM_MIDI_PRESSURE_TYPES,
+} MidiPressureType;
 
 // PITCH
 
@@ -897,3 +770,146 @@ static inline const char* note_name(int note) {
 	buf[2] = '0' + octave;
 	return buf;
 }
+
+// == TYPEDEFS == //
+
+typedef struct ValueSmoother {
+	float y1;
+	float y2;
+} ValueSmoother;
+
+typedef struct Touch {
+	s16 pres;
+	u16 pos;
+} Touch;
+
+typedef struct TouchCalibData {
+	u16 pres[PADS_PER_STRIP];
+	s16 pos[PADS_PER_STRIP];
+} TouchCalibData;
+
+typedef struct ADC_DAC_Calib {
+	float bias;
+	float scale;
+} ADC_DAC_Calib;
+
+typedef struct SeqFlags {
+	bool playing : 1;
+	bool recording : 1;
+	bool previewing : 1;
+	bool playing_backwards : 1;
+	bool stop_at_next_step : 1;
+	bool is_first_pulse : 1;
+	bool do_manual_step : 1;
+	bool unused : 1;
+} SeqFlags;
+
+typedef struct ConditionalStep {
+	s8 euclid_len;
+	u8 euclid_trigs;
+	s32 density;
+	bool play_step;
+	bool advance_step;
+} ConditionalStep;
+
+typedef struct Osc {
+	u32 phase;
+	u32 prev_sample;
+	s32 phase_diff;
+	s32 goal_phase_diff;
+	s32 pitch;
+} Osc;
+
+typedef struct GrainPair {
+	int fpos24;
+	int pos[2];
+	int vol24;
+	int dvol24;
+	int dpos24;
+	float grate_ratio;
+	float multisample_grate;
+	int bufadjust; // for reverse grains, we adjust the dma buffer address by this many samples
+	int outflags;
+} GrainPair;
+
+typedef struct Voice {
+	// oscillator (sampler only uses the pitch value)
+	Osc osc[OSCS_PER_VOICE];
+	// env 1
+	float env1_lvl;
+	bool env1_decaying;
+	ValueSmoother lpg_smoother[2];
+	// env 1 visuals
+	float env1_peak;
+	float env1_norm;
+	// env 2
+	float env2_lvl;
+	u16 env2_lvl16;
+	bool env2_decaying;
+	// noise
+	float noise_lvl;
+	// sampler state
+	GrainPair grain_pair[2];
+	int playhead8;
+	u8 slice_id;
+	u16 touch_pos_start;
+	ValueSmoother touch_pos;
+} Voice;
+
+typedef struct SysParams {
+	u8 preset_id;
+	u8 midi_in_chan : 4;
+	u8 midi_out_chan : 4;
+	u8 accel_sens;
+	u8 volume_lsb;
+	u8 volume_msb : 3; // add 3 bits to make editing in 0-1024 range possible
+	u8 cv_quant : 2;
+	u8 reverse_encoder : 1;
+	u8 preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
+	u8 pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
+	u8 cv_in_ppqn : 3;
+	u8 cv_out_ppqn : 3;
+	u8 midi_in_clock_mult : 2; // 0 = 1/2x, 1 = 1x, 2 = 2x
+	u8 midi_in_vel_balance;    // balance between incoming velocity and pressure
+	u8 midi_out_vel_balance;   // balance between outgoing velocity and pressure
+	MidiPressureType midi_in_pres_type : 2;
+	MidiPressureType midi_out_pres_type : 2;
+	u8 midi_out_ccs : 1;
+	u8 paddy : 1;
+	u8 pad[16 - 10];
+	u8 version;
+} SysParams;
+
+typedef struct Preset {
+	s16 params[96][8];
+	u8 pad;
+	u8 seq_start;
+	u8 seq_len;
+	u8 paddy[3];
+	u8 version;
+	u8 category;
+	u8 name[8];
+} Preset;
+static_assert((sizeof(Preset) & 15) == 0, "?");
+
+typedef struct PatternStringStep {
+	u8 pos[PTN_SUBSTEPS / 2];
+	u8 pres[PTN_SUBSTEPS];
+} PatternStringStep;
+
+typedef struct PatternQuarter {
+	PatternStringStep steps[PTN_STEPS_PER_QTR][NUM_STRINGS];
+	s8 autoknob[PTN_STEPS_PER_QTR * PTN_SUBSTEPS][NUM_KNOBS];
+} PatternQuarter;
+static_assert((sizeof(PatternQuarter) & 15) == 0, "?");
+
+typedef struct SampleInfo {
+	u8 waveform4_b[1024]; // 4 bits x 2048 points, every 1024 samples
+	int splitpoints[8];
+	int samplelen; // must be after splitpoints, so that splitpoints[8] is always the length.
+	s8 notes[8];
+	u8 pitched;
+	u8 loop; // bottom bit: loop; next bit: slice vs all
+	u8 paddy[2];
+} SampleInfo;
+static_assert((sizeof(SampleInfo) & 15) == 0, "?");
