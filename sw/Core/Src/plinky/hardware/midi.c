@@ -4,6 +4,7 @@
 
 #include "midi.h"
 // regular includes
+#include "hardware/touchstrips.h"
 #include "memory.h"
 #include "synth/params.h"
 #include "synth/pitch_tools.h"
@@ -15,7 +16,14 @@
 extern UART_HandleTypeDef huart3;
 
 #define MIDI_BUFFER_SIZE 16
-#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + pitchbend / 8)
+#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (pitchbend >> 3))
+#define MIXED_PRESSURE(full_pressure, midi_velocity)                                                                   \
+	({                                                                                                                 \
+		u8 velo_mult = sys_params.midi_out_vel_balance;                                                                \
+		velo_mult == 128                                                                                               \
+		    ? 0                                                                                                        \
+		    : clampi((((full_pressure) << 3) - velo_mult * (midi_velocity) - 128) / (128 - velo_mult), 0, 127);        \
+	})
 
 typedef enum MidiStringState {
 	MS_UNUSED,
@@ -26,22 +34,21 @@ typedef enum MidiStringState {
 
 typedef struct MidiString {
 	MidiStringState state;
-	u8 note; // played note
+	u8 note;
 	u8 velocity;
 	u8 pressure;
 	bool suppressed; // suppressed by other touch
 
 	// midi out
-	u8 goal_note;          // note we want to send to midi out
-	u16 position;          // position on string
-	u8 last_sent_note;     // last sent midi note
-	u8 note_on_pressure;   // pressure/velocity sent on note on
-	u8 aftertouch;         // last sent poly aftertouch
-	u8 last_sent_position; // last sent position CC
-	u8 last_sent_pressure; // last sent pressure CC
+	u16 position;        // position on string
+	u8 cur_note;         // note currently playing on string
+	u8 last_note;        // last sent midi note
+	u8 last_pressure;    // last sent poly pressure
+	u8 last_pressure_cc; // last sent pressure CC
+	u8 last_position_cc; // last sent position CC
 } MidiString;
 
-static const MidiString midi_init_string = {MS_UNUSED, 255, 0, 0, false, 255, 0, 255, 0, 0, 0, 0};
+static const MidiString midi_init_string = {MS_UNUSED, 255, 0, 0, false, 0, 255, 255, 0, 0, 0};
 
 // buffers - double sized to allow linearizing cross-boundary reads/writes
 static u8 midi_receive_buffer[2 * MIDI_BUFFER_SIZE];
@@ -53,11 +60,12 @@ static u8 midi_send_tail;
 static u8 channel_pressure;
 static s16 pitchbend;
 static bool sustain_pressed = false;
-static MidiString midi_string[NUM_STRINGS];
+static MidiString midi_string[NUM_STRINGS] = {};
 
 // cue midi out
-static u8 clocks_to_send;
-static MidiMessageType send_transport;
+static u8 clocks_to_send = 0;
+static MidiMessageType send_transport = 0;
+static u8 last_channel_pressure = 0;
 
 // == UTILS == //
 
@@ -87,12 +95,23 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 		return;
 
 	// synthesize internal pressure from midi velocity and midi pressure
+	u8 midi_pressure = 0;
+	switch (sys_params.midi_in_pres_type) {
+	case MP_CHANNEL_PRESSURE:
+		midi_pressure = channel_pressure;
+		break;
+	case MP_POLY_AFTERTOUCH:
+		midi_pressure = maxi(midi_string[string_id].pressure, channel_pressure);
+		break;
+	default:
+		break;
+	}
 	u8 velo_mult = sys_params.midi_in_vel_balance;
 	*pressure =
 	    // scaled velocity, offset to max out at 128
 	    (velo_mult * (midi_string[string_id].velocity + 1)
 	     // scaled pressure, offset to max out at 128
-	     + (128 - velo_mult) * (maxi(midi_string[string_id].pressure, channel_pressure) + 1)
+	     + (128 - velo_mult) * (midi_pressure + 1)
 	     // scale to max out at TOUCH_FULL_PRES
 	     + 4)
 	    >> 3;
@@ -117,8 +136,15 @@ void init_midi(void) {
 	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
 }
 
+static u8 string_holds_note(u8 note) {
+	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
+		if (midi_string[string_id].note == note)
+			return string_id;
+	return 255;
+}
+
 static u8 string_playing_note(u8 note) {
-	for (u8 string_id = 0; string_id < 8; ++string_id)
+	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
 		if (midi_string[string_id].state != MS_UNUSED && midi_string[string_id].note == note)
 			return string_id;
 	return 255;
@@ -212,7 +238,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			midi_string[string_id] = (MidiString){MS_PRESSED, data1, data2};
 	} break;
 	case MIDI_POLY_KEY_PRESSURE: {
-		u8 string_id = string_playing_note(data1);
+		u8 string_id = string_holds_note(data1);
 		if (string_id < NUM_STRINGS)
 			midi_string[string_id].pressure = data2;
 	} break;
@@ -254,15 +280,15 @@ static u8 num_midi_bytes(u8 status) {
 	return 3;
 }
 
-// send midi msg to uart and usb, returns false if serial too full
+// send midi msg to uart and usb, returns false if buffer too full
 static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
-	// prepare message
 	u8 num_bytes = num_midi_bytes(status);
-	if (status < MIDI_SYSTEM_EXCLUSIVE)
-		status += sys_params.midi_out_chan;
-	// midi buffer full
+	// exit if serial buffer full
 	if (midi_send_head - midi_send_tail + num_bytes > MIDI_BUFFER_SIZE)
 		return false;
+	// prepare message
+	if (status < MIDI_SYSTEM_EXCLUSIVE)
+		status += sys_params.midi_out_chan;
 	// prepare usb packet
 	u8 buf[4] = {status >> 4, status, data1, data2};
 
@@ -278,101 +304,172 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	return true;
 }
 
-// outgoing midi gets processed once and sent out identically to serial and usb
+// cue all midi data for one string, returns whether there is still space in the midi buffer
+static bool cue_midi_string_out(void) {
+	typedef enum MidiOutState {
+		MSG_NOTE,
+		MSG_POLY_PRESSURE,
+		MSG_CHAN_PRESSURE,
+		MSG_PRESSURE_CC,
+		MSG_POSITION_CC,
+	} MidiOutState;
+
+	static u8 string_id = 0;
+	static MidiOutState msg_state = MSG_NOTE;
+
+	//  get a bunch of parameters from the synth
+	u16 string_pos = get_string_pos(string_id);
+	u16 string_pres = clampi(get_string_pressures()[string_id], 0, TOUCH_FULL_PRES);
+	Touch* prev_string_touch = get_string_touch_prev(string_id, 2);
+	const Touch* touch = get_touch(string_id, 0);
+	bool pres_stable = abs(prev_string_touch->pres - string_pres) < 100;
+	bool pos_stable = abs(prev_string_touch->pos - string_pos) < 32;
+
+	// these are our targets
+	u8 target_note = midi_string[string_id].cur_note;
+	u8 target_pressure = clampi((prev_string_touch->pres - 100) / 48, 0, 127);
+
+	MidiString* m_string = &midi_string[string_id];
+	u8 last_note = m_string->last_note;
+
+	switch (msg_state) {
+	case MSG_NOTE:
+		// note has changed
+		if (target_note != last_note) {
+			// we were playing a note => send note off
+			if (last_note) {
+				if (!send_midi_msg(MIDI_NOTE_OFF, last_note, 0))
+					return false;
+				m_string->last_note = 0;
+			}
+			// we start playing a new note => send note on
+			if (target_note && pos_stable && pres_stable) {
+				// we use the current pressure as the note velocity
+				if (!send_midi_msg(MIDI_NOTE_ON, target_note, target_pressure))
+					return false;
+				m_string->last_note = target_note;
+			}
+		}
+		msg_state++;
+		// fall thru
+	case MSG_POLY_PRESSURE: {
+		static u8 poly_pres = 0;
+		static u8 min_diff = 5;
+		// only update when poly pressure is selected
+		if (sys_params.midi_out_pres_type == MP_POLY_AFTERTOUCH) {
+			poly_pres = MIXED_PRESSURE(string_pres, m_string->velocity);
+			// require a difference of 5, unless this is an extreme value
+			min_diff = (poly_pres == 0 || poly_pres == 127) ? 1 : 5;
+		}
+		// send if changed
+		if (abs(poly_pres - m_string->last_pressure) >= min_diff) {
+			if (!send_midi_msg(MIDI_POLY_KEY_PRESSURE, last_note, poly_pres))
+				return false;
+			m_string->last_pressure = poly_pres;
+		}
+		msg_state++;
+		// fall thru
+	}
+	case MSG_CHAN_PRESSURE: {
+		static u16 max_string_pressure = 0;
+		static u8 max_velocity = 0;
+		static u8 chan_pres = 0;
+		static u8 min_diff = 5;
+		// track max pressure & velocity
+		if (string_pres > max_string_pressure) {
+			max_string_pressure = string_pres;
+			max_velocity = m_string->velocity;
+		}
+		// all strings have been tracked
+		if (string_id == 7) {
+			// only update when mono pressure is selected
+			if (sys_params.midi_out_pres_type == MP_CHANNEL_PRESSURE) {
+				chan_pres = MIXED_PRESSURE(max_string_pressure, max_velocity);
+				// require a difference of 5, unless this is an extreme value
+				min_diff = (chan_pres == 0 || chan_pres == 127) ? 1 : 5;
+			}
+			// send if changed
+			if (abs(chan_pres - last_channel_pressure) >= min_diff) {
+				if (!send_midi_msg(MIDI_CHANNEL_PRESSURE, chan_pres, 0))
+					return false;
+				last_channel_pressure = chan_pres;
+			}
+			// restart tracking
+			max_string_pressure = 0;
+			max_velocity = 0;
+		}
+		msg_state++;
+		// fall thru
+	}
+	case MSG_PRESSURE_CC: // cc 40-47
+		if (sys_params.midi_out_ccs) {
+			// reports directly from touchstrips
+			u8 strip_pressure = clampi(touch->pres, 0, TOUCH_FULL_PRES) >> 4;
+			// always send extreme values
+			u8 min_diff = (strip_pressure == 0 || strip_pressure == 127) ? 1 : 2;
+			if (abs(strip_pressure - m_string->last_pressure_cc) >= min_diff) {
+				if (!send_midi_msg(MIDI_CONTROL_CHANGE, 40 + string_id, strip_pressure))
+					return false;
+				m_string->last_pressure_cc = strip_pressure;
+			}
+		}
+		msg_state++;
+		// fall thru
+	case MSG_POSITION_CC: // cc 32-39
+		if (sys_params.midi_out_ccs) {
+			// reports directly from touchstrips
+			u8 strip_position = 127 - (mini(touch->pos, TOUCH_MAX_POS) >> 4);
+			// always send extreme values
+			u8 min_diff = (strip_position == 0 || strip_position == 127) ? 1 : 2;
+			if (abs(strip_position - m_string->last_position_cc) >= min_diff) {
+				if (!send_midi_msg(MIDI_CONTROL_CHANGE, 32 + string_id, strip_position))
+					return false;
+				m_string->last_position_cc = strip_position;
+			}
+		}
+		// done, set up for next string
+		string_id = (string_id + 1) & 7;
+		msg_state = MSG_NOTE;
+		break;
+	}
+	return true;
+}
+
 static void cue_midi_out(void) {
 // exit if uart is used for debug logging
 #ifdef DEBUG_LOG
 	return;
 #endif
 
-	static u8 string_id = 0;
-
 	// exit if the uart is not ready
 	if (huart3.TxXferCount)
 		return;
+
+	// send transport
 	if (send_transport != MIDI_NONE) {
 		if (!send_midi_msg(send_transport, 0, 0))
 			return;
 		send_transport = MIDI_NONE;
 	}
+
+	// send clock
 	while (clocks_to_send) {
 		if (!send_midi_msg(MIDI_TIMING_CLOCK, 0, 0))
 			return;
 		clocks_to_send--;
 	}
-	// we check for a maximum of eight times (once for each voice)
-	u8 num_loops = 0;
-	while (num_loops < 8) {
-		num_loops++;
-		//  get a bunch of parameters from the synth
-		const Touch* synthf = get_string_touch(string_id);
-		Touch* prevsynthf = get_string_touch_prev(string_id, 2);
-		bool pres_stable = abs(prevsynthf->pres - synthf->pres) < 100;
-		bool pos_stable = abs(prevsynthf->pos - synthf->pos) < 32;
-		bool pres_significant = synthf->pres > 200;
-		// these are our targets
-		u8 target_note = midi_string[string_id].goal_note;
-		u8 target_pressure = clampi((synthf->pres - 100) / 48, 0, 127);
 
-		// take out some undesired note/pressure values
-		if (!target_note)
-			target_pressure = 0;
-		if (!target_pressure)
-			target_note = 0;
-
-		// one loop checks all needed outgoing midi messages for one voice
-		u8 initial_head = midi_send_head;
-		MidiString* str = &midi_string[string_id];
-		u8 cur_note = str->last_sent_note;
-		// note has changed
-		if (target_note != cur_note) {
-			// we were playing a note => send note off
-			if (cur_note) {
-				if (!send_midi_msg(MIDI_NOTE_OFF, cur_note, 0))
-					return; // if the buffer is full, we exit the function and try again next time
-				str->last_sent_note = 0;
-				str->aftertouch = 0;
-			}
-			// we start playing a new note => send note on
-			if (target_note && pos_stable && pres_stable) {
-				// we use the current pressure as the note velocity
-				if (!send_midi_msg(MIDI_NOTE_ON, target_note, target_pressure))
-					return;
-				str->last_sent_note = target_note;
-				str->note_on_pressure = target_pressure;
-				str->aftertouch = 0;
-			}
-		}
-		// we define aftertouch as any pressure on top of the pressure when the note started
-		u8 goal_aftertouch = maxi(target_pressure - str->note_on_pressure, 0);
-		if (abs(goal_aftertouch - str->aftertouch) > 4) {
-			// poly aftertouch (only when pressure difference is larger than 4)
-			if (!send_midi_msg(MIDI_POLY_KEY_PRESSURE, cur_note, goal_aftertouch))
-				return;
-			str->aftertouch = goal_aftertouch;
-		}
-		// voice position, CC32 - CC39
-		u8 goal_position = clampi(127 - (synthf->pos / 13 - 16), 0, 127);
-		if (abs(goal_position - str->last_sent_position) > 1 && pres_significant && pres_stable) {
-			if (!send_midi_msg(MIDI_CONTROL_CHANGE, 32 + string_id, goal_position))
-				return;
-			str->last_sent_position = goal_position;
-		}
-		// voice pressure, CC40 - CC47
-		if (abs(target_pressure - str->last_sent_pressure) > 1) {
-			if (!send_midi_msg(MIDI_CONTROL_CHANGE, 40 + string_id, target_pressure))
-				return;
-			str->last_sent_pressure = target_pressure;
-		}
-
-		// jump to next voice
-		string_id = (string_id + 1) & 7;
-
-		// if we sent any midi message for this voice, exit the function
-		// the next time we enter the function again, string_id will be set to the next voice
-		if (midi_send_head != initial_head)
-			break;
-	}
+	// send string data, breaks if:
+	// - midi out buffer full
+	// - any midi was sent for a string (gives space to send realtime data next tick)
+	// - all strings have been checked
+	bool buffer_free = true;
+	u8 initial_send_head = midi_send_head;
+	u8 strings_checked = 0;
+	do {
+		buffer_free = cue_midi_string_out();
+		strings_checked++;
+	} while (buffer_free && midi_send_head == initial_send_head && strings_checked < NUM_STRINGS);
 }
 
 void process_midi(void) {
@@ -470,7 +567,7 @@ void midi_send_transport(MidiMessageType transport_type) {
 }
 
 void midi_set_goal_note(u8 string_id, u8 midi_note) {
-	midi_string[string_id].goal_note = midi_note;
+	midi_string[string_id].cur_note = midi_note;
 }
 
 // == AUX == //
