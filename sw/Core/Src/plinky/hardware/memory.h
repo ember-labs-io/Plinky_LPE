@@ -64,10 +64,8 @@ void apply_cued_mem_items(void);
 void cue_mem_item(u8 item_id);
 
 // ui
-void update_clear_item(u8 item_id);
-void long_press_load_item(u8 item_id);
+void long_press_mem_item(u8 item_id);
 void save_preset(void);
-void clear_mem_item(void);
 
 // calib
 FlashCalibType flash_read_calib(void);
