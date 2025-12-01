@@ -101,7 +101,6 @@ static bool force_load_preset = false;
 static bool force_load_pattern = false;
 
 static u8 edit_item_id = 255; // ram item to edit | msb unset => save, msb set => clear
-static u8 clear_item;         // the item that will be cleared on an X long-press in UI_LOAD
 static u32 recent_load_time = 0;
 static char recent_load_msg[24];
 
@@ -128,20 +127,24 @@ static u16 compute_hash(const void* data, u16 nbytes) {
 static void set_action_msg(u8 item_id, MemActionType action_type) {
 	switch (get_item_type(item_id)) {
 	case MEM_PRESET:
-		snprintf(recent_load_msg, sizeof(recent_load_msg), "%s preset %d",
-		         action_type == MEM_ACTION_SAVE    ? "saved"
-		         : action_type == MEM_ACTION_LOAD  ? "loaded"
-		         : action_type == MEM_ACTION_CLEAR ? "cleared"
-		                                           : "cued",
-		         item_id + 1);
+		if (action_type == MEM_ACTION_CLEAR)
+			snprintf(recent_load_msg, sizeof(recent_load_msg), "cleared preset");
+		else
+			snprintf(recent_load_msg, sizeof(recent_load_msg), "%s preset %d",
+			         action_type == MEM_ACTION_SAVE   ? "saved"
+			         : action_type == MEM_ACTION_LOAD ? "loaded"
+			                                          : "cued",
+			         item_id + 1);
 		break;
 	case MEM_PATTERN:
-		snprintf(recent_load_msg, sizeof(recent_load_msg), "%s pattern %d",
-		         action_type == MEM_ACTION_SAVE    ? "saved"
-		         : action_type == MEM_ACTION_LOAD  ? "loaded"
-		         : action_type == MEM_ACTION_CLEAR ? "cleared"
-		                                           : "cued",
-		         item_id - PATTERNS_START + 1);
+		if (action_type == MEM_ACTION_CLEAR)
+			snprintf(recent_load_msg, sizeof(recent_load_msg), "cleared pattern");
+		else
+			snprintf(recent_load_msg, sizeof(recent_load_msg), "%s pattern %d",
+			         action_type == MEM_ACTION_SAVE   ? "saved"
+			         : action_type == MEM_ACTION_LOAD ? "loaded"
+			                                          : "cued",
+			         item_id - PATTERNS_START + 1);
 		break;
 	case MEM_SAMPLE: {
 		u8 sample_id = item_id - SAMPLES_START;
@@ -558,7 +561,6 @@ void init_memory(void) {
 		sys_params.pattern_aligned = true;
 		log_ram_edit(SEG_SYS_PARAMS);
 	}
-	clear_item = load_preset_id;
 	ram_initialized = true;
 }
 
@@ -604,6 +606,16 @@ void memory_frame(void) {
 	bool message_set = false;
 	MemItemType item_type = get_item_type(edit_item_id & 63);
 	// clear requested
+	if (edit_item_id != 255 && (edit_item_id & MEM_ACTION_CLEAR) && item_type == MEM_SAMPLE) {
+		// clear current sample info
+		memset(&cur_sample_info, 0, sizeof(SampleInfo));
+		log_ram_edit(SEG_SAMPLE_INFO);
+		// mark item to be saved
+		edit_item_id &= 63;
+		// show message
+		set_action_msg(edit_item_id, MEM_ACTION_CLEAR);
+		message_set = true;
+	}
 	if (edit_item_id != 255 && (edit_item_id & MEM_ACTION_CLEAR)) {
 		// clearing the first two bits also requests a save for this item
 		edit_item_id &= 63;
@@ -659,8 +671,6 @@ void memory_frame(void) {
 			// "save sample" command opens the sample editor instead
 			break;
 		}
-		// update clear item
-		clear_item = edit_item_id;
 		// show message
 		if (!message_set)
 			set_action_msg(edit_item_id, MEM_ACTION_SAVE);
@@ -841,7 +851,6 @@ void load_preset(u8 preset_id, bool show_message) {
 	load_preset_id = preset_id;
 	force_load_preset = true;
 	update_preset_ram();
-	clear_item = preset_id;
 	if (show_message)
 		set_action_msg(preset_id, MEM_ACTION_LOAD);
 }
@@ -850,7 +859,6 @@ static void load_pattern(u8 pattern_id, bool show_message) {
 	save_param_index(P_PATTERN, pattern_id);
 	force_load_pattern = true;
 	update_pattern_ram();
-	clear_item = pattern_id + PATTERNS_START;
 	if (show_message)
 		set_action_msg(pattern_id + PATTERNS_START, MEM_ACTION_LOAD);
 }
@@ -858,10 +866,6 @@ static void load_pattern(u8 pattern_id, bool show_message) {
 static void load_sample(u8 sample_id, bool show_message) {
 	save_param_index(P_SAMPLE, sample_id);
 	update_sample_ram();
-	if (sample_id == NO_SAMPLE)
-		clear_item = ram_preset_id;
-	else
-		clear_item = sample_id + SAMPLES_START;
 	if (show_message)
 		set_action_msg(sample_id + SAMPLES_START, MEM_ACTION_LOAD);
 }
@@ -940,50 +944,59 @@ void cue_mem_item(u8 item_id) {
 
 // == UI == //
 
-void update_clear_item(u8 item_id) {
-	switch (get_item_type(item_id)) {
-	case MEM_PRESET:
-		clear_item = ram_preset_id;
+void long_press_mem_item(u8 item_id) {
+	MemItemType item_type = get_item_type(item_id);
+	switch (function_pressed) {
+	// not holding function pad: cue item for loading
+	case FN_NONE:
+		cue_mem_item(item_id);
 		break;
-	case MEM_PATTERN:
-		clear_item = ram_pattern_id + PATTERNS_START;
+	// holding load pad
+	case FN_LOAD:
+		// sample => open sampler
+		if (item_type == MEM_SAMPLE) {
+			u8 sample_id = item_id & 7;
+			open_sampler(sample_id);
+			flash_message(F_16_BOLD, "Sample %d", "Editing", sample_id + 1);
+		}
+		// preset or pattern => line up to save next tick
+		else
+			edit_item_id = item_id;
 		break;
-	case MEM_SAMPLE:
-		if (ram_sample_id != NO_SAMPLE)
-			clear_item = ram_sample_id + SAMPLES_START;
+	// holding clear pad
+	case FN_CLEAR:
+		switch (item_type) {
+		// clear floating preset
+		case MEM_PRESET:
+			memcpy(&cur_preset, init_params_ptr(), sizeof(Preset));
+			log_ram_edit(SEG_PRESET);
+			set_action_msg(item_id, MEM_ACTION_CLEAR);
+			break;
+		// clear floating pattern
+		case MEM_PATTERN:
+			memset(&cur_pattern_qtr, 0, 4 * sizeof(PatternQuarter));
+			log_ram_edit(SEG_PAT0);
+			log_ram_edit(SEG_PAT1);
+			log_ram_edit(SEG_PAT2);
+			log_ram_edit(SEG_PAT3);
+			set_action_msg(item_id, MEM_ACTION_CLEAR);
+			break;
+		// line up sample to be cleared next tick
+		case MEM_SAMPLE:
+			edit_item_id = main_press_pad | MEM_ACTION_CLEAR;
+			break;
+		default:
+			break;
+		}
 		break;
 	default:
 		break;
 	}
 }
 
-void long_press_load_item(u8 item_id) {
-	bool is_sample = get_item_type(item_id) == MEM_SAMPLE;
-	// holding load pad
-	if (function_pressed == FN_LOAD)
-		// sample => open sampler
-		if (is_sample) {
-			u8 sample_id = item_id & 7;
-			clear_item = sample_id + SAMPLES_START;
-			open_sampler(sample_id);
-			flash_message(F_16_BOLD, "Sample %d", "Editing", sample_id + 1);
-		}
-		// preset or pattern => cue to save
-		else
-			edit_item_id = item_id;
-	// not holding function pad: cue item for loading
-	else
-		cue_mem_item(item_id);
-}
-
 // line up cur_preset to be saved to ram_preset_id during the next tick
 void save_preset(void) {
 	edit_item_id = ram_preset_id | MEM_ACTION_SAVE;
-}
-
-// line up clear_item to be cleared during the next tick
-void clear_mem_item(void) {
-	edit_item_id = clear_item | MEM_ACTION_CLEAR;
 }
 
 // == CALIB == //
@@ -1148,21 +1161,27 @@ void draw_ui_load_visuals(void) {
 			recent_load_time = 0;
 	}
 	// clear messages
-	else if (function_pressed == FN_CLEAR && function_press_ms > PRESS_DELAY) {
-		switch (get_item_type(clear_item)) {
-		case MEM_PRESET:
-			snprintf(name_str, sizeof(name_str), "initialize preset %d?", clear_item + 1);
-			break;
-		case MEM_PATTERN:
-			snprintf(name_str, sizeof(name_str), "clear pattern %d?", clear_item - PATTERNS_START + 1);
-			break;
-		case MEM_SAMPLE:
-			snprintf(name_str, sizeof(name_str), "clear sample %d?", clear_item - SAMPLES_START + 1);
-			break;
-		default:
-			break;
+	else if (function_pressed == FN_CLEAR) {
+		// clear + main pad pressed
+		if (main_press_ms > PRESS_DELAY) {
+			switch (get_item_type(main_press_pad)) {
+			case MEM_PRESET:
+				snprintf(name_str, sizeof(name_str), "clear preset?");
+				break;
+			case MEM_PATTERN:
+				snprintf(name_str, sizeof(name_str), "clear pattern?");
+				break;
+			case MEM_SAMPLE:
+				snprintf(name_str, sizeof(name_str), "clear sample %d?", main_press_pad - SAMPLES_START + 1);
+				break;
+			default:
+				break;
+			}
+			load_bar_progress = main_press_ms - PRESS_DELAY;
 		}
-		load_bar_progress = function_press_ms - PRESS_DELAY;
+		// only clear pressed
+		else
+			snprintf(name_str, sizeof(name_str), "clear _");
 	}
 	// save/load messages
 	else if (main_press_ms > PRESS_DELAY) {
@@ -1216,10 +1235,6 @@ u8 ui_load_led(u8 x, u8 y, u8 pulse1, u8 pulse2) {
 		k = 255;
 	if (item_id == SAMPLES_START + load_sample_id)
 		k = 255;
-
-	// slow pulse clear item
-	if (item_id == clear_item)
-		k = 128 + (pulse2 >> 1);
 
 	// pulse cued load item
 	if (item_id == cued_preset_id)

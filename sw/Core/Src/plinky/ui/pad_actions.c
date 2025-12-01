@@ -20,24 +20,20 @@ static bool keep_edit_mode_open = false;
 
 // keep track of (long) presses on the main grid
 u8 main_press_pad = 255;
+static bool main_press_canceled = false;
 static u32 main_press_start = 0;
 u32 main_press_ms = 0;
 
 // keep track of (long) presses on the function pads
-static bool function_press_used_up = false;
 static u32 function_press_start = 0;
 u32 function_press_ms = 0;
 
 // == UTILS == //
 
-static void start_main_press(void) {
-	main_press_start = millis();
+// disables current main press from triggering any actions
+static void cancel_main_press(void) {
+	main_press_canceled = true;
 	main_press_ms = 0;
-}
-
-static void use_function_press(void) {
-	function_press_ms = 0;
-	function_press_used_up = true;
 }
 
 // == MAIN == //
@@ -45,7 +41,6 @@ static void use_function_press(void) {
 static void press_function(FunctionPad new_function) {
 	function_pressed = new_function;
 	function_press_start = millis();
-	function_press_used_up = false;
 
 	if (ui_mode == UI_SAMPLE_EDIT) {
 		// record/play buttons have identical behavior
@@ -81,8 +76,7 @@ static void press_function(FunctionPad new_function) {
 		ui_mode = mode_a ? UI_EDITING_A : UI_EDITING_B;
 		break;
 	case FN_LOAD:
-		// switching from fn_load unpressed to pressed restarts the long-press
-		start_main_press();
+		cancel_main_press();
 		keep_ui_open = ui_mode != UI_LOAD;
 		ui_mode = UI_LOAD;
 		break;
@@ -95,9 +89,13 @@ static void press_function(FunctionPad new_function) {
 		ui_mode = UI_PTN_END;
 		break;
 	case FN_CLEAR:
-		// pressing clear stops latched notes playing
-		clear_latch();
-		keep_ui_open = ui_mode == UI_LOAD;
+		if (ui_mode == UI_LOAD)
+			cancel_main_press();
+		else {
+			// pressing clear stops latched notes playing
+			clear_latch();
+			keep_ui_open = ui_mode == UI_LOAD;
+		}
 		break;
 	case FN_RECORD:
 		keep_ui_open = true;
@@ -161,8 +159,7 @@ static void release_function(void) {
 			close_edit_mode();
 		break;
 	case FN_LOAD:
-		// switching from fn_load pressed to unpressed restarts the long-press
-		start_main_press();
+		cancel_main_press();
 		break;
 	case FN_LEFT:
 		if (press_start_ui_mode != UI_PTN_START && press_start_ui_mode != UI_PTN_END && short_press) {
@@ -177,7 +174,10 @@ static void release_function(void) {
 		}
 		break;
 	case FN_CLEAR:
-		seq_press_clear();
+		if (ui_mode == UI_LOAD)
+			cancel_main_press();
+		else
+			seq_press_clear();
 		break;
 	case FN_RECORD:
 		if (short_press)
@@ -196,27 +196,13 @@ static void release_function(void) {
 }
 
 static void hold_function(void) {
-	if (!function_press_used_up)
-		function_press_ms = millis() - function_press_start;
+	function_press_ms = millis() - function_press_start;
 
 	switch (ui_mode) {
 	case UI_LOAD:
-		switch (function_pressed) {
-		case FN_LOAD:
-			// hold ui_load open after a short press
-			if (!keep_ui_open && function_press_ms >= SHORT_PRESS_TIME)
-				keep_ui_open = true;
-			break;
-		case FN_CLEAR:
-			// clear item
-			if (function_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
-				clear_mem_item();
-				use_function_press();
-			}
-			break;
-		default:
-			break;
-		}
+		// hold ui_load open after a short press
+		if (function_pressed == FN_LOAD && !keep_ui_open && function_press_ms >= SHORT_PRESS_TIME)
+			keep_ui_open = true;
 		break;
 	case UI_SAMPLE_EDIT:
 		// long-pressing record or play in sampler preview mode records a new sample
@@ -305,7 +291,9 @@ void handle_pad_actions(u8 strip_id) {
 		// track main press
 		if (!action_press_on_strip) {
 			main_press_pad = pad_id;
-			start_main_press();
+			main_press_start = millis();
+			main_press_ms = 0;
+			main_press_canceled = false;
 		}
 		// track press start
 		if (!(action_press_on_strip & strip_mask)) {
@@ -356,10 +344,6 @@ void handle_pad_actions(u8 strip_id) {
 				seq_set_end_step(pad_y * 8 + strip_id);
 			keep_ui_open = false;
 			break;
-		case UI_LOAD:
-			if (is_press_start)
-				update_clear_item(pad_id);
-			break;
 		case UI_SAMPLE_EDIT:
 			if (is_press_start && function_pressed == FN_NONE)
 				switch (sampler_mode) {
@@ -399,12 +383,12 @@ void pad_actions_frame(void) {
 		main_press_ms = 0;
 		return;
 	}
-	main_press_ms = millis() - main_press_start;
+	if (!main_press_canceled)
+		main_press_ms = millis() - main_press_start;
 	// actions on long press
 	if (ui_mode == UI_LOAD && main_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
-		long_press_load_item(main_press_pad);
-		main_press_pad = 255;
-		main_press_ms = 0;
+		long_press_mem_item(main_press_pad);
+		cancel_main_press();
 	}
 }
 
@@ -459,7 +443,7 @@ bool oled_function_visuals(void) {
 }
 
 u8 ui_load_long_press_led(u8 x, u8 y, u8 pulse) {
-	if ((action_press_on_strip & (1 << x)) && main_press_pad == x * 8 + y)
+	if ((action_press_on_strip & (1 << x)) && main_press_pad == x * 8 + y && !main_press_canceled)
 		return maxi(pulse, 1);
 	return 0;
 }
