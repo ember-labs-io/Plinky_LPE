@@ -444,8 +444,8 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		u32 ain1 = audio_in[i * 2 + 1];
 
 		u32 audioinwet = STEREOSCALE(STEREOADDAVERAGE(ain0, ain1), ainwetlvl);
-		u32 dry2wetlr = STEREOADDAVERAGE(drylr0, drylr1);
-		dry2wetlr = STEREOADDSAT(dry2wetlr, audioinwet);
+		u32 synthwet = STEREOSCALE(STEREOADDAVERAGE(drylr0, drylr1), wetlvl);
+		u32 dry2wetlr = STEREOADDSAT(synthwet, audioinwet);
 
 		// delay
 
@@ -511,7 +511,6 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		newwetlr = STEREOADDSAT(newwetlr, reverbout);
 
 		// output upsample
-		newwetlr = STEREOSCALE(newwetlr, wetlvl);
 		u32 midwetlr = STEREOADDAVERAGE(newwetlr, wetlr);
 		wetlr = newwetlr;
 
