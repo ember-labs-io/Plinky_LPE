@@ -394,7 +394,6 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 	ainwetlvl = ((ainwetlvl >> 4) * (a_in_lvl >> 4)) >> 8;
 
-	a_in_lvl = ((a_in_lvl >> 4) * (drylvl >> 4)) >> 8;    // prescale by dry level
 	a_in_lvl = ((a_in_lvl >> 4) * (aindrylvl >> 4)) >> 8; // prescale by fx dry level
 
 	int delayratio = param_val(P_PING_PONG) >> 8;
