@@ -314,8 +314,6 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 	// hpf params
 
-	static float peak = 0.f;
-	peak *= 0.99f;
 	static float power = 0.f;
 	// at sample rate, lpf k 0.002 takes 10ms to go to half; .0006 takes 40ms; k=.0002 takes 100ms;
 	// at buffer rate, k=0.13 goes to half in 10ms; 0.013 goes to half in 100ms; 0.005 is 280ms
@@ -348,7 +346,6 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 		power *= 0.999f;
 		power += l * l + r * r;
-		peak = maxf(peak, l + r);
 
 		s16 li = (s16)SATURATE16(l);
 		s16 ri = (s16)SATURATE16(r);
@@ -402,6 +399,11 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 	int delayratio = param_val(P_PING_PONG) >> 8;
 	static int delaytime = SAMPLES_PER_TICK << 12;
+
+	// scope params
+	static float peak = 0.f;
+	peak *= 0.99f;
+	int a_in_lvl_full = param_val(P_IN_LVL);
 	int scopescale = (65536 * 24) / maxi(16384, (int)peak);
 
 	// fx processing
@@ -463,8 +465,15 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		delaypos &= DL_SIZE_MASK;
 		delay_ram_buf[delaypos] = delaysend;
 		delaypos++;
-		s16 li = dry2wetlr;
-		s16 ri = dry2wetlr >> 16;
+
+		// scope generation
+
+		u32 audioin_full = STEREOSCALE(STEREOADDAVERAGE(ain0, ain1), a_in_lvl_full);
+		u32 full_audio = STEREOADDSAT(STEREOADDAVERAGE(drylr0, drylr1), audioin_full);
+		s16 li = full_audio;
+		s16 ri = full_audio >> 16;
+		peak = maxf(peak, li + ri);
+
 		static s16 prevli = 0;
 		static s16 prevprevli = 0;
 		static u16 bestedge = 0;
@@ -482,8 +491,6 @@ void audio_post(u32* audio_out, u32* audio_in) {
 		}
 		prevprevli = prevli;
 		prevli = li;
-
-		// scope generation
 
 		if (scopex < 256 && scopex >= 0) {
 			int x = scopex / 2;
