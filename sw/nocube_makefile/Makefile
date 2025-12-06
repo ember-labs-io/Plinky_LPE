@@ -1,15 +1,9 @@
+# Toolchain and programmer locations - create this for your system from local_paths_template.mk
+-include local_paths.mk
 
-# Toolchain location - update this for your system
-# if the arm-none-eabi-* is in your path, then you can leave TOOLCHAIN_LOCATION empty
-# you can also set this from the commandline like
-# make TOOLCHAIN_LOCATION=/path/to/toolchain
-TOOLCHAIN_LOCATION ?= /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.macos64_1.1.0.202410301201/tools/bin/
+# You can also set this from the commandline:
+# make TOOLCHAIN_LOCATION=/path/to/toolchain STM32_CUBE_PROGRAMMER=/path/to/STM32_Programmer_CLI
 
-# set this to the location of the stm32 cube programmer cli app,
-# and then the 'program' pseudo target will flash your plinky
-# you can also set this from the commandline like
-# make STM32_CUBE_PROGRAMMER=/path/to/STM32_Programmer_CLI
-STM32_CUBE_PROGRAMMER ?= /Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI
 
 # Compiler and linker with full paths
 CC = $(TOOLCHAIN_LOCATION)arm-none-eabi-gcc
