@@ -17,6 +17,7 @@ sw/.settings/com.st.stm32cube.ide.mcu.sfrview.prefs
 sw/.DS_Store
 sw/.vscode
 .vscode
+sw/nocube_makefile/local_paths.mk
 sw/plinkyblack Debug.cfg
 sw/plinkyblack Debug.launch
 sw/plinkyblack Release.cfg
