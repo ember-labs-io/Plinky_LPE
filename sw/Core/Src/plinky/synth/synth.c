@@ -123,6 +123,11 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 				fine_pitch = (fine_pos * micro_tune) >> 14;
 			}
 
+			// send osc 0 pitch to midi
+			if (osc_id == 0)
+				midi_set_goal_note(
+				    voice_id, clampi((base_pitch + note_pitch + (PITCH_PER_SEMI >> 1)) / PITCH_PER_SEMI + 24, 0, 127));
+
 			s32 used_interval_pitch = (osc_id & 1) ? osc_interval_pitch : 0;
 
 			// calculate resulting pitch
@@ -150,8 +155,6 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 		}
 		high_string_pitch = summed_pitch;
 		got_high_pitch = true;
-		// the outgoing midi note is generated from oscillator pitch
-		midi_set_goal_note(voice_id, clampi((summed_pitch + SEMIS_TO_PITCH(2)) / SEMIS_TO_PITCH(4) + 24, 0, 127));
 	}
 
 	// == UPDATE ENVELOPE == //
