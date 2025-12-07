@@ -166,3 +166,19 @@ static inline void sort8(int *dst, const int *src) {
 }
 #undef SWAP
 // clang-format on
+
+static inline const char* bin8_str(u8 val) {
+	static char buf[9];
+	for (int i = 7; i >= 0; i--)
+		buf[7 - i] = (val & (1 << i)) ? '1' : '0';
+	buf[8] = '\0';
+	return buf;
+}
+
+static inline const char* bin16_str(u16 val) {
+	static char buf[17];
+	for (int i = 15; i >= 0; i--)
+		buf[15 - i] = (val & (1 << i)) ? '1' : '0';
+	buf[16] = '\0';
+	return buf;
+}
