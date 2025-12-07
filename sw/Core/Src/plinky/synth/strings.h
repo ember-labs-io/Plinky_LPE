@@ -11,7 +11,6 @@ extern u8 envelope_trigger;
 
 const Touch* get_string_touch(u8 string_id);
 u16 get_string_pos(u8 string_id);
-s16 get_string_pres(u8 string_id);
 const s16* get_string_pressures(void);
 const Touch* sorted_string_touch_ptr(u8 string_id);
 
