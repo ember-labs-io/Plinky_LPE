@@ -59,10 +59,6 @@ u16 get_string_pos(u8 string_id) {
 	return GET_STRING_TOUCH(string_id)->pos;
 }
 
-s16 get_string_pres(u8 string_id) {
-	return (string_touched & (1 << string_id)) ? GET_STRING_TOUCH(string_id)->pres : TOUCH_MIN_PRES;
-}
-
 const s16* get_string_pressures(void) {
 	return &working_string_pres[0];
 }
