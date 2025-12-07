@@ -123,6 +123,8 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 				fine_pitch = (fine_pos * micro_tune) >> 14;
 			}
 
+			s32 used_interval_pitch = (osc_id & 1) ? osc_interval_pitch : 0;
+
 			// calculate resulting pitch
 			osc_pitch =
 			    // octave and pitch parameters
@@ -130,12 +132,12 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 			    // pitch from scale step / midi note
 			    note_pitch +
 			    // pitch from osc interval parameter
-			    ((osc_id & 1) ? osc_interval_pitch : 0) +
+			    used_interval_pitch +
 			    // pitch from micro_tone / pitch spread
 			    fine_pitch;
 
 			// save values
-			summed_pitch += osc_pitch;
+			summed_pitch += osc_pitch - used_interval_pitch;
 			voice->osc[osc_id].pitch = osc_pitch;
 			voice->osc[osc_id].goal_phase_diff =
 			    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
