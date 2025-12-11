@@ -109,16 +109,6 @@ void init_midi(void) {
 	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
 }
 
-static s32 string_pitch_at_pad(u8 string_id, u8 pad_y) {
-	Scale scale = param_index_poly(P_SCALE, string_id);
-	return pitch_at_step(scale, param_index_poly(P_DEGREE, string_id) + scale_steps_at_string(scale, string_id) + pad_y)
-	       + 12 * ((param_index_poly(P_OCT, string_id) << 9) + (param_val_poly(P_PITCH, string_id) >> 7));
-}
-
-static s32 string_center_pitch(u8 string_id) {
-	return (string_pitch_at_pad(string_id, 0) + string_pitch_at_pad(string_id, 7)) >> 1;
-}
-
 static u8 string_playing_note(u8 note) {
 	for (u8 string_id = 0; string_id < 8; ++string_id)
 		if (midi_string[string_id].state != MS_UNUSED && midi_string[string_id].note == note)
@@ -168,22 +158,13 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			                 + PITCH_OFFSET_FROM_NOTE(data1);
 			// find the best string for this midi note
 			u8 desired_string = 0;
-			// pitch falls below center of bottom string
-			if (midi_pitch < string_center_pitch(0))
-				desired_string = 0;
-			// pitch falls above center of top string
-			else if (midi_pitch >= string_center_pitch(7))
-				desired_string = 7;
-			// find the string with the closest center pitch
-			else {
-				s32 min_dist = __INT32_MAX__;
-				for (u8 i = 0; i < NUM_STRINGS; i++) {
-					u32 pitch_dist = abs(string_center_pitch(i) - midi_pitch);
-					if (pitch_dist < min_dist) {
-						min_dist = pitch_dist;
-						desired_string = i;
-					}
-				}
+			u32 min_pitch_dist = abs(string_center_pitch(0, param_index_poly(P_SCALE, 0)) - midi_pitch);
+			for (u8 i = 1; i < NUM_STRINGS; i++) {
+				u32 pitch_dist = abs(string_center_pitch(i, param_index_poly(P_SCALE, i)) - midi_pitch);
+				if (pitch_dist >= min_pitch_dist)
+					break;
+				min_pitch_dist = pitch_dist;
+				desired_string = i;
 			}
 			// find closest non-sounding string
 			u8 min_string_dist = 255;
@@ -208,10 +189,14 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			}
 			// collect position on found string
 			if (string_id < NUM_STRINGS) {
+				Scale scale = param_index_poly(P_SCALE, string_id);
+				s16 string_step_offset = step_at_string(string_id, scale);
 				midi_string[string_id].position = 7 << 8;
-				for (u8 pad = 7; pad > 0; pad--)
-					if (midi_pitch >= string_pitch_at_pad(string_id, pad))
-						midi_string[string_id].position = (7 - pad) << 8;
+				for (u8 pad = 7; pad > 0; pad--) {
+					if (midi_pitch < pitch_at_step(string_step_offset + pad, scale))
+						break;
+					midi_string[string_id].position = (7 - pad) << 8;
+				}
 			}
 		}
 		// save in string

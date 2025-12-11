@@ -31,6 +31,9 @@
 
 // SYNTH
 
+#define PITCH_PER_SEMI 512
+#define PITCH_PER_OCT 6144
+
 #define NUM_TOUCHSTRIPS 9
 #define PADS_PER_STRIP 8
 
@@ -407,18 +410,18 @@ typedef enum Scale {
 	NUM_SCALES,
 } Scale;
 
-#define C (0 * 512)
-#define Cs (1 * 512)
-#define D (2 * 512)
-#define Ds (3 * 512)
-#define E (4 * 512)
-#define F (5 * 512)
-#define Fs (6 * 512)
-#define G (7 * 512)
-#define Gs (8 * 512)
-#define A (9 * 512)
-#define As (10 * 512)
-#define B (11 * 512)
+#define C (0 * PITCH_PER_SEMI)
+#define Cs (1 * PITCH_PER_SEMI)
+#define D (2 * PITCH_PER_SEMI)
+#define Ds (3 * PITCH_PER_SEMI)
+#define E (4 * PITCH_PER_SEMI)
+#define F (5 * PITCH_PER_SEMI)
+#define Fs (6 * PITCH_PER_SEMI)
+#define G (7 * PITCH_PER_SEMI)
+#define Gs (8 * PITCH_PER_SEMI)
+#define A (9 * PITCH_PER_SEMI)
+#define As (10 * PITCH_PER_SEMI)
+#define B (11 * PITCH_PER_SEMI)
 
 #define Es F
 #define Bs C
@@ -431,7 +434,7 @@ typedef enum Scale {
 #define Fb E
 #define Gb Fs
 
-#define CENTS(c) (((c) * 512) / 100)
+#define CENTS(c) (((c) * PITCH_PER_SEMI) / 100)
 
 #define MAX_SCALE_STEPS 12
 
@@ -495,16 +498,6 @@ const static u16 scale_table[NUM_SCALES][16] = {
 #undef Gb
 #undef Ab
 #undef Bb
-
-// Alex notes:
-//
-// pitch table is (64*8) steps per semitone, ie 512 per semitone
-// so heres my maths, this comes out at 435
-// 8887421 comes from the value of pitch when playing a C
-// the pitch of middle c in plinky as written is (4.0/(65536.0*65536.0/8887421.0/31250.0f))
-// which is 1.0114729530400526 too low
-// which is 0.19749290999 semitones flat
-// *512 = 101. so I need to add 101 to pitch_base
 
 // PARAMS
 

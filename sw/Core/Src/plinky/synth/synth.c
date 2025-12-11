@@ -11,9 +11,17 @@
 #include "sampler.h"
 #include "strings.h"
 
-#define PITCH_PER_SEMI 512
+// Alex notes:
+//
+// pitch table is (64*8) steps per semitone, ie 512 per semitone
+// so heres my maths, this comes out at 435
+// 8887421 comes from the value of pitch when playing a C
+// the pitch of middle c in plinky as written is (4.0/(65536.0*65536.0/8887421.0/31250.0f))
+// which is 1.0114729530400526 too low
+// which is 0.19749290999 semitones flat
+// *512 = 101. so I need to add 101 to pitch_base
+
 #define PITCH_BASE ((32768 - (12 << 9)) + 512 + 101) // pitch value for C4
-#define PITCH_TO_SCALE_STEPS(pitch, scale) (((pitch / 512) * scale_table[scale][0] + 1) / 12)
 
 Voice voices[NUM_VOICES];
 
@@ -37,9 +45,10 @@ static void osc_generation_init(void) {
 void generate_oscs(u8 string_id, Voice* voice) {
 	float pres_scaled = get_string_touch(string_id)->pres * 1.f / TOUCH_MAX_POS;
 
-	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes against
-	// eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value of this is,
-	// since we already have an expression of the max pressure on the pressure CV out - should we make gate out binary?
+	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes
+	// against eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value
+	// of this is, since we already have an expression of the max pressure on the pressure CV out - should we make
+	// gate out binary?
 	cv_gate_value = maxi(cv_gate_value, (int)(pres_scaled * 65536.f));
 
 	s32 note_pitch = 0;   // pitch offset caused by the played note
@@ -51,6 +60,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	Scale scale = NUM_SCALES;
 	s32 cv_pitch_offset = 0;
 	s8 cv_step_offset = 0;
+	s16 string_step_offset = 0;
 
 	// saving string values that are the same for all oscillators
 
@@ -61,8 +71,6 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	                  + (param_val_poly(P_PITCH, string_id) >> 7));
 	// pitch from interval parameter
 	s32 osc_interval_pitch = (param_val_poly(P_INTERVAL, string_id) * 12) >> 7;
-	// scale step from rotate parameter
-	s8 string_step_offset = param_index_poly(P_DEGREE, string_id);
 
 	bool using_midi = midi_string_used(string_id);
 
@@ -75,18 +83,17 @@ void generate_oscs(u8 string_id, Voice* voice) {
 		if (scale >= NUM_SCALES)
 			scale = 0;
 
-		// add step offset caused by scale & column (stride) parameters
-		string_step_offset += scale_steps_at_string(scale, string_id);
-
 		// cv
 		s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
 		if (sys_params.cv_quant == CVQ_SCALE)
-			cv_step_offset = PITCH_TO_SCALE_STEPS(cv_pitch, scale); // quantized cv
+			cv_step_offset = (((PITCH_TO_SEMIS(cv_pitch)) * scale_table[scale][0] + 1) / 12); // quantized cv
 		else
 			cv_pitch_offset = cv_pitch; // unquantized cv
+		string_step_offset = step_at_string(string_id, scale);
 	}
 
-	// we discard the two highest and lowest positions and use elements 2 through 5 to generate our oscillator pitches
+	// we discard the two highest and lowest positions and use elements 2 through 5 to generate our oscillator
+	// pitches
 	Touch* s_touch_sort = sorted_string_touch_ptr(string_id) + 2;
 
 	// loop through oscillators
@@ -100,13 +107,13 @@ void generate_oscs(u8 string_id, Voice* voice) {
 			u16 position = s_touch_sort->pos; // touch position
 			u8 pad_y = 7 - (position >> 8);   // pad on string
 			// pitch at step + cv
-			note_pitch = pitch_at_step(scale, string_step_offset + pad_y + cv_step_offset) + cv_pitch_offset;
+			note_pitch = pitch_at_step(string_step_offset + pad_y + cv_step_offset, scale) + cv_pitch_offset;
 
 			// detuning scaled by microtune param
 			s16 fine_pos = 127 - (position & 255); // offset from pad center
 			u16 pitch_to_next_pad =
-			    abs(pitch_at_step(scale, string_step_offset + pad_y + cv_step_offset + (fine_pos > 0 ? 1 : -1))
-			        - note_pitch);
+			    abs(pitch_at_step(string_step_offset + pad_y + cv_step_offset + (fine_pos > 0 ? 1 : -1), scale)
+			        + cv_pitch_offset - note_pitch);
 			s32 micro_tune = ((64 + param_val_poly(P_MICROTONE, string_id)) * pitch_to_next_pad) >> 10;
 			fine_pitch = (fine_pos * micro_tune) >> 14;
 		}
@@ -138,7 +145,7 @@ void generate_oscs(u8 string_id, Voice* voice) {
 	high_string_pitch = summed_pitch;
 	got_high_pitch = true;
 	// the outgoing midi note is generated from oscillator pitch
-	midi_set_goal_note(string_id, clampi((summed_pitch + 2 * PITCH_PER_SEMI) / (4 * PITCH_PER_SEMI) + 24, 0, 127));
+	midi_set_goal_note(string_id, clampi((summed_pitch + SEMIS_TO_PITCH(2)) / SEMIS_TO_PITCH(4) + 24, 0, 127));
 }
 
 static float update_envelope(u8 voice_id, Voice* voice) {
