@@ -87,7 +87,7 @@ static void draw_main_leds(void) {
 	precalc_waves(&next_wave);
 
 	// prepare pitch calc
-	int cv_pitch = adc_get_smooth(ADC_S_PITCH);
+	s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
 
 	for (u8 x = 0; x < 8; ++x) {
 		// prepare press
@@ -97,22 +97,26 @@ static void draw_main_leds(void) {
 		int sp0 = cur_sample_info.splitpoints[x];
 		int sp1 = (x < 7) ? cur_sample_info.splitpoints[x + 1] : cur_sample_info.samplelen;
 
-		// root pitch calcs
-		s8 root = param_index_poly(P_DEGREE, x);
 		Scale scale = param_index_poly(P_SCALE, x);
-		if (scale >= NUM_SCALES)
-			scale = 0;
-		if (sys_params.cv_quant == CVQ_SCALE) {
-			int steps = ((cv_pitch / 512) * scale_table[scale][0] + 1) / 12;
-			root += steps;
-		}
-		root += scale_steps_at_string(scale, x);
+		u8 steps_in_scale = scale_table[scale][0];
+		s16 start_step = step_at_string(x, scale);
+		// quantized cv offset
+		if (sys_params.cv_quant == CVQ_SCALE)
+			start_step += (PITCH_TO_SEMIS(cv_pitch) * steps_in_scale + 6) / 12;
+
+		// Find first pad that lands on step % steps_in_scale == 0
+		s16 first_y = ((-start_step % steps_in_scale) + steps_in_scale) % steps_in_scale;
+
+		// Draw all occurrences within 8-pad range
+		u8 root_k[8] = {};
+		for (s16 y = first_y; y < 8; y += steps_in_scale)
+			root_k[7 - y] = 96;
 
 		for (u8 y = 0; y < 8; ++y) {
-			u8 k = 0;
+			u8 k = root_k[y];
 
 			// draw wave
-			k = clampi((int)((next_wave[x + y * 8]) * 64.f) - 20, 0, 128);
+			k = maxi(k, clampi((int)((next_wave[x + y * 8]) * 64.f) - 20, 0, 128));
 
 			// draw finger press
 			if (s_touch->pos / 256 == y)
@@ -147,15 +151,6 @@ static void draw_main_leds(void) {
 					int samp = sp0 + (((sp1 - sp0) * y) >> 3);
 					u16 avg_peak = getwaveform4zoom(&cur_sample_info, samp / 1024, 3) & 15;
 					k = maxi(k, avg_peak * 6);
-				}
-				// draw root notes
-				else {
-					s32 pitch = (pitch_at_step(scale, (7 - y) + root));
-					pitch %= 12 * 512;
-					if (pitch < 0)
-						pitch += 12 * 512;
-					if (pitch < 256)
-						k = maxi(k, 96);
 				}
 				// draw sequencer
 				k = maxi(k, seq_led(x, y, sync_pulse, false));

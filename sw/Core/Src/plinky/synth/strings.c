@@ -5,7 +5,6 @@
 #include "hardware/midi.h"
 #include "hardware/touchstrips.h"
 #include "params.h"
-#include "pitch_tools.h"
 #include "sequencer.h"
 #include "synth.h"
 #include "time.h"
