@@ -109,12 +109,11 @@ static u32 last_flash_write[NUM_MEM_SEGMENTS] = {};
 
 // == UTILS == //
 
-static MemItemType get_item_type(u8 item_id) {
-	return item_id < PATTERNS_START      ? MEM_PRESET
-	       : item_id < SAMPLES_START     ? MEM_PATTERN
-	       : item_id < NUM_RAM_ITEMS + 1 ? MEM_SAMPLE // one extra space for NO_SAMPLE
-	                                     : NUM_RAM_ITEMS;
-}
+#define GET_ITEM_TYPE(item_id)                                                                                         \
+	((item_id) < PATTERNS_START      ? MEM_PRESET                                                                      \
+	 : (item_id) < SAMPLES_START     ? MEM_PATTERN                                                                     \
+	 : (item_id) < NUM_RAM_ITEMS + 1 ? MEM_SAMPLE                                                                      \
+	                                 : NUM_RAM_ITEMS)
 
 static u16 compute_hash(const void* data, u16 nbytes) {
 	u16 hash = 123;
@@ -125,7 +124,7 @@ static u16 compute_hash(const void* data, u16 nbytes) {
 }
 
 static void set_action_msg(u8 item_id, MemActionType action_type) {
-	switch (get_item_type(item_id)) {
+	switch (GET_ITEM_TYPE(item_id)) {
 	case MEM_PRESET:
 		if (action_type == MEM_ACTION_CLEAR)
 			snprintf(recent_load_msg, sizeof(recent_load_msg), "cleared preset");
@@ -325,9 +324,7 @@ bool pattern_outdated(void) {
 	return load_pattern_id != ram_pattern_id;
 }
 
-static bool sample_outdated(void) {
-	return load_sample_id != ram_sample_id;
-}
+#define SAMPLE_OUTDATED() (load_sample_id != ram_sample_id)
 
 // == INIT == //
 
@@ -620,7 +617,7 @@ static bool need_flash_write(MemSegment seg, u32 now) {
 			return true;
 		break;
 	case SEG_SAMPLE_INFO:
-		if (sample_outdated())
+		if (SAMPLE_OUTDATED())
 			return true;
 		break;
 	default:
@@ -637,7 +634,7 @@ static bool need_flash_write(MemSegment seg, u32 now) {
 
 void memory_frame(void) {
 	bool message_set = false;
-	MemItemType item_type = get_item_type(edit_item_id & 63);
+	MemItemType item_type = GET_ITEM_TYPE(edit_item_id & 63);
 	// clear requested
 	if (edit_item_id != 255 && (edit_item_id & MEM_ACTION_CLEAR) && item_type == MEM_SAMPLE) {
 		// clear current sample info
@@ -784,9 +781,7 @@ void revert_presets(void) {
 
 // == UPDATE RAM == //
 
-static bool segment_outdated(MemSegment segment) {
-	return last_ram_write[segment] != last_flash_write[segment];
-}
+#define SEGMENT_OUTDATED(segment) (last_ram_write[segment] != last_flash_write[segment])
 
 void log_ram_edit(MemSegment segment) {
 	switch (segment) {
@@ -812,7 +807,7 @@ void update_preset_ram(void) {
 	if (!preset_outdated() && !force_load_preset)
 		return;
 	// flash is not ready
-	if (flash_busy || segment_outdated(SEG_PRESET))
+	if (flash_busy || SEGMENT_OUTDATED(SEG_PRESET))
 		return;
 	clear_latch();
 	// load cur_preset
@@ -837,8 +832,8 @@ void update_pattern_ram(void) {
 	if (!pattern_outdated() && !force_load_pattern)
 		return;
 	// flash is not ready
-	if (flash_busy || segment_outdated(SEG_PAT0) || segment_outdated(SEG_PAT1) || segment_outdated(SEG_PAT2)
-	    || segment_outdated(SEG_PAT3))
+	if (flash_busy || SEGMENT_OUTDATED(SEG_PAT0) || SEGMENT_OUTDATED(SEG_PAT1) || SEGMENT_OUTDATED(SEG_PAT2)
+	    || SEGMENT_OUTDATED(SEG_PAT3))
 		return;
 	// load cur_pattern_qtr
 	u8 base_id = 4 * load_pattern_id + PATTERNS_START;
@@ -860,10 +855,10 @@ void update_pattern_ram(void) {
 void update_sample_ram(void) {
 	load_sample_id = param_index(P_SAMPLE);
 	// already up to date
-	if (!sample_outdated())
+	if (!SAMPLE_OUTDATED())
 		return;
 	// flash is not ready
-	if (flash_busy || segment_outdated(SEG_SAMPLE_INFO))
+	if (flash_busy || SEGMENT_OUTDATED(SEG_SAMPLE_INFO))
 		return;
 	// load cur_sample_info
 	const SampleInfo* src = (SampleInfo*)zero;
@@ -919,7 +914,7 @@ void apply_cued_mem_items(void) {
 }
 
 void cue_mem_item(u8 item_id) {
-	switch (get_item_type(item_id)) {
+	switch (GET_ITEM_TYPE(item_id)) {
 	case MEM_PRESET:
 		// load immediately
 		if (!seq_playing() || item_id == cued_preset_id) {
@@ -978,7 +973,7 @@ void cue_mem_item(u8 item_id) {
 // == UI == //
 
 void long_press_mem_item(u8 item_id) {
-	MemItemType item_type = get_item_type(item_id);
+	MemItemType item_type = GET_ITEM_TYPE(item_id);
 	switch (function_pressed) {
 	// not holding function pad: cue item for loading
 	case FN_NONE:
@@ -1197,7 +1192,7 @@ void draw_ui_load_visuals(void) {
 	else if (function_pressed == FN_CLEAR) {
 		// clear + main pad pressed
 		if (main_press_ms > PRESS_DELAY) {
-			switch (get_item_type(main_press_pad)) {
+			switch (GET_ITEM_TYPE(main_press_pad)) {
 			case MEM_PRESET:
 				snprintf(name_str, sizeof(name_str), "clear preset?");
 				break;
@@ -1218,7 +1213,7 @@ void draw_ui_load_visuals(void) {
 	}
 	// save/load messages
 	else if (main_press_ms > PRESS_DELAY) {
-		switch (get_item_type(main_press_pad)) {
+		switch (GET_ITEM_TYPE(main_press_pad)) {
 		case MEM_PRESET:
 			snprintf(name_str, sizeof(name_str), "%s preset %d?", function_pressed == FN_LOAD ? "save" : "load",
 			         main_press_pad + 1);
@@ -1259,7 +1254,7 @@ u8 ui_load_led(u8 x, u8 y, u8 pulse1, u8 pulse2) {
 	u8 item_id = x * 8 + y;
 
 	// all patterns low brightness
-	u8 k = get_item_type(item_id) == MEM_PATTERN ? 64 : 0;
+	u8 k = GET_ITEM_TYPE(item_id) == MEM_PATTERN ? 64 : 0;
 
 	// full selected load item
 	if (item_id == load_preset_id)

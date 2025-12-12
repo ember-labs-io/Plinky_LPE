@@ -72,39 +72,27 @@ static s32 SATURATE17(s32 a) {
 	return tmp;
 }
 
-static s8 value_to_index(s32 value, u8 range) {
-	return (clampi(value, -65535, 65535) * range + (value < 0 ? 65535 : 0)) >> 16;
-}
+#define VALUE_TO_INDEX(value, range) ((clampi(value, -65535, 65535) * (range) + ((value) < 0 ? 65535 : 0)) >> 16)
 
-static s8 raw_to_index(s16 raw, u8 range) {
-	return value_to_index(raw << 6, range);
-}
+#define RAW_TO_INDEX(raw, range) (VALUE_TO_INDEX((raw) << 6, range))
 
-static u8 param_range(Param param_id) {
-	return param_info[range_type[param_id]] & RANGE_MASK;
-}
+#define PARAM_RANGE(param_id) (param_info[range_type[param_id]] & RANGE_MASK)
 
 static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 	if (mod_src != SRC_BASE)
 		return false;
-	if (param_range(param_id) == 0)
+	if (PARAM_RANGE(param_id) == 0)
 		return false;
 	if ((range_type[param_id] == R_DLYCLK || range_type[param_id] == R_DUACLK) && raw < 0)
 		return false;
 	return true;
 }
 
-static bool param_signed(Param param_id) {
-	return param_info[range_type[param_id]] & SIGNED;
-}
+#define PARAM_SIGNED(param_id) (param_info[range_type[param_id]] & SIGNED)
 
-static bool param_signed_or_mod(Param param_id, ModSource mod_src) {
-	return param_signed(param_id) || mod_src != SRC_BASE;
-}
+#define PARAM_SIGNED_OR_MOD(param_id, mod_src) (PARAM_SIGNED(param_id) || (mod_src) != SRC_BASE)
 
-static Param get_recent_param(void) {
-	return EDITING_PARAM ? selected_param : mem_param;
-}
+#define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
 const Preset* init_params_ptr() {
 	return &init_params;
@@ -163,7 +151,7 @@ void params_rcv_cc(u8 d1, u8 d2) {
 	}
 
 	// scale from unsigned to signed
-	if (param_signed(param_id))
+	if (PARAM_SIGNED(param_id))
 		value = value * 2 - RAW_SIZE;
 
 	// save
@@ -174,7 +162,7 @@ void params_rcv_cc(u8 d1, u8 d2) {
 
 // parameter ranges in the og firmware
 static u8 get_og_range(Param param_id) {
-	u8 lpe_range = param_range(param_id);
+	u8 lpe_range = PARAM_RANGE(param_id);
 	switch (param_id) {
 	// slight range changes because of new index scaling
 	case P_DEGREE:
@@ -238,7 +226,7 @@ bool update_preset(Preset* preset) {
 			// restrict to unipolar range
 			case P_ARP_EUC_LEN:
 			case P_SEQ_EUC_LEN:
-				lpe_raw = INDEX_TO_RAW((abs(og_raw) * get_og_range(param_id)) >> 10, param_range(param_id));
+				lpe_raw = INDEX_TO_RAW((abs(og_raw) * get_og_range(param_id)) >> 10, PARAM_RANGE(param_id));
 				break;
 			// arp & latch, take from what used to be "flags"
 			case P_ARP_TGL:
@@ -265,7 +253,7 @@ bool update_preset(Preset* preset) {
 			default:
 				// indeces - map more equally over raw range
 				if (param_is_index(param_id, SRC_BASE, og_raw))
-					lpe_raw = INDEX_TO_RAW((og_raw * get_og_range(param_id)) >> 10, param_range(param_id));
+					lpe_raw = INDEX_TO_RAW((og_raw * get_og_range(param_id)) >> 10, PARAM_RANGE(param_id));
 				break;
 			}
 			preset->params[param_id][SRC_BASE] = lpe_raw;
@@ -323,7 +311,7 @@ void revert_preset(Preset* preset) {
 		default:
 			// indeces - map to center of range
 			if (is_index)
-				og_raw = ((raw_to_index(lpe_raw, param_range(param_id)) << 10) + RAW_HALF) / get_og_range(param_id);
+				og_raw = ((RAW_TO_INDEX(lpe_raw, PARAM_RANGE(param_id)) << 10) + RAW_HALF) / get_og_range(param_id);
 			break;
 		}
 		preset->params[param_id][SRC_BASE] = og_raw;
@@ -432,11 +420,9 @@ void params_tick(void) {
 // == RETRIEVAL == //
 
 // raw parameter value, range -1024 to 1024
-static s16 param_val_raw(Param param_id, ModSource mod_src) {
-	if (param_id == P_VOLUME && mod_src == SRC_BASE)
-		return (sys_params.volume_msb << 8) + sys_params.volume_lsb;
-	return cur_preset.params[param_id][mod_src];
-}
+#define PARAM_VAL_RAW(param_id, mod_src)                                                                               \
+	((param_id) == P_VOLUME && (mod_src) == SRC_BASE ? (sys_params.volume_msb << 8) + sys_params.volume_lsb            \
+	                                                 : cur_preset.params[param_id][mod_src])
 
 // modulated parameter value, range -65536 to 65536
 static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
@@ -466,7 +452,7 @@ static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 
 	// the shape parameter can only modulate within the same oscillator shape type
 	if (param_id == P_SHAPE) {
-		s16 raw = param_val_raw(param_id, SRC_BASE);
+		s16 raw = PARAM_VAL_RAW(param_id, SRC_BASE);
 		// wavetable
 		if (raw > 0)
 			mod_val = maxi(1 << 17, mod_val); // 0.1%
@@ -479,7 +465,7 @@ static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 	}
 
 	// all 7 mod sources have now been applied, scale and clamp to 16 bit
-	return clampi(mod_val >> 10, param_signed(param_id) ? -65536 : 0, 65536);
+	return clampi(mod_val >> 10, PARAM_SIGNED(param_id) ? -65536 : 0, 65536);
 }
 
 // param value range +/- 65536
@@ -496,8 +482,8 @@ s32 param_val_poly(Param param_id, u8 string_id) {
 // index value is scaled to its appropriate range
 
 s8 param_index(Param param_id) {
-	u8 range = param_range(param_id);
-	s8 index = value_to_index(param_val(param_id), range);
+	u8 range = PARAM_RANGE(param_id);
+	s8 index = VALUE_TO_INDEX(param_val(param_id), range);
 	// revert from being stored 1-based
 	if (param_id == P_SAMPLE)
 		index = (index - 1 + range) % range;
@@ -505,11 +491,11 @@ s8 param_index(Param param_id) {
 }
 
 s8 param_index_poly(Param param_id, u8 string_id) {
-	return value_to_index(param_val_poly(param_id, string_id), param_range(param_id));
+	return VALUE_TO_INDEX(param_val_poly(param_id, string_id), PARAM_RANGE(param_id));
 }
 
 s8 param_index_unmod(Param param_id) {
-	return raw_to_index(cur_preset.params[param_id][SRC_BASE], param_range(param_id));
+	return RAW_TO_INDEX(cur_preset.params[param_id][SRC_BASE], PARAM_RANGE(param_id));
 }
 
 // == SAVING == //
@@ -533,11 +519,11 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 }
 
 void save_param_index(Param param_id, s8 index) {
-	u8 range = param_range(param_id);
+	u8 range = PARAM_RANGE(param_id);
 	// save 1-based
 	if (param_id == P_SAMPLE)
 		index = (index + 1) % range;
-	index = clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1);
+	index = clampi(index, PARAM_SIGNED(param_id) ? -(range - 1) : 0, range - 1);
 	save_param_raw(param_id, SRC_BASE, INDEX_TO_RAW(index, range));
 }
 
@@ -576,7 +562,7 @@ void close_edit_mode(void) {
 }
 
 static void reset_left_strip(void) {
-	left_strip_start = param_val_raw(selected_param, selected_mod_src);
+	left_strip_start = PARAM_VAL_RAW(selected_param, selected_mod_src);
 	set_smoother(&left_strip_smooth, left_strip_start);
 }
 
@@ -594,7 +580,7 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 	float press_value =
 	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (RAW_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
 	           RAW_SIZE);
-	bool is_signed = param_signed_or_mod(selected_param, selected_mod_src);
+	bool is_signed = PARAM_SIGNED_OR_MOD(selected_param, selected_mod_src);
 	if (is_signed)
 		press_value = press_value * 2 - RAW_SIZE;
 	// smooth the pressed value
@@ -616,8 +602,8 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 	s16 raw = smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f);
 	// snap to index value
 	if (param_is_index(selected_param, selected_mod_src, raw)) {
-		u8 range = param_range(selected_param);
-		raw = INDEX_TO_RAW(raw_to_index(raw, range), range);
+		u8 range = PARAM_RANGE(selected_param);
+		raw = INDEX_TO_RAW(RAW_TO_INDEX(raw, range), range);
 	}
 	// apply center deadzone to non-index, signed params (notched params only first half)
 	else if (is_signed && !(notch_at_50 && fabs(smoothed_value) >= RAW_HALF)) {
@@ -667,7 +653,7 @@ void press_mod_pad(u8 pad_y) {
 // == ENCODER == //
 
 void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
-	Param param_id = get_recent_param();
+	Param param_id = RECENT_PARAM;
 	if (param_id >= NUM_PARAMS)
 		return;
 
@@ -675,8 +661,8 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	if (function_pressed == FN_SHIFT_A || function_pressed == FN_SHIFT_B)
 		pad_actions_keep_edit_mode_open();
 
-	s16 raw = param_val_raw(param_id, selected_mod_src);
-	u8 range = param_range(param_id);
+	s16 raw = PARAM_VAL_RAW(param_id, selected_mod_src);
+	u8 range = PARAM_RANGE(param_id);
 
 	// negative values of delay/dual clock are unranged
 	if ((range_type[param_id] == R_DLYCLK || range_type[param_id] == R_DUACLK) && raw < 0)
@@ -684,8 +670,8 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 
 	// indeces: just add/subtract 1 per encoder tick
 	if (range && selected_mod_src == SRC_BASE) {
-		s16 index = raw_to_index(raw, range) + enc_diff;
-		raw = INDEX_TO_RAW(clampi(index, param_signed(param_id) ? -(range - 1) : 0, range - 1), range);
+		s16 index = RAW_TO_INDEX(raw, range) + enc_diff;
+		raw = INDEX_TO_RAW(clampi(index, PARAM_SIGNED(param_id) ? -(range - 1) : 0, range - 1), range);
 		// smooth transition between synced and free timing
 		if ((range_type[param_id] == R_DLYCLK || range_type[param_id] == R_DUACLK) && index < 0)
 			raw = -1;
@@ -721,7 +707,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 			raw += enc_diff > 0 ? 1 : -1;
 		break;
 	}
-	raw = clampi(raw, param_signed_or_mod(param_id, selected_mod_src) ? -RAW_SIZE : 0, RAW_SIZE);
+	raw = clampi(raw, PARAM_SIGNED_OR_MOD(param_id, selected_mod_src) ? -RAW_SIZE : 0, RAW_SIZE);
 	save_param_raw(param_id, selected_mod_src, raw);
 }
 
@@ -729,7 +715,7 @@ void params_toggle_default_value(void) {
 	static u16 param_hash = NUM_PARAMS * NUM_MOD_SOURCES;
 	static s16 saved_val = INT16_MAX;
 
-	Param param_id = get_recent_param();
+	Param param_id = RECENT_PARAM;
 	if (param_id >= NUM_PARAMS)
 		return;
 
@@ -740,11 +726,11 @@ void params_toggle_default_value(void) {
 		param_hash = new_hash;
 	}
 
-	s16 cur_val = param_val_raw(param_id, selected_mod_src);
+	s16 cur_val = PARAM_VAL_RAW(param_id, selected_mod_src);
 	s16 init_val = selected_mod_src ? 0 : init_params.params[param_id][0];
 	// first press: save current value and set init value
 	if (cur_val != init_val || saved_val == INT16_MAX) {
-		saved_val = param_val_raw(param_id, selected_mod_src);
+		saved_val = PARAM_VAL_RAW(param_id, selected_mod_src);
 		save_param_raw(param_id, selected_mod_src, init_val);
 	}
 	// second press: restore saved value
@@ -831,13 +817,13 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 	if (mod_src != SRC_BASE)
 		return get_val_str(raw * 1000 >> 10, 1, val_buf, "", true);
 
-	u8 range = param_range(param_id);
+	u8 range = PARAM_RANGE(param_id);
 	if ((range_type[param_id] == R_DLYCLK || range_type[param_id] == R_DUACLK) && raw < 0)
 		range = 0;
 
 	// indeces
 	if (range) {
-		s8 index = raw_to_index(raw, range);
+		s8 index = RAW_TO_INDEX(raw, range);
 		switch (param_id) {
 		case P_SCALE:
 			return scale_name[index];
@@ -1060,7 +1046,7 @@ void draw_cur_param(void) {
 	u8 width = 0;
 	u8 x_center = 0;
 	u8 x;
-	s16 raw = param_val_raw(draw_param, src_snap);
+	s16 raw = PARAM_VAL_RAW(draw_param, src_snap);
 
 	gfx_text_color = 3;
 	// draw section name
@@ -1210,7 +1196,7 @@ void draw_cur_param(void) {
 	// draw param name
 
 	//  special negative ranges
-	s16 base_raw = param_val_raw(draw_param, SRC_BASE);
+	s16 base_raw = PARAM_VAL_RAW(draw_param, SRC_BASE);
 	if (base_raw < 0) {
 		switch (draw_param) {
 		case P_SHAPE:
@@ -1241,8 +1227,8 @@ void draw_cur_param(void) {
 	}
 
 	// special incidental  cases
-	u8 range = param_range(draw_param);
-	s8 index = raw_to_index(base_raw, range);
+	u8 range = PARAM_RANGE(draw_param);
+	s8 index = RAW_TO_INDEX(base_raw, range);
 	if (draw_param == P_SEQ_CLK_DIV && index == range - 1) {
 		draw_str(0, 18, F_12_BOLD, I_JACK);
 		draw_str(text_x, 18, F_12_BOLD, "Trigger");
@@ -1325,10 +1311,10 @@ static u8 col_led(float brightness) {
 s16 value_editor_column_led(u8 y) {
 	if (param_snap >= NUM_PARAMS)
 		return -1;
-	bool is_signed = param_signed_or_mod(param_snap, src_snap);
-	s16 raw = param_val_raw(param_snap, src_snap);
+	bool is_signed = PARAM_SIGNED_OR_MOD(param_snap, src_snap);
+	s16 raw = PARAM_VAL_RAW(param_snap, src_snap);
 	u8 pad_id = 7 - y;
-	u8 range = src_snap == SRC_BASE ? param_range(param_snap) : 0;
+	u8 range = src_snap == SRC_BASE ? PARAM_RANGE(param_snap) : 0;
 	float pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
 	// small ranges light up discrete leds
 	if (range > 0 && (is_signed ? 2 * range - 1 : range) <= 9)
@@ -1393,7 +1379,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 	else if (x < 7) {
 		u8 pAorB = x - 1 + y * 12 + (ui_mode == UI_EDITING_B ? 6 : 0);
 		// holding down a mod source => light up params that are modulated by it
-		if (mod_action_pressed() && src_snap != SRC_BASE && param_val_raw(pAorB, src_snap))
+		if (mod_action_pressed() && src_snap != SRC_BASE && PARAM_VAL_RAW(pAorB, src_snap))
 			k = 255;
 		// pulse selected param
 		if (pAorB == param_snap)
@@ -1405,7 +1391,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 			k = pulse;
 		// light up mod sources that modulate current param
 		else
-			k = (y && param_val_raw(param_snap, y)) ? 255 : 0;
+			k = (y && PARAM_VAL_RAW(param_snap, y)) ? 255 : 0;
 	}
 	return k;
 }

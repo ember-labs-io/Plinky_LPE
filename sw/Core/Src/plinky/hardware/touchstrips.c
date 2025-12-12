@@ -58,14 +58,11 @@ void init_touchstrips(void) {
 // == GET TOUCH INFO == //
 
 // sensor position: ratio between a and b values mapped to [-4096 .. 4095]
-static s16 sensor_reading_position(u8 reading_id) {
-	return ((B_VAL(reading_id) - A_VAL(reading_id)) << 12) / (A_VAL(reading_id) + B_VAL(reading_id) + 1);
-}
+#define SENSOR_READING_POS(reading_id)                                                                                 \
+	(((B_VAL(reading_id) - A_VAL(reading_id)) << 12) / (A_VAL(reading_id) + B_VAL(reading_id) + 1))
 
 // sensor pressure: sensor values added (normalized for noise floor)
-static u16 sensor_reading_pressure(u8 reading_id) {
-	return clampi(A_DIFF(reading_id) + B_DIFF(reading_id), 0, 65536);
-}
+#define SENSOR_READING_PRES(reading_id) (clampi(A_DIFF(reading_id) + B_DIFF(reading_id), 0, 65536))
 
 const Touch* get_touch(u8 touch_id, u8 frames_back) {
 	return GET_TOUCH(touch_id, frames_back);
@@ -89,8 +86,8 @@ static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
 
 static void process_reading(u8 reading_id) {
 	// raw values
-	s16 raw_pos = sensor_reading_position(reading_id);
-	u16 raw_pres = sensor_reading_pressure(reading_id);
+	s16 raw_pos = SENSOR_READING_POS(reading_id);
+	u16 raw_pres = SENSOR_READING_PRES(reading_id);
 
 	// touch
 	u8 touch_id = reading_id % NUM_TOUCHSTRIPS;
@@ -434,12 +431,12 @@ void touch_calib(FlashCalibType flash_calib_type) {
 				continue;
 			}
 			// pressure
-			u16 raw_pres = sensor_reading_pressure(read_id);
+			u16 raw_pres = SENSOR_READING_PRES(read_id);
 			u16 prev_raw_pres = raw_pres_1back[read_id];
 			raw_pres_1back[read_id] = raw_pres;
 			u16 pres_band = raw_pres / 20;
 			// position
-			s16 raw_pos = sensor_reading_position(read_id);
+			s16 raw_pos = SENSOR_READING_POS(read_id);
 			// pressure is quite stable => update calibration state
 			if (raw_pres > 1200 && raw_pres > prev_raw_pres - pres_band / 2 && raw_pres < prev_raw_pres + pres_band) {
 				float weight = (raw_pres - 1200.f) / 1000.f;
