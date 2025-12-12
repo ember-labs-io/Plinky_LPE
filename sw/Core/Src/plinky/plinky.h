@@ -26,6 +26,9 @@ typedef enum CalibMode {
 	CALIB_CV,
 } CalibMode;
 
+#define TIME_LOG_ITEMS 12
+extern u32 debug_time[TIME_LOG_ITEMS];
+
 extern HardwareVersion hw_version;
 extern UIMode ui_mode;
 extern CalibMode calib_mode;
