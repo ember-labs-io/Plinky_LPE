@@ -52,17 +52,13 @@ void open_sampler(u8 with_sample_id) {
 
 // == PLAY SAMPLER AUDIO == //
 
-// start of current (slice) loop
-static int calcloopstart(u8 slice_id) {
-	int all = cur_sample_info.loop & 2;
-	return (all) ? 0 : cur_sample_info.splitpoints[slice_id];
-}
+// start of current (slice) loop - u8 slice_id -> int
+#define CALCLOOPSTART(slice_id) ((cur_sample_info.loop & 2) ? 0 : cur_sample_info.splitpoints[slice_id])
 
-// end of current (slice) loop
-static int calcloopend(u8 slice_id) {
-	int all = cur_sample_info.loop & 2;
-	return (all || slice_id >= 7) ? cur_sample_info.samplelen - 192 : cur_sample_info.splitpoints[slice_id + 1];
-}
+// end of current (slice) loop - u8 slice_id -> int
+#define CALCLOOPEND(slice_id)                                                                                          \
+	((cur_sample_info.loop & 2 || (slice_id) >= 7) ? cur_sample_info.samplelen - 192                                   \
+	                                               : cur_sample_info.splitpoints[(slice_id) + 1])
 
 void sampler_recording_tick(u32* dst, u32* audioin) {
 	update_sample_ram();
@@ -173,8 +169,8 @@ void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noi
 
 		// if the sample loops and the new playhead has crossed the loop boundary, recalculate new playhead position
 		if (cur_sample_info.loop & 1) {
-			int loopstart = calcloopstart(voice->slice_id) << 8;
-			int loopend = calcloopend(voice->slice_id) << 8;
+			int loopstart = CALCLOOPSTART(voice->slice_id) << 8;
+			int loopend = CALCLOOPEND(voice->slice_id) << 8;
 			int looplen = loopend - loopstart;
 			if (looplen > 0 && (new_playhead < loopstart || new_playhead >= loopstart + looplen)) {
 				new_playhead = (new_playhead - loopstart) % looplen;
@@ -212,8 +208,8 @@ void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noi
 
 		int64_t posa = g->pos[0];
 		int64_t posb = g->pos[1];
-		int loopstart = calcloopstart(prevsliceidx);
-		int loopend = calcloopend(prevsliceidx);
+		int loopstart = CALCLOOPSTART(prevsliceidx);
+		int loopend = CALCLOOPEND(prevsliceidx);
 		bool outofrange0 = posa < loopstart || posa >= loopend;
 		bool outofrange1 = posb < loopstart || posb >= loopend;
 		int gvol24 = g->vol24;
