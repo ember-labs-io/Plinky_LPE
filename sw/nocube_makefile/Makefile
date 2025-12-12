@@ -138,8 +138,10 @@ CFLAGS = $(CFLAGS_COMMON) -Og -g3 -D_DEBUG -DDEBUG -gdwarf-2
 LDFLAGS = $(LDFLAGS_COMMON)
 endif
 
-# enable debug logging
+# debug flags
 # CFLAGS += -DDEBUG_LOG
+# CFLAGS += -DTIME_LOGGING
+# CFLAGS += -DFPS_WINDOW
 
 # Print build type
 $(info Building in $(BUILD_TYPE) mode)
