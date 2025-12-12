@@ -23,6 +23,10 @@
 #include "ui/settings_menu.h"
 #include "usb/usb.h"
 
+u32 debug_time[TIME_LOG_ITEMS];
+const char* debug_label[TIME_LOG_ITEMS] = {"ts",     "au_pre", "pr_ram", "seq",    "s_tch", "prm_t",
+                                           "sp_ram", "vcs",    "spi",    "au_pst", "frame", "fps"};
+
 UIMode ui_mode = UI_DEFAULT;
 
 HardwareVersion hw_version;
@@ -120,20 +124,47 @@ void plinky_init(void) {
 	init_encoder();
 }
 
+static void log_time(void) {
+	static u8 index = 0;
+	static u32 frame_start = 0;
+	static u32 last_us = 0;
+	u32 new_us = micros();
+	// frame start
+	if (index == 0)
+		frame_start = new_us;
+	// log section
+	else
+		debug_time[index - 1] = new_us - last_us;
+	// last section (logs section and full frame time)
+	if (index == TIME_LOG_ITEMS - 2)
+		debug_time[index] = new_us - frame_start;
+	last_us = new_us;
+	// leave last index open for the slow frame fps
+	index = (index + 1) % (TIME_LOG_ITEMS - 1);
+}
+
 // this runs with precise audio timing
 void plinky_codec_tick(u32* audio_out, u32* audio_in) {
+	log_time();
+
 	// read physical touches
 	u8 read_phase = read_touchstrips();
+
+	log_time();
+
 	// once per touchstrip read cycle:
 	if (!read_phase) {
 		encoder_tick();
 		pad_actions_frame();
 	}
+
 	// update all leds
 	leds_update();
 
 	// pre-process audio
 	audio_pre(audio_out, audio_in);
+
+	log_time();
 
 	// don't do anything else while calibrating
 	if (calib_mode)
@@ -148,30 +179,76 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 
 	// make sure preset ram is up to date
 	update_preset_ram();
+
+	log_time();
+
 	// midi
 	process_midi();
+
 	// clock
 	clock_tick();
+
 	// sequencer
 	seq_tick();
+
+	log_time();
+
 	// combine physical, latch, sequencer touches; run arp
 	generate_string_touches();
+
+	log_time();
+
 	// evaluate parameters and modulations
 	params_tick();
+
+	log_time();
+
 	// make sure sample and pattern ram is up to date
 	update_sample_ram();
 	update_pattern_ram();
+
+	log_time();
+
 	// generate the voices, based on touches and parameters
 	handle_synth_voices(audio_out);
+
+	log_time();
+
 	// restart spi loop if necessary
 	spi_tick();
+
+	log_time();
+
 	// apply audio effects and send result to output buffer
 	audio_post(audio_out, audio_in);
+
+	log_time();
 }
 
 // this is the main loop, only code that is blocking in some way lives here
+#if defined(TIME_LOGGING) || defined(FPS_WINDOW)
 void plinky_loop(void) {
 	while (1) {
+		// save frame fps to last debug item
+		static u32 last_us = 0;
+		u32 new_us = micros();
+		debug_time[TIME_LOG_ITEMS - 1] = 100000000 / (new_us - last_us); // 100x fps
+		last_us = new_us;
+
+#ifdef TIME_LOGGING
+		// serial log one saved  item per loop
+		static u8 log_index = 0;
+		if (log_index == TIME_LOG_ITEMS)
+			debug_log("Frame Start\n");
+		else
+			debug_log("%s %u\n", debug_label[log_index], debug_time[log_index]);
+		log_index = (log_index + 1) % (TIME_LOG_ITEMS + 1);
+#endif
+#else
+
+void plinky_loop(void) {
+	while (1) {
+#endif
 		// set output volume
 		codec_update_volume();
 		// handle spi flash writes for the sampler

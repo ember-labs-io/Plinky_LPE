@@ -146,6 +146,21 @@ static void draw_preset_info(void) {
 		draw_pattern_id(param_index(P_ARP_TGL));
 }
 
+#ifdef FPS_WINDOW
+static void draw_fps_window(void) {
+	Font fps_font = F_12;
+	char fps_buf[5];
+	u8 fps = debug_time[TIME_LOG_ITEMS - 1] / 10;
+	sprintf(fps_buf, "%d.%d", (fps / 10) % 100, fps % 10);
+	u8 fps_width = str_width(fps_font, fps_buf);
+	u8 fps_height = font_height(fps_font);
+	fill_rectangle(0, 0, fps_width + 3, fps_height + 2);
+	inverted_rectangle(1, 1, fps_width + 2, fps_height + 1);
+	gfx_text_color = 1;
+	draw_str(2, 2, fps_font, fps_buf);
+}
+#endif
+
 static void draw_visuals(void) {
 	gfx_text_color = 1;
 
@@ -213,6 +228,10 @@ static void draw_visuals(void) {
 		draw_settings_menu();
 		break;
 	}
+
+#ifdef FPS_WINDOW
+	draw_fps_window();
+#endif
 }
 
 void draw_oled_visuals(void) {
