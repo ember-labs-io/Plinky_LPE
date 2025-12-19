@@ -15,5 +15,3 @@ const Touch* sorted_string_touch_ptr(u8 string_id);
 void clear_latch(void);
 
 void generate_string_touches(void);
-// this only exists for midi output - remove after midi cleanup
-Touch* get_string_touch_prev(u8 string_id, u8 frames_back);
