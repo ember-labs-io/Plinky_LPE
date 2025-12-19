@@ -247,9 +247,19 @@ void handle_pad_actions(u8 strip_id) {
 	const Touch* touch_1back = get_touch(strip_id, 1);
 	const Touch* touch_2back = get_touch(strip_id, 2);
 
-	bool valid_action = (strip_touched & mask) && !strip_available_for_synth(strip_id);
 	u8 pad_y = touch->pos >> 8;       // local pad (on strip, 0 - 7)
 	u8 pad_id = strip_id * 8 + pad_y; // global pad (on plate, 0 - 71)
+
+	bool valid_action =
+	    // touched
+	    (strip_touched & mask)
+	    && (
+	        // function strip
+	        strip_id == 8 ||
+	        // any non-default ui
+	        ui_mode != UI_DEFAULT ||
+	        // using the edit strip in the synth
+	        (ui_mode == UI_DEFAULT && strip_id == 0 && editing_param()));
 
 	u8 prev_pad_y = prev_action_pad[strip_id];
 	// action tries to slide from one pad to the next

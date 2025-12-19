@@ -4,8 +4,8 @@
 // this module deals with selecting parameters, editing their values, and applying mod-source modulations to them
 
 // utils
-const Preset* init_params_ptr();
-bool strip_available_for_synth(u8 strip_id);
+const Preset* init_params_ptr(void);
+bool editing_param(void);
 bool arp_active(void);
 void params_rcv_cc(u8 d1, u8 d2);
 
