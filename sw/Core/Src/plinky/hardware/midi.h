@@ -16,5 +16,6 @@ void process_midi(void);
 void midi_send_clock(void);
 void midi_send_transport(MidiMessageType transport_type);
 void midi_set_goal_note(u8 string_id, u8 midi_note);
+void midi_set_start_velocity(u8 string_id, s16 pressure);
 
 void debug_log(const char* format, ...);
