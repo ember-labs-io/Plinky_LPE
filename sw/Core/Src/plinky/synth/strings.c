@@ -47,11 +47,6 @@ void clear_latch(void) {
 
 // -- latching
 
-// this only exists for midi output - remove after midi cleanup
-Touch* get_string_touch_prev(u8 string_id, u8 frames_back) {
-	return &string_touch[string_id][(strings_write_frame - frames_back) & 7];
-}
-
 u16 get_string_pos(u8 string_id) {
 	return GET_STRING_TOUCH(string_id)->pos;
 }
@@ -264,7 +259,10 @@ void generate_string_touches(void) {
 	string_touched = arp_active() ? arp_tick(string_touched_no_arp) : string_touched_no_arp;
 
 	// precalculate working string pressures
-	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
 		working_string_pres[string_id] =
 		    (string_touched & (1 << string_id)) ? GET_STRING_TOUCH(string_id)->pres : TOUCH_MIN_PRES;
+		if (envelope_trigger & (1 << string_id))
+			midi_set_start_velocity(string_id, working_string_pres[string_id]);
+	}
 }

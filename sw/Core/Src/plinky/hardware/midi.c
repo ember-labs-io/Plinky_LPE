@@ -234,8 +234,12 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			}
 		}
 		// save in string
-		if (string_id < NUM_STRINGS)
-			midi_string[string_id] = (MidiString){MS_PRESSED, data1, data2};
+		if (string_id < NUM_STRINGS) {
+			MidiString* m_string = &midi_string[string_id];
+			m_string->state = MS_PRESSED;
+			m_string->note = data1;
+			m_string->velocity = data2;
+		}
 	} break;
 	case MIDI_POLY_KEY_PRESSURE: {
 		u8 string_id = string_holds_note(data1);
@@ -304,6 +308,16 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	return true;
 }
 
+static bool send_double_midi_msg(u8 status1, u8 data1_1, u8 data1_2, u8 status2, u8 data2_1, u8 data2_2) {
+	// exit if not enough space for both messages
+	if (midi_send_head - midi_send_tail + num_midi_bytes(status1) + num_midi_bytes(status2) > MIDI_BUFFER_SIZE)
+		return false;
+	// send both messages
+	send_midi_msg(status1, data1_1, data1_2);
+	send_midi_msg(status2, data2_1, data2_2);
+	return true;
+}
+
 // cue all midi data for one string, returns whether there is still space in the midi buffer
 static bool cue_midi_string_out(void) {
 	typedef enum MidiOutState {
@@ -317,41 +331,38 @@ static bool cue_midi_string_out(void) {
 	static u8 string_id = 0;
 	static MidiOutState msg_state = MSG_NOTE;
 
-	//  get a bunch of parameters from the synth
-	u16 string_pos = get_string_pos(string_id);
-	u16 string_pres = clampi(get_string_pressures()[string_id], 0, TOUCH_FULL_PRES);
-	Touch* prev_string_touch = get_string_touch_prev(string_id, 2);
 	const Touch* touch = get_touch(string_id, 0);
-	bool pres_stable = abs(prev_string_touch->pres - string_pres) < 100;
-	bool pos_stable = abs(prev_string_touch->pos - string_pos) < 32;
-
-	// these are our targets
-	u8 target_note = midi_string[string_id].cur_note;
-	u8 target_pressure = clampi((prev_string_touch->pres - 100) / 48, 0, 127);
-
+	u16 string_pres = clampi(get_string_pressures()[string_id], 0, TOUCH_FULL_PRES);
 	MidiString* m_string = &midi_string[string_id];
-	u8 last_note = m_string->last_note;
 
 	switch (msg_state) {
-	case MSG_NOTE:
-		// note has changed
-		if (target_note != last_note) {
-			// we were playing a note => send note off
-			if (last_note) {
-				if (!send_midi_msg(MIDI_NOTE_OFF, last_note, 0))
+	case MSG_NOTE: {
+		u8 last_note = m_string->last_note;
+		u8 cur_note = m_string->cur_note;
+		// string is touched
+		if (string_touched & (1 << string_id)) {
+			// we last sent a note off => send a note on
+			if (last_note == 255) {
+				if (!send_midi_msg(MIDI_NOTE_ON, cur_note, m_string->velocity))
 					return false;
-				m_string->last_note = 0;
+				m_string->last_note = cur_note;
 			}
-			// we start playing a new note => send note on
-			if (target_note && pos_stable && pres_stable) {
-				// we use the current pressure as the note velocity
-				if (!send_midi_msg(MIDI_NOTE_ON, target_note, target_pressure))
+			// we last sent a different note => send both a note off and note on
+			else if (last_note != cur_note) {
+				if (!send_double_midi_msg(MIDI_NOTE_OFF, last_note, 0, MIDI_NOTE_ON, cur_note, m_string->velocity))
 					return false;
-				m_string->last_note = target_note;
+				m_string->last_note = cur_note;
 			}
+		}
+		// string is not touched but we last sent a valid note => send note off
+		else if (last_note != 255) {
+			if (!send_midi_msg(MIDI_NOTE_OFF, last_note, 0))
+				return false;
+			m_string->last_note = 255;
 		}
 		msg_state++;
 		// fall thru
+	}
 	case MSG_POLY_PRESSURE: {
 		static u8 poly_pres = 0;
 		static u8 min_diff = 5;
@@ -363,7 +374,7 @@ static bool cue_midi_string_out(void) {
 		}
 		// send if changed
 		if (abs(poly_pres - m_string->last_pressure) >= min_diff) {
-			if (!send_midi_msg(MIDI_POLY_KEY_PRESSURE, last_note, poly_pres))
+			if (!send_midi_msg(MIDI_POLY_KEY_PRESSURE, m_string->last_note, poly_pres))
 				return false;
 			m_string->last_pressure = poly_pres;
 		}
@@ -568,6 +579,10 @@ void midi_send_transport(MidiMessageType transport_type) {
 
 void midi_set_goal_note(u8 string_id, u8 midi_note) {
 	midi_string[string_id].cur_note = midi_note;
+}
+
+void midi_set_start_velocity(u8 string_id, s16 pressure) {
+	midi_string[string_id].velocity = clampi((pressure << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
 }
 
 // == AUX == //
