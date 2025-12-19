@@ -5,6 +5,7 @@
 #include "hardware/midi.h"
 #include "hardware/touchstrips.h"
 #include "params.h"
+#include "sampler.h"
 #include "sequencer.h"
 #include "synth.h"
 #include "time.h"
@@ -83,7 +84,12 @@ static void generate_string_touch(u8 string_id) {
 
 	// === TOUCH INPUT === //
 
-	if (strip_available_for_synth(string_id)) {
+	// is this string available for the synth?
+	if (
+	    // default ui, exception for the edit-strip
+	    (ui_mode == UI_DEFAULT && !(string_id == 0 && editing_param()))
+	    // sampler in preview mode when a sample is loaded
+	    || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER)) {
 		bool touching = strip_touched & mask;
 		bool first_touch_global = false;
 
