@@ -6,6 +6,7 @@
 // regular includes
 #include "hardware/touchstrips.h"
 #include "memory.h"
+#include "synth/lfos.h"
 #include "synth/params.h"
 #include "synth/pitch_tools.h"
 #include "synth/strings.h"
@@ -40,12 +41,13 @@ typedef struct MidiString {
 	bool suppressed; // suppressed by other touch
 
 	// midi out
-	u16 position;        // position on string
-	u8 cur_note;         // note currently playing on string
-	u8 last_note;        // last sent midi note
-	u8 last_pressure;    // last sent poly pressure
-	u8 last_pressure_cc; // last sent pressure CC
-	u8 last_position_cc; // last sent position CC
+	u16 position;          // position on string
+	u8 cur_note;           // note currently playing on string
+	u8 last_note;          // last sent midi note
+	u8 last_pressure;      // last sent poly pressure
+	u8 last_pressure_cc;   // last sent pressure CC
+	u8 last_position_cc;   // last sent position CC
+	u8 last_lfo[NUM_LFOS]; // last sent lfo CC
 } MidiString;
 
 static const MidiString midi_init_string = {MS_UNUSED, 255, 0, 0, false, 0, 255, 255, 0, 0, 0};
@@ -321,6 +323,7 @@ static bool cue_midi_string_out(void) {
 		MSG_CHAN_PRESSURE,
 		MSG_PRESSURE_CC,
 		MSG_POSITION_CC,
+		MSG_LFOS,
 	} MidiOutState;
 
 	static u8 string_id = 0;
@@ -339,13 +342,13 @@ static bool cue_midi_string_out(void) {
 			// we last sent a note off => send a note on
 			if (last_note == 255) {
 				if (!send_midi_msg(MIDI_NOTE_ON, cur_note, m_string->velocity))
-				return false;
+					return false;
 				m_string->last_note = cur_note;
 			}
 			// we last sent a different note => send both a note off and note on
 			else if (last_note != cur_note) {
 				if (!send_double_midi_msg(MIDI_NOTE_OFF, last_note, 0, MIDI_NOTE_ON, cur_note, m_string->velocity))
-				return false;
+					return false;
 				m_string->last_note = cur_note;
 			}
 		}
@@ -433,10 +436,33 @@ static bool cue_midi_string_out(void) {
 				m_string->last_position_cc = strip_position;
 			}
 		}
+		msg_state++;
+		// fall thru
+	case MSG_LFOS: {
+		static u8 lfo_id = 0;
+		// only send lfos after the last string
+		if (string_id == 7) {
+			if (sys_params.midi_out_lfos) {
+				// handle all four lfos
+				do {
+					u8 lfo_val = clampi((lfo_cur[lfo_id] + 65536) >> 10, 0, 127);
+					if (abs(lfo_val - m_string->last_lfo[lfo_id])) {
+						if (!send_midi_msg(MIDI_CONTROL_CHANGE, 24 + lfo_id, lfo_val))
+							return false;
+						m_string->last_lfo[lfo_id] = lfo_val;
+					}
+					lfo_id = (lfo_id + 1) % NUM_LFOS;
+				}
+				// we break when lfo_id rolls over
+				while (lfo_id != 0);
+			}
+		}
+
 		// done, set up for next string
 		string_id = (string_id + 1) & 7;
 		msg_state = MSG_NOTE;
 		break;
+	}
 	}
 	return true;
 }
