@@ -59,6 +59,7 @@ static u8 midi_send_head;
 static u8 midi_send_tail;
 
 // midi state
+static u8 mod_wheel;
 static u8 channel_pressure;
 static s16 pitchbend;
 static bool sustain_pressed = false;
@@ -108,6 +109,11 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	default:
 		break;
 	}
+
+	// apply pressure from mod wheel
+	midi_pressure = maxi(midi_pressure, mod_wheel);
+
+	// map internal pressure based on velocity/pressure balance
 	u8 velo_mult = sys_params.midi_in_vel_balance;
 	*pressure =
 	    // scaled velocity, offset to max out at 128
@@ -255,8 +261,13 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		channel_pressure = data1;
 		break;
 	case MIDI_CONTROL_CHANGE:
+		switch (data1) {
+		// mod wheel
+		case 1:
+			mod_wheel = data2;
+			break;
 		// sustain
-		if (data1 == 64) {
+		case 64:
 			bool new_sustain = data2 >= 64;
 			if (new_sustain != sustain_pressed) {
 				sustain_pressed = new_sustain;
@@ -267,10 +278,13 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 							midi_string[string_id].state = MS_RINGING_OUT;
 				}
 			}
-		}
-		// update parameters from ccs
-		else
+			break;
+		default:
+			// update parameters from ccs
 			params_rcv_cc(data1, data2);
+			break;
+		}
+
 		break;
 	default:
 		break;
