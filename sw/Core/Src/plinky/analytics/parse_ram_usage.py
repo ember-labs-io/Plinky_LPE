@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 import os
 
-MAP_FILE = 'sw/nocube_makefile/RELEASE/plinkyblack.map'
+MAP_FILE = 'sw/build/RELEASE/plinkyblack.map'
 OUTPUT_FILE = 'sw/Core/Src/plinky/analytics/RAM_ANALYSIS.md'
 
 def get_ram_section_sizes():
@@ -39,14 +39,17 @@ def parse_section(content, section_name):
                               content, re.MULTILINE | re.DOTALL)
 
     if not section_match:
+        print(f"  WARNING: Section '{section_name}' not found in map file")
         return defaultdict(list)
 
     section_content = section_match.group(0)
     lines = section_content.split('\n')
+    print(f"  Section '{section_name}' found, {len(lines)} lines to parse")
 
     # Data structure: module -> list of (variable, size, address)
     modules = defaultdict(list)
 
+    vars_found = 0
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -64,7 +67,7 @@ def parse_section(content, section_name):
             found = False
 
             # Check same line first
-            same_line_match = re.search(r'\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+RELEASE/Core/Src/(.+?)\.o', line)
+            same_line_match = re.search(r'\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+sw/build/RELEASE/Core/Src/(.+?)\.o', line)
             if same_line_match:
                 addr, size_hex, module = same_line_match.groups()
                 size = int(size_hex, 16)
@@ -75,12 +78,13 @@ def parse_section(content, section_name):
                         'size_hex': size_hex,
                         'address': addr
                     })
+                    vars_found += 1
                 found = True
 
             # Check next line if not found
             if not found and i + 1 < len(lines):
                 next_line = lines[i + 1]
-                alloc_match = re.match(r'\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+RELEASE/Core/Src/(.+?)\.o', next_line)
+                alloc_match = re.match(r'\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+sw/build/RELEASE/Core/Src/(.+?)\.o', next_line)
                 if alloc_match:
                     addr, size_hex, module = alloc_match.groups()
                     size = int(size_hex, 16)
@@ -91,19 +95,32 @@ def parse_section(content, section_name):
                             'size_hex': size_hex,
                             'address': addr
                         })
+                        vars_found += 1
 
         i += 1
 
+    print(f"  Parsed {vars_found} variables from '{section_name}' section")
     return modules
 
 def parse_map_file():
     """Parse all RAM sections from the map file."""
-    with open(MAP_FILE, 'r') as f:
-        content = f.read()
+    print(f"Opening map file: {MAP_FILE}")
+    try:
+        with open(MAP_FILE, 'r') as f:
+            content = f.read()
+        print(f"Map file read successfully, {len(content)} bytes")
+    except FileNotFoundError:
+        print(f"ERROR: Map file not found: {MAP_FILE}")
+        return defaultdict(list)
 
     # Parse both .data and .bss sections
+    print("Parsing .data section...")
     data_modules = parse_section(content, '.data')
+    print(f"Found {len(data_modules)} modules in .data section")
+
+    print("Parsing .bss section...")
     bss_modules = parse_section(content, '.bss')
+    print(f"Found {len(bss_modules)} modules in .bss section")
 
     # Merge the two, combining entries for the same module
     all_modules = defaultdict(list)
@@ -114,7 +131,57 @@ def parse_map_file():
     for module, symbols in bss_modules.items():
         all_modules[module].extend(symbols)
 
+    print(f"Total unique modules: {len(all_modules)}")
     return all_modules
+
+def add_padding_to_modules(modules):
+    """Add inter-variable alignment padding to variable sizes."""
+    # Get section info
+    ram_sections = get_ram_section_sizes()
+
+    # Define section boundaries
+    data_start = 0x20000000
+    data_end = data_start + ram_sections.get('data', 0)
+    bss_start = data_end
+    bss_end = bss_start + ram_sections.get('bss', 0)
+
+    # Collect all symbols with their module info and reference to original
+    all_symbols = []
+    for module, symbols in modules.items():
+        for symbol in symbols:
+            addr = int(symbol['address'], 16)
+            all_symbols.append({
+                'module': module,
+                'symbol_ref': symbol,  # reference to original dict
+                'address': addr,
+                'size': symbol['size']
+            })
+
+    # Sort by address
+    all_symbols.sort(key=lambda x: x['address'])
+
+    # Find gaps and update symbol sizes/names
+    for i in range(len(all_symbols) - 1):
+        current = all_symbols[i]
+        next_sym = all_symbols[i + 1]
+
+        current_end = current['address'] + current['size']
+        gap = next_sym['address'] - current_end
+
+        # Only add padding if gap exists and both symbols are in same section
+        if gap > 0:
+            # Check if they're in the same section
+            current_in_data = data_start <= current['address'] < data_end
+            next_in_data = data_start <= next_sym['address'] < data_end
+            current_in_bss = bss_start <= current['address'] < bss_end
+            next_in_bss = bss_start <= next_sym['address'] < bss_end
+
+            # Only add padding if in same section
+            if (current_in_data and next_in_data) or (current_in_bss and next_in_bss):
+                # Update the original symbol dict
+                sym_ref = current['symbol_ref']
+                sym_ref['symbol'] = f"{sym_ref['symbol']} ({gap} padding)"
+                sym_ref['size'] += gap
 
 def print_report(modules):
     """Print formatted report of RAM usage by module."""
@@ -276,12 +343,21 @@ def print_report(modules):
 if __name__ == '__main__':
     import sys
 
+    print("Starting RAM usage analysis...")
     modules = parse_map_file()
+
     if modules:
+        print(f"SUCCESS: Found {len(modules)} modules to analyze")
+        # Add inter-variable padding to modules
+        print("Adding padding calculations...")
+        add_padding_to_modules(modules)
         # Write report to file
+        print(f"Writing report to {OUTPUT_FILE}...")
         original_stdout = sys.stdout
         with open(OUTPUT_FILE, 'w') as f:
             sys.stdout = f
             print_report(modules)
         sys.stdout = original_stdout
         print(f"RAM analysis written to {OUTPUT_FILE}")
+    else:
+        print("ERROR: No modules found in map file. Check regex patterns.")
