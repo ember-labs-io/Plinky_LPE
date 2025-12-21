@@ -18,6 +18,7 @@
 extern UART_HandleTypeDef huart3;
 
 #define MIDI_BUFFER_SIZE 16
+#define THRU_BUFFER_SIZE 16
 #define PARAM_BUFFER_SIZE 8
 #define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (pitchbend >> 3))
 #define MIXED_PRESSURE(full_pressure, midi_velocity)                                                                   \
@@ -72,6 +73,12 @@ static u8 clocks_to_send = 0;
 static MidiMessageType send_transport = 0;
 static u8 last_channel_pressure = 0;
 
+// soft thru
+static u8 thru_buffer[THRU_BUFFER_SIZE][3];
+static u8 thru_buffer_head = 0;
+static u8 thru_buffer_tail = 0;
+static u8 thru_buffer_count = 0;
+
 // parameter ccs
 static u8 param_buffer[PARAM_BUFFER_SIZE][2];
 static u8 param_buffer_head = 0;
@@ -91,6 +98,10 @@ void midi_clear_all(void) {
 	sustain_pressed = false;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		memcpy(&midi_string[string_id], &midi_init_string, sizeof(MidiString));
+	memset(&thru_buffer, 0, sizeof(thru_buffer));
+	thru_buffer_head = 0;
+	thru_buffer_tail = 0;
+	thru_buffer_count = 0;
 	memset(&param_last, 255, NUM_PARAMS);
 	memset(&param_buffer, 0, PARAM_BUFFER_SIZE * 2);
 	param_buffer_head = 0;
@@ -167,19 +178,41 @@ static u8 string_playing_note(u8 note) {
 	return 255;
 }
 
+static void forward_midi_msg(u8 status, u8 data1, u8 data2) {
+	if (thru_buffer_count >= THRU_BUFFER_SIZE) {
+		flash_message(F_16_BOLD, "BUFFER FULL", "MIDI SOFT THRU");
+		return;
+	}
+	thru_buffer[thru_buffer_head][0] = status;
+	thru_buffer[thru_buffer_head][1] = data1;
+	thru_buffer[thru_buffer_head][2] = data2;
+	thru_buffer_head = (thru_buffer_head + 1) % THRU_BUFFER_SIZE;
+	thru_buffer_count++;
+}
+
 // apply midi messages to plinky
 static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	MidiMessageType type = status & MIDI_TYPE_MASK;
 
-	// out of the system messages we only implement the time-related ones => forward to clock
 	if (type == MIDI_SYSTEM_COMMON_MSG) {
-		clock_rcv_midi(status);
+		// out of the system messages we only implement the time-related ones => forward to clock
+		if (status >= MIDI_TIMING_CLOCK && status <= MIDI_STOP)
+			clock_rcv_midi(status);
+		// clock messages get consumed, sysex gets ignored, the remaining six system common msgs get forwarded
+		else if (sys_params.midi_soft_thru
+		         && ((status >= MIDI_TIME_CODE && status <= MIDI_TUNE_REQUEST) || status >= MIDI_ACTIVE_SENSING))
+			forward_midi_msg(status, data1, data2);
 		return;
 	}
 
-	// channel voice messages: only listen on the chosen channel
-	if ((status & MIDI_CHANNEL_MASK) != sys_params.midi_in_chan)
+	u8 in_channel = status & MIDI_CHANNEL_MASK;
+	if (in_channel != sys_params.midi_in_chan) {
+		// we forward voice messages not on either our in or out channels
+		if (sys_params.midi_soft_thru && in_channel != sys_params.midi_out_chan)
+			forward_midi_msg(status, data1, data2);
+		// we don't process messages not on our in channel
 		return;
+	}
 
 	// turn silent note ons into note offs
 	if (type == MIDI_NOTE_ON && data2 == 0)
@@ -499,6 +532,17 @@ static void cue_midi_out(void) {
 	// exit if the uart is not ready
 	if (huart3.TxXferCount)
 		return;
+
+	// send thru
+	if (sys_params.midi_soft_thru) {
+		while (thru_buffer_count) {
+			if (!send_midi_msg(thru_buffer[thru_buffer_tail][0], thru_buffer[thru_buffer_tail][1],
+			                   thru_buffer[thru_buffer_tail][2]))
+				return;
+			thru_buffer_tail = (thru_buffer_tail + 1) % THRU_BUFFER_SIZE;
+			thru_buffer_count--;
+		}
+	}
 
 	// send transport
 	if (send_transport != MIDI_NONE) {

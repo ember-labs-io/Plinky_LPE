@@ -239,6 +239,7 @@ typedef enum SysParam {
 	SYS_MIDI_OUT_CCS,
 	SYS_MIDI_OUT_LFOS,
 	SYS_MIDI_OUT_PARAMS,
+	SYS_MIDI_SOFT_THRU,
 } SysParam;
 
 typedef enum MidiPressureType {
@@ -898,7 +899,8 @@ typedef struct SysParams {
 	u8 midi_out_ccs : 1;
 	u8 midi_out_lfos : 1;
 	u8 midi_out_params : 1;
-	u8 paddy : 7;
+	u8 midi_soft_thru : 1;
+	u8 paddy : 6;
 	u8 pad[16 - 11];
 	u8 version;
 } SysParams;
