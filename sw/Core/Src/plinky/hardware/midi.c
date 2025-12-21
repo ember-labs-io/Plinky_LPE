@@ -190,7 +190,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	MidiMessageType type = status & MIDI_TYPE_MASK;
 
 	if (type == MIDI_SYSTEM_COMMON_MSG) {
-		// out of the system messages we only implement the time-related ones => forward to clock
+		// midi reset / panic
+		if (status == MIDI_SYSTEM_RESET)
+			midi_clear_all();
+		// time-related => forward to clock
 		if (status >= MIDI_TIMING_CLOCK && status <= MIDI_STOP)
 			clock_rcv_midi(status);
 		// clock messages get consumed, sysex gets ignored, the remaining six system common msgs get forwarded
