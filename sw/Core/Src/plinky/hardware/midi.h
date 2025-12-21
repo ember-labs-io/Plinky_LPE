@@ -11,6 +11,7 @@ void midi_clear_all(void);
 // main
 void init_midi(void);
 void process_midi(void);
+void midi_panic(void);
 
 // cue midi out
 void midi_send_clock(void);
