@@ -47,9 +47,13 @@ static inline void ssd130x_command(unsigned char c) {
 	HAL_Delay(1);
 }
 
-static inline void ssd130x_flip(u8* buffer) {
+static inline void ssd130x_flip(const u8* buffer) {
 	ssd130x_wait();
+	// ignore the dropped "const" warning
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 	HAL_I2C_Master_Transmit(&hi2c2, I2C_ADDRESS, buffer, OLED_BUFFER_SIZE, 500);
+#pragma GCC diagnostic pop
 }
 
 static void ssd130x_init() {
