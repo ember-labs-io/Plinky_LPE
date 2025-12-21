@@ -43,6 +43,7 @@ typedef enum Item {
 	I_TOUCH_CALIB,
 	I_CV_CALIB,
 	I_OG_PRESETS,
+	I_MIDI_PANIC,
 
 	MAX_ITEM,
 } Item;
@@ -68,6 +69,7 @@ const static u8 num_options[NUM_ITEMS] = {
     [I_TOUCH_CALIB] = 1,
     [I_CV_CALIB] = 1,
     [I_OG_PRESETS] = 1,
+    [I_MIDI_PANIC] = 1,
 };
 
 const static char* section_name[NUM_SYS_PARAM_SECTS] = {
@@ -95,6 +97,7 @@ const static char* item_name[NUM_ITEMS] = {
     [I_TOUCH_CALIB] = "Touch Calib",
     [I_CV_CALIB] = "CV Calib",
     [I_OG_PRESETS] = "OG Presets",
+    [I_MIDI_PANIC] = "Midi Panic",
 };
 
 static Item cur_item = 0;
@@ -267,6 +270,9 @@ void settings_menu_actions(void) {
 		break;
 	case I_OG_PRESETS:
 		revert_presets();
+		break;
+	case I_MIDI_PANIC:
+		midi_panic();
 		break;
 	default:
 		break;

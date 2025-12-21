@@ -687,6 +687,11 @@ void process_midi(void) {
 	} while (packets_handled < max_packets_per_call);
 }
 
+void midi_panic(void) {
+	midi_clear_all();
+	forward_midi_msg(MIDI_SYSTEM_RESET, 0, 0);
+}
+
 // == CUE MIDI OUT == //
 
 void midi_send_clock(void) {
