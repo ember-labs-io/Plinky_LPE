@@ -490,19 +490,23 @@ s8 param_index_unmod(Param param_id) {
 // == SAVING == //
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
-	// special cases
-	switch (param_id) {
-	case P_VOLUME:
+	// special case
+	if (param_id == P_VOLUME) {
 		set_sys_param(SYS_VOLUME, data);
 		return;
-	default:
-		break;
 	}
 	// don't save if no change
 	if (data == cur_preset.params[param_id][mod_src])
 		return;
 	// save
 	cur_preset.params[param_id][mod_src] = data;
+	// send to midi
+	if (mod_src == SRC_BASE && sys_params.midi_out_params) {
+		if (PARAM_SIGNED(param_id))
+			data = (data + RAW_SIZE) >> 1;
+		midi_set_param_value(param_id, clampi(data >> 3, 0, 127));
+	}
+	// precalc modulation values
 	apply_lfo_mods(param_id);
 	log_ram_edit(SEG_PRESET);
 }

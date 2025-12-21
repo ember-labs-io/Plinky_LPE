@@ -12,11 +12,13 @@
 #include "synth/strings.h"
 #include "synth/synth.h"
 #include "synth/time.h"
+#include "ui/oled_viz.h"
 
 // midi uart, lives in main.c
 extern UART_HandleTypeDef huart3;
 
 #define MIDI_BUFFER_SIZE 16
+#define PARAM_BUFFER_SIZE 8
 #define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (pitchbend >> 3))
 #define MIXED_PRESSURE(full_pressure, midi_velocity)                                                                   \
 	({                                                                                                                 \
@@ -70,6 +72,13 @@ static u8 clocks_to_send = 0;
 static MidiMessageType send_transport = 0;
 static u8 last_channel_pressure = 0;
 
+// parameter ccs
+static u8 param_buffer[PARAM_BUFFER_SIZE][2];
+static u8 param_buffer_head = 0;
+static u8 param_buffer_tail = 0;
+static u8 param_buffer_count = 0;
+static u8 param_last[NUM_PARAMS];
+
 // == UTILS == //
 
 void midi_clear_all(void) {
@@ -82,6 +91,11 @@ void midi_clear_all(void) {
 	sustain_pressed = false;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		memcpy(&midi_string[string_id], &midi_init_string, sizeof(MidiString));
+	memset(&param_last, 255, NUM_PARAMS);
+	memset(&param_buffer, 0, PARAM_BUFFER_SIZE * 2);
+	param_buffer_head = 0;
+	param_buffer_tail = 0;
+	param_buffer_count = 0;
 }
 
 bool midi_string_used(u8 string_id) {
@@ -500,6 +514,17 @@ static void cue_midi_out(void) {
 		clocks_to_send--;
 	}
 
+	// send params
+	if (sys_params.midi_out_params) {
+		while (param_buffer_count) {
+			if (!send_midi_msg(MIDI_CONTROL_CHANGE, param_buffer[param_buffer_tail][0],
+			                   param_buffer[param_buffer_tail][1]))
+				return;
+			param_buffer_tail = (param_buffer_tail + 1) % PARAM_BUFFER_SIZE;
+			param_buffer_count--;
+		}
+	}
+
 	// send string data, breaks if:
 	// - midi out buffer full
 	// - any midi was sent for a string (gives space to send realtime data next tick)
@@ -613,6 +638,28 @@ void midi_set_goal_note(u8 string_id, u8 midi_note) {
 
 void midi_set_start_velocity(u8 string_id, s16 pressure) {
 	midi_string[string_id].velocity = clampi(pressure * 100 / (sys_params.midi_out_vel_balance << 4) - 1, 0, 127);
+}
+
+void midi_set_param_value(Param param, u8 cc_value) {
+	if (param_buffer_count >= PARAM_BUFFER_SIZE) {
+		flash_message(F_16_BOLD, "BUFFER FULL", "MIDI PARAM OUT");
+		return;
+	}
+
+	u8 cc_number = midi_cc_table_rvs[param];
+	// no valid cc for this param
+	if (cc_number == 255)
+		return;
+
+	// value identical to last sent value
+	if (param_last[param] == cc_value)
+		return;
+
+	param_last[param] = cc_value;
+	param_buffer[param_buffer_head][0] = cc_number;
+	param_buffer[param_buffer_head][1] = cc_value;
+	param_buffer_head = (param_buffer_head + 1) % PARAM_BUFFER_SIZE;
+	param_buffer_count++;
 }
 
 // == AUX == //
