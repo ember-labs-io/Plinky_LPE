@@ -33,6 +33,7 @@ typedef enum Item {
 	I_MIDI_OUT_CCS,
 	I_MIDI_OUT_LFOS,
 	I_MIDI_OUT_PARAMS,
+	I_MIDI_SOFT_THRU,
 	// cv
 	I_CV_QUANT = S_CV * 8,
 	I_CV_PPQN_IN,
@@ -59,6 +60,7 @@ const static u8 num_options[NUM_ITEMS] = {
     [I_MIDI_OUT_CCS] = 3,
     [I_MIDI_OUT_LFOS] = 2,
     [I_MIDI_OUT_PARAMS] = 2,
+    [I_MIDI_SOFT_THRU] = 2,
     [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
     [I_CV_PPQN_IN] = NUM_PPQN_VALUES,
     [I_CV_PPQN_OUT] = NUM_PPQN_VALUES,
@@ -85,6 +87,7 @@ const static char* item_name[NUM_ITEMS] = {
     [I_MIDI_OUT_CCS] = "Touch CCs",
     [I_MIDI_OUT_LFOS] = "LFO CCs",
     [I_MIDI_OUT_PARAMS] = "Param CCs",
+    [I_MIDI_SOFT_THRU] = "Thru",
     [I_CV_QUANT] = "Quant",
     [I_CV_PPQN_IN] = "PPQN in",
     [I_CV_PPQN_OUT] = "PPQN out",
@@ -143,6 +146,9 @@ static void select_item(Item item, bool force) {
 	case I_MIDI_OUT_PARAMS:
 		cur_value = sys_params.midi_out_params;
 		break;
+	case I_MIDI_SOFT_THRU:
+		cur_value = sys_params.midi_soft_thru;
+		break;
 	case I_CV_QUANT:
 		cur_value = sys_params.cv_quant;
 		break;
@@ -197,6 +203,9 @@ static void save_value(s16 value) {
 		break;
 	case I_MIDI_OUT_PARAMS:
 		set_sys_param(SYS_MIDI_OUT_PARAMS, value);
+		break;
+	case I_MIDI_SOFT_THRU:
+		set_sys_param(SYS_MIDI_SOFT_THRU, value);
 		break;
 	case I_CV_QUANT:
 		set_sys_param(SYS_CV_QUANT, value);
@@ -358,6 +367,8 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MIDI_OUT_LFOS:
 	case I_MIDI_OUT_PARAMS:
 		return value ? "On" : "Off";
+	case I_MIDI_SOFT_THRU:
+		return value ? "Consume" : "Off";
 	case I_CV_QUANT:
 		return cv_quant_name[value];
 	// ppqns
