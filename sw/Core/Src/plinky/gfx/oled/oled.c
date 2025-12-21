@@ -37,7 +37,7 @@ void oled_flip() {
 	ssd130x_flip(debug_view_active ? oled_debug : oled);
 }
 
-void oled_flip_with_buffer(u8* buffer) {
+void oled_flip_with_buffer(const u8* buffer) {
 	ssd130x_flip(buffer);
 }
 
