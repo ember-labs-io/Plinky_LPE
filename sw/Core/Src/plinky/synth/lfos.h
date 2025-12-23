@@ -5,6 +5,5 @@
 
 extern s32 lfo_cur[NUM_LFOS];
 
-void update_lfo_scope(void);
-void update_lfo(u8 lfo_id);
+void lfos_tick(void);
 void draw_lfos(void);
