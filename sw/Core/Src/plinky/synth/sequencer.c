@@ -379,7 +379,7 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	if (!string_step->pres[substep])
 		return;
 	// exit if we're beyond the gate length
-	if (seq_substep(GATE_LEN_SUBSTEPS) > (param_val_poly(P_GATE_LENGTH, string_id) >> 8))
+	if (seq_substep(GATE_LEN_SUBSTEPS) > (param_val(P_GATE_LENGTH) >> 8))
 		return;
 
 	// we're playing from the sequencer => create touch from pattern
