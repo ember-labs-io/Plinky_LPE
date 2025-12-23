@@ -554,8 +554,8 @@ bool try_restore_param(bool mode_a) {
 
 void close_edit_mode(void) {
 	mem_param = selected_param;
+	selected_param = NUM_PARAMS;
 	clear_last_encoder_use();
-	SELECT_PARAM(NUM_PARAMS);
 }
 
 static void reset_left_strip(void) {
