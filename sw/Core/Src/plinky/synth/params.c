@@ -90,8 +90,6 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 
 #define PARAM_SIGNED(param_id) (param_info[range_type[param_id]] & SIGNED)
 
-#define PARAM_SIGNED_OR_MOD(param_id, mod_src) (PARAM_SIGNED(param_id) || (mod_src) != SRC_BASE)
-
 #define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
 const Preset* init_params_ptr(void) {
@@ -380,15 +378,15 @@ void params_tick(void) {
 
 	adc_update_inputs();
 
-	// lfos
-	update_lfo_scope();
+	// apply lfo modulation to the parameters of the lfo itself
 	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++) {
 		u8 lfo_row_offset = lfo_id * 6;
-		// apply lfo modulation to the parameters of the lfo itself
 		for (Param param_id = P_A_SCALE; param_id <= P_A_SYM; param_id++)
 			apply_lfo_mods(param_id + lfo_row_offset);
-		update_lfo(lfo_id);
 	}
+
+	// process lfos
+	lfos_tick();
 
 	// apply lfo modulation to al other params
 	for (Param param_id = 0; param_id < NUM_PARAMS; ++param_id) {
@@ -410,8 +408,8 @@ void params_tick(void) {
 
 // raw parameter value, range -1024 to 1024
 #define PARAM_VAL_RAW(param_id, mod_src)                                                                               \
-	((param_id) == P_VOLUME && (mod_src) == SRC_BASE ? (sys_params.volume_msb << 8) + sys_params.volume_lsb            \
-	                                                 : cur_preset.params[param_id][mod_src])
+	((param_id) == P_VOLUME ? (sys_params.volume_msb << 8) + sys_params.volume_lsb                                     \
+	                        : cur_preset.params[param_id][mod_src])
 
 // modulated parameter value, range -65536 to 65536
 static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
@@ -577,14 +575,15 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 	float press_value =
 	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (RAW_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
 	           RAW_SIZE);
-	bool is_signed = PARAM_SIGNED_OR_MOD(selected_param, selected_mod_src);
+	bool is_signed = PARAM_SIGNED(param_snap) || selected_mod_src != SRC_BASE;
 	if (is_signed)
 		press_value = press_value * 2 - RAW_SIZE;
 	// smooth the pressed value
 	smooth_value(&left_strip_smooth, press_value, 256);
-	float smoothed_value = clampf(left_strip_smooth.y2, (is_signed) ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
+	float smoothed_value = clampf(left_strip_smooth.y2, is_signed ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
 	// value stops exactly at +/- 100%
-	bool notch_at_50 = (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
+	bool notch_at_50 =
+	    selected_mod_src == SRC_BASE && (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
 	if (notch_at_50) {
 		if (smoothed_value < RAW_HALF && left_strip_start > RAW_HALF)
 			smoothed_value = RAW_HALF;
@@ -704,7 +703,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 			raw += enc_diff > 0 ? 1 : -1;
 		break;
 	}
-	raw = clampi(raw, PARAM_SIGNED_OR_MOD(param_id, selected_mod_src) ? -RAW_SIZE : 0, RAW_SIZE);
+	raw = clampi(raw, (PARAM_SIGNED(param_id) || selected_mod_src != SRC_BASE) ? -RAW_SIZE : 0, RAW_SIZE);
 	save_param_raw(param_id, selected_mod_src, raw);
 }
 
@@ -1030,12 +1029,17 @@ void draw_cur_param(void) {
 	}
 
 	Param draw_param;
-	if (param_snap < NUM_PARAMS)
-		// standard param editing
+	ModSource draw_src;
+	// standard param editing
+	if (param_snap < NUM_PARAMS) {
 		draw_param = param_snap;
-	else
-		// no valid snap param => this must be an encoder edit
+		draw_src = src_snap;
+	}
+	// no valid snap param => this must be an encoder edit
+	else {
 		draw_param = mem_param;
+		draw_src = selected_mod_src;
+	}
 
 	// value data
 	Font font;
@@ -1043,12 +1047,12 @@ void draw_cur_param(void) {
 	u8 width = 0;
 	u8 x_center = 0;
 	u8 x;
-	s16 raw = PARAM_VAL_RAW(draw_param, src_snap);
+	s16 raw = PARAM_VAL_RAW(draw_param, draw_src);
 
 	gfx_text_color = 3;
 	// draw section name
 	const char* sect_str;
-	if (src_snap == SRC_BASE) {
+	if (draw_src == SRC_BASE) {
 		sect_str = param_row_name[draw_param / 6];
 
 		// manual section name overrides
@@ -1094,23 +1098,21 @@ void draw_cur_param(void) {
 	}
 	// mod sources
 	else {
-		if (src_snap == SRC_RND && raw < 0)
+		if (draw_src == SRC_RND && raw < 0)
 			sect_str = I_TILT "Rand >>";
 		else
-			sect_str = mod_src_name[src_snap];
+			sect_str = mod_src_name[draw_src];
 	}
 
-	const u8 text_x = 19;
-	const u8 text_right_x = OLED_WIDTH - 17;
-	u8 text_y;
-	u8 icon_y = sect_str[0] == I_NOTES[0] ? 1 : 0;
-	char icon_str[2] = {sect_str[0], '\0'};
-	draw_str(0, icon_y, F_12, icon_str);
+	u8 text_x = 19;
+	u8 text_right_x = OLED_WIDTH - 17;
+	// draw section icon
+	draw_str(0, sect_str[0] == I_NOTES[0] ? 1 : 0, F_12, (char[]){sect_str[0], '\0'});
+	// draw section name
 	draw_str(text_x, 3, F_12, sect_str + 1);
-	u8 sect_end_x = text_x + str_width(F_12, sect_str + 1);
 
 	// modulated value
-	if (src_snap != SRC_BASE || has_modulation(draw_param)) {
+	if (draw_src != SRC_BASE || has_modulation(draw_param)) {
 		s16 raw_mod = param_val(draw_param) >> 6;
 		switch (draw_param) {
 		case P_SCALE:
@@ -1121,7 +1123,7 @@ void draw_cur_param(void) {
 		case P_X_SHAPE:
 		case P_Y_SHAPE:
 			// display the modulated param as the main param
-			if (src_snap == SRC_BASE)
+			if (draw_src == SRC_BASE)
 				raw = raw_mod;
 			break;
 		default:
@@ -1136,10 +1138,10 @@ void draw_cur_param(void) {
 
 	// main value
 	font = F_20_BOLD;
-	const char* val_str = get_param_str(draw_param, src_snap, raw, val_buf);
+	const char* val_str = get_param_str(draw_param, draw_src, raw, val_buf);
 	strcpy(val_buf, val_str);
 
-	if (src_snap == SRC_BASE) {
+	if (draw_src == SRC_BASE) {
 		switch (draw_param) {
 		case P_SCALE:
 			font = F_12;
@@ -1171,9 +1173,9 @@ void draw_cur_param(void) {
 		}
 	}
 
+	// draw second line
 	char* newline_pos = strchr(val_buf, '\n');
 	if (newline_pos) {
-		// draw second line
 		char* val_buf2 = newline_pos + 1;
 		width = str_width(font, val_buf2);
 		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
@@ -1183,7 +1185,7 @@ void draw_cur_param(void) {
 	// draw first line
 	width = str_width(font, val_buf);
 	x = x_center == 0 ? text_right_x - width : x_center - width / 2;
-	if (x < sect_end_x) {
+	if (x < text_x + str_width(F_12, sect_str + 1)) {
 		font--;
 		width = str_width(font, val_buf);
 		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
@@ -1192,32 +1194,49 @@ void draw_cur_param(void) {
 
 	// draw param name
 
+	char icon_str[2] = {' ', '\0'};
+	char name_str[16];
+	u8 icon_y = 0;
+	u8 text_y = 0;
+
 	//  special negative ranges
 	s16 base_raw = PARAM_VAL_RAW(draw_param, SRC_BASE);
 	if (base_raw < 0) {
 		switch (draw_param) {
 		case P_SHAPE:
-			draw_str(0, 18, F_12, I_SHAPE);
-			draw_str(text_x - 1, 20, F_12, "PulseWidth");
-			return;
+			icon_str[0] = *I_SHAPE;
+			strcpy(name_str, "PulseWidth");
+			icon_y = 18;
+			text_x = 18;
+			text_y = 20;
+			break;
 		case P_SWING:
-			draw_str(0, 18, F_12, I_TILT);
-			draw_str(text_x, 18, F_12, "Swing 16th");
-			return;
+			icon_str[0] = *I_TILT;
+			strcpy(name_str, "Swing 16th");
+			icon_y = 18;
+			text_x = 19;
+			text_y = 18;
+			break;
 		case P_ARP_CHANCE:
 		case P_SEQ_CHANCE:
-			draw_str(0, 18, F_12, I_PERCENT);
-			draw_str(text_x, 20, F_12, "Chance (W)");
-			return;
+			icon_str[0] = *I_PERCENT;
+			strcpy(name_str, "Chance (W)");
+			icon_y = 18;
+			text_x = 19;
+			text_y = 20;
+			break;
 		default:
 			break;
 		}
 		switch (range_type[draw_param]) {
 		case R_DLYCLK:
 		case R_DUACLK:
-			draw_str(0, 18, F_12, I_TIME);
-			draw_str(text_x, 20, F_12, "Rate");
-			return;
+			icon_str[0] = *I_TIME;
+			strcpy(name_str, "Rate");
+			icon_y = 18;
+			text_x = 19;
+			text_y = 20;
+			break;
 		default:
 			break;
 		}
@@ -1227,54 +1246,71 @@ void draw_cur_param(void) {
 	u8 range = PARAM_RANGE(draw_param);
 	s8 index = RAW_TO_INDEX(base_raw, range);
 	if (draw_param == P_SEQ_CLK_DIV && index == range - 1) {
-		draw_str(0, 18, F_12, I_JACK);
-		draw_str(text_x, 18, F_12, "Trigger");
-		return;
+		icon_str[0] = *I_JACK;
+		strcpy(name_str, "Trigger");
+		icon_y = 18;
+		text_x = 19;
+		text_y = 18;
 	}
 	if (draw_param == P_SHAPE && base_raw == 0) {
-		draw_str(0, 18, F_12, I_SHAPE);
-		draw_str(text_x, 20, F_12, "SuperSaw");
-		return;
+		icon_str[0] = *I_SHAPE;
+		strcpy(name_str, "SuperSaw");
+		icon_y = 18;
+		text_x = 19;
+		text_y = 20;
 	}
 
-	// default
 	const char* p_name = param_name[draw_param];
-	switch (p_name[0]) {
-	case '\x83': // I_DISTORT
-	case '\x81': // I_SEND
-	case '\x8d': // I_REVERB
-	case '\xab': // I_INTERVAL
-		icon_y = 17;
-		break;
-	default:
-		icon_y = 18;
-		break;
+
+	// icon default
+	if (icon_y == 0) {
+		switch (p_name[0]) {
+		case '\x83': // I_DISTORT
+		case '\x81': // I_SEND
+		case '\x8d': // I_REVERB
+		case '\xab': // I_INTERVAL
+			icon_y = 17;
+			break;
+		default:
+			icon_y = 18;
+			break;
+		}
+		icon_str[0] = p_name[0];
 	}
-	icon_str[0] = p_name[0];
+
+	// draw icon
 	draw_str(0, icon_y, F_12, icon_str);
 
-	switch (draw_param) {
-	// make sure param name descenders don't bump into voice bars
-	case P_ENV_LVL1:
-	case P_DECAY1:
-	case P_DECAY2:
-	case P_SWING:
-	case P_PLAY_SPD:
-	case P_PLAY_SPD_JIT:
-	case P_A_SYM:
-	case P_B_SYM:
-	case P_X_SYM:
-	case P_Y_SYM:
-	case P_SYN_WET_DRY:
-	case P_IN_WET_DRY:
-		text_y = 18;
-		break;
-	default:
-		text_y = 20;
-		break;
+	// name default
+	if (text_y == 0) {
+		// x
+		text_x = 19;
+		// y
+		switch (draw_param) {
+		case P_ENV_LVL1:
+		case P_DECAY1:
+		case P_DECAY2:
+		case P_SWING:
+		case P_PLAY_SPD:
+		case P_PLAY_SPD_JIT:
+		case P_A_SYM:
+		case P_B_SYM:
+		case P_X_SYM:
+		case P_Y_SYM:
+		case P_SYN_WET_DRY:
+		case P_IN_WET_DRY:
+			text_y = 18;
+			break;
+		default:
+			text_y = 20;
+			break;
+		}
+		// name
+		strcpy(name_str, p_name + 1);
 	}
-	draw_str(text_x, text_y, F_12, p_name + 1);
-	return;
+
+	// draw name
+	draw_str(text_x, text_y, F_12, name_str);
 }
 
 void draw_arp_flag(void) {
@@ -1308,7 +1344,7 @@ static u8 col_led(float brightness) {
 s16 value_editor_column_led(u8 y) {
 	if (param_snap >= NUM_PARAMS)
 		return -1;
-	bool is_signed = PARAM_SIGNED_OR_MOD(param_snap, src_snap);
+	bool is_signed = PARAM_SIGNED(param_snap) || src_snap != SRC_BASE;
 	s16 raw = PARAM_VAL_RAW(param_snap, src_snap);
 	u8 pad_id = 7 - y;
 	u8 range = src_snap == SRC_BASE ? PARAM_RANGE(param_snap) : 0;
@@ -1384,7 +1420,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 	}
 	else {
 		// pulse active mod source
-		if (y == selected_mod_src)
+		if (y == src_snap)
 			k = pulse;
 		// light up mod sources that modulate current param
 		else
