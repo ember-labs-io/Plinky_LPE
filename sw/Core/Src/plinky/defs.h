@@ -61,6 +61,7 @@
 #define RAW_SIZE 1024
 #define RAW_HALF (RAW_SIZE / 2)
 #define NUM_14BIT_CCS 32
+#define NUM_MIDI_PRESSURE_TYPES 4
 
 // MEMORY
 
@@ -246,7 +247,7 @@ typedef enum MidiPressureType {
 	MP_NONE,
 	MP_CHANNEL_PRESSURE,
 	MP_POLY_AFTERTOUCH,
-	NUM_MIDI_PRESSURE_TYPES,
+	MP_MPE_PRESSURE,
 } MidiPressureType;
 
 // PITCH

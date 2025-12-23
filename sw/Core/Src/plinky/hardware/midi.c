@@ -19,7 +19,15 @@ extern UART_HandleTypeDef huart3;
 
 #define MIDI_BUFFER_SIZE 16
 #define THRU_BUFFER_SIZE 16
-#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (pitchbend >> 3))
+
+#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (channel_pitchbend * channel_bend_sens >> 13))
+
+#define PITCH_OFFSET_FROM_NOTE_MPE(string_id, midi_note)                                                               \
+	((((midi_note) - 24) << 9)                                                                                         \
+	 + ((midi_string[string_id].assigned_by_mpe ? midi_string[string_id].pitchbend * voice_bend_sens                   \
+	                                            : channel_pitchbend * channel_bend_sens)                               \
+	    >> 13))
+
 #define MIXED_PRESSURE(full_pressure, midi_velocity)                                                                   \
 	({                                                                                                                 \
 		u8 velo_mult = sys_params.midi_out_vel_balance;                                                                \
@@ -40,7 +48,9 @@ typedef struct MidiString {
 	u8 note;
 	u8 velocity;
 	u8 pressure;
-	bool suppressed; // suppressed by other touch
+	s16 pitchbend;
+	bool suppressed;      // suppressed by other touch
+	bool assigned_by_mpe; // prevents global notes from mapping to mpe strings
 
 	// midi out
 	u16 position;          // position on string
@@ -52,7 +62,7 @@ typedef struct MidiString {
 	u8 last_lfo[NUM_LFOS]; // last sent lfo CC
 } MidiString;
 
-static const MidiString midi_init_string = {MS_UNUSED, 255, 0, 0, false, 0, 255, 255, 0, 0, 0};
+static const MidiString midi_init_string = {MS_UNUSED, 255, 0, 0, 0, false, false, 0, 255, 255};
 
 // buffers - double sized to allow linearizing cross-boundary reads/writes
 static u8 midi_receive_buffer[2 * MIDI_BUFFER_SIZE];
@@ -63,9 +73,15 @@ static u8 midi_send_tail;
 // midi state
 static u8 mod_wheel;
 static u8 channel_pressure;
-static s16 pitchbend;
+static s16 channel_pitchbend;
+static u16 channel_bend_sens = 2 * PITCH_PER_SEMI; // default: 2 semis
+static u16 voice_bend_sens = 48 * PITCH_PER_SEMI;  // default: 48 semis
 static bool sustain_pressed = false;
-static MidiString midi_string[NUM_STRINGS] = {};
+static MidiString midi_string[NUM_STRINGS];
+
+// mpe
+static u8 manager_chan = 0;
+static u8 num_member_chans = 8;
 
 // cue midi out
 static u8 clocks_to_send = 0;
@@ -88,7 +104,7 @@ void midi_clear_all(void) {
 	midi_send_head = 0;
 	midi_send_tail = 0;
 	channel_pressure = 0;
-	pitchbend = 0;
+	channel_pitchbend = 0;
 	sustain_pressed = false;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		memcpy(&midi_string[string_id], &midi_init_string, sizeof(MidiString));
@@ -119,6 +135,7 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 		midi_pressure = channel_pressure;
 		break;
 	case MP_POLY_AFTERTOUCH:
+	case MP_MPE_PRESSURE:
 		midi_pressure = maxi(midi_string[string_id].pressure, channel_pressure);
 		break;
 	default:
@@ -142,7 +159,7 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 }
 
 s32 midi_get_pitch(u8 string_id) {
-	return PITCH_OFFSET_FROM_NOTE(midi_string[string_id].note);
+	return PITCH_OFFSET_FROM_NOTE_MPE(string_id, midi_string[string_id].note);
 }
 
 // a midi note ends when it's ringing out and it's gone quiet, or overwritten by a different press
@@ -161,14 +178,15 @@ void init_midi(void) {
 
 static u8 string_holds_note(u8 note) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
-		if (midi_string[string_id].note == note)
+		if (!midi_string[string_id].assigned_by_mpe && midi_string[string_id].note == note)
 			return string_id;
 	return 255;
 }
 
 static u8 string_playing_note(u8 note) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
-		if (midi_string[string_id].state != MS_UNUSED && midi_string[string_id].note == note)
+		if (!midi_string[string_id].assigned_by_mpe && midi_string[string_id].state != MS_UNUSED
+		    && midi_string[string_id].note == note)
 			return string_id;
 	return 255;
 }
@@ -189,6 +207,8 @@ static void forward_midi_msg(u8 status, u8 data1, u8 data2) {
 static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	MidiMessageType type = status & MIDI_TYPE_MASK;
 
+	//  == not channel based == //
+
 	if (type == MIDI_SYSTEM_COMMON_MSG) {
 		// midi reset / panic
 		if (status == MIDI_SYSTEM_RESET)
@@ -204,11 +224,25 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	}
 
 	u8 in_channel = status & MIDI_CHANNEL_MASK;
-	if (in_channel != sys_params.midi_in_chan) {
+	bool using_mpe = sys_params.midi_in_pres_type == MP_MPE_PRESSURE;
+	bool is_manager_msg = using_mpe && in_channel == manager_chan;
+	bool is_member_msg = using_mpe && in_channel > manager_chan && in_channel <= manager_chan + num_member_chans;
+
+	// == unused channels: forward & exit == //
+
+	// mpe
+	if (using_mpe) {
+		if (!is_manager_msg && !is_member_msg) {
+			if (sys_params.midi_soft_thru)
+				forward_midi_msg(status, data1, data2);
+			return;
+		}
+	}
+	// default
+	else if (in_channel != sys_params.midi_in_chan) {
 		// we forward voice messages not on either our in or out channels
 		if (sys_params.midi_soft_thru && in_channel != sys_params.midi_out_chan)
 			forward_midi_msg(status, data1, data2);
-		// we don't process messages not on our in channel
 		return;
 	}
 
@@ -216,118 +250,148 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	if (type == MIDI_NOTE_ON && data2 == 0)
 		type = MIDI_NOTE_OFF;
 
-	switch (type) {
-	case MIDI_PROGRAM_CHANGE:
-		if (data1 < NUM_PRESETS)
-			cue_mem_item(data1);
-		break;
-	case MIDI_NOTE_OFF: {
-		u8 string_id = string_playing_note(data1);
-		if (string_id < NUM_STRINGS)
-			midi_string[string_id].state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
-	} break;
-	case MIDI_NOTE_ON: {
-		// try to map to existing string
-		u8 string_id = string_playing_note(data1);
-		// none found => find new string
-		if (string_id == 255) {
-			s32 midi_pitch = 12 *
-			                     // pitch from octave parameter
-			                     ((param_index(P_OCT) << 9)
-			                      // pitch from pitch parameter
-			                      + (param_val(P_PITCH) >> 7))
-			                 // pitch from midi note
-			                 + PITCH_OFFSET_FROM_NOTE(data1);
-			// find the best string for this midi note
-			u8 desired_string = 0;
-			u32 min_pitch_dist = abs(string_center_pitch(0, param_index_poly(P_SCALE, 0)) - midi_pitch);
-			for (u8 i = 1; i < NUM_STRINGS; i++) {
-				u32 pitch_dist = abs(string_center_pitch(i, param_index_poly(P_SCALE, i)) - midi_pitch);
-				if (pitch_dist >= min_pitch_dist)
-					break;
-				min_pitch_dist = pitch_dist;
-				desired_string = i;
-			}
-			// find closest non-sounding string
-			u8 min_string_dist = 255;
-			for (u8 i = 0; i < NUM_VOICES; i++) {
-				u8 dist = abs(i - desired_string);
-				if (midi_string[i].state == MS_UNUSED && voices[i].env1_lvl < 0.001f && dist < min_string_dist) {
-					min_string_dist = dist;
-					string_id = i;
-				}
-			}
-			// none found => find quietest non-pressed string
-			float min_vol = __FLT_MAX__;
+	// == central channel == //
+
+	if (!using_mpe || is_manager_msg) {
+		switch (type) {
+		case MIDI_PROGRAM_CHANGE:
+			if (data1 < NUM_PRESETS)
+				cue_mem_item(data1);
+			break;
+		case MIDI_NOTE_OFF: {
+			u8 string_id = string_playing_note(data1);
+			if (string_id < NUM_STRINGS)
+				midi_string[string_id].state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
+		} break;
+		case MIDI_NOTE_ON: {
+			// try to map to existing string
+			u8 string_id = string_playing_note(data1);
+			// none found => find new string
 			if (string_id == 255) {
+				s32 midi_pitch = 12 *
+				                     // pitch from octave parameter
+				                     ((param_index(P_OCT) << 9)
+				                      // pitch from pitch parameter
+				                      + (param_val(P_PITCH) >> 7))
+				                 // pitch from midi note
+				                 + PITCH_OFFSET_FROM_NOTE(data1);
+				// find the best string for this midi note
+				u8 desired_string = 0;
+				u32 min_pitch_dist = abs(string_center_pitch(0, param_index_poly(P_SCALE, 0)) - midi_pitch);
+				for (u8 i = 1; i < NUM_STRINGS; i++) {
+					u32 pitch_dist = abs(string_center_pitch(i, param_index_poly(P_SCALE, i)) - midi_pitch);
+					if (pitch_dist >= min_pitch_dist)
+						break;
+					min_pitch_dist = pitch_dist;
+					desired_string = i;
+				}
+				// find closest non-sounding string
+				u8 min_string_dist = 255;
 				for (u8 i = 0; i < NUM_VOICES; i++) {
-					float vol = voices[i].env1_lvl;
-					if ((midi_string[i].state == MS_UNUSED || midi_string[i].state == MS_RINGING_OUT)
-					    && !(string_touched & (1 << i)) && vol < min_vol) {
-						min_vol = vol;
+					u8 dist = abs(i - desired_string);
+					if (midi_string[i].state == MS_UNUSED && voices[i].env1_lvl < 0.001f && dist < min_string_dist) {
+						min_string_dist = dist;
 						string_id = i;
 					}
 				}
+				// none found => find quietest non-pressed string
+				float min_vol = __FLT_MAX__;
+				if (string_id == 255) {
+					for (u8 i = 0; i < NUM_VOICES; i++) {
+						float vol = voices[i].env1_lvl;
+						if ((midi_string[i].state == MS_UNUSED || midi_string[i].state == MS_RINGING_OUT)
+						    && !(string_touched & (1 << i)) && vol < min_vol) {
+							min_vol = vol;
+							string_id = i;
+						}
+					}
+				}
+				// collect position on found string
+				if (string_id < NUM_STRINGS) {
+					Scale scale = param_index_poly(P_SCALE, string_id);
+					s16 string_step_offset = step_at_string(string_id, scale);
+					MidiString* m_string = &midi_string[string_id];
+					m_string->position = 7 << 8;
+					for (u8 pad = 7; pad > 0; pad--) {
+						if (midi_pitch < pitch_at_step(string_step_offset + pad, scale))
+							break;
+						m_string->position = (7 - pad) << 8;
+					}
+				}
 			}
-			// collect position on found string
+			// save in string
 			if (string_id < NUM_STRINGS) {
-				Scale scale = param_index_poly(P_SCALE, string_id);
-				s16 string_step_offset = step_at_string(string_id, scale);
-				midi_string[string_id].position = 7 << 8;
-				for (u8 pad = 7; pad > 0; pad--) {
-					if (midi_pitch < pitch_at_step(string_step_offset + pad, scale))
-						break;
-					midi_string[string_id].position = (7 - pad) << 8;
-				}
+				MidiString* m_string = &midi_string[string_id];
+				m_string->state = MS_PRESSED;
+				m_string->note = data1;
+				m_string->velocity = data2;
+				m_string->assigned_by_mpe = false;
 			}
-		}
-		// save in string
-		if (string_id < NUM_STRINGS) {
-			MidiString* m_string = &midi_string[string_id];
-			m_string->state = MS_PRESSED;
-			m_string->note = data1;
-			m_string->velocity = data2;
-		}
-	} break;
-	case MIDI_POLY_KEY_PRESSURE: {
-		u8 string_id = string_holds_note(data1);
-		if (string_id < NUM_STRINGS)
-			midi_string[string_id].pressure = data2;
-	} break;
-	case MIDI_PITCH_BEND:
-		pitchbend = (data1 + (data2 << 7)) - 0x2000;
-		break;
-	case MIDI_CHANNEL_PRESSURE:
-		channel_pressure = data1;
-		break;
-	case MIDI_CONTROL_CHANGE:
-		switch (data1) {
-		// mod wheel
-		case 1:
-			mod_wheel = data2;
+		} break;
+		case MIDI_POLY_KEY_PRESSURE: {
+			u8 string_id = string_holds_note(data1);
+			if (string_id < NUM_STRINGS)
+				midi_string[string_id].pressure = data2;
+		} break;
+		case MIDI_PITCH_BEND:
+			channel_pitchbend = (data1 + (data2 << 7)) - 0x2000;
 			break;
-		// sustain
-		case 64:
-			bool new_sustain = data2 >= 64;
-			if (new_sustain != sustain_pressed) {
-				sustain_pressed = new_sustain;
-				// on a sustain release, release all midi notes that were held by the sustain
-				if (!sustain_pressed) {
-					for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-						if (midi_string[string_id].state == MS_SUSTAINED)
-							midi_string[string_id].state = MS_RINGING_OUT;
+		case MIDI_CHANNEL_PRESSURE:
+			channel_pressure = data1;
+			break;
+		case MIDI_CONTROL_CHANGE:
+			switch (data1) {
+			// mod wheel
+			case 1:
+				mod_wheel = data2;
+				break;
+			// sustain
+			case 64:
+				bool new_sustain = data2 >= 64;
+				if (new_sustain != sustain_pressed) {
+					sustain_pressed = new_sustain;
+					// on a sustain release, release all midi notes that were held by the sustain
+					if (!sustain_pressed) {
+						for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+							if (midi_string[string_id].state == MS_SUSTAINED)
+								midi_string[string_id].state = MS_RINGING_OUT;
+					}
 				}
+				break;
+			default:
+				// update parameters from ccs
+				params_rcv_cc(data1, data2);
+				break;
 			}
 			break;
 		default:
-			// update parameters from ccs
-			params_rcv_cc(data1, data2);
 			break;
 		}
+	}
 
-		break;
-	default:
-		break;
+	// == mpe member channels == //
+
+	if (is_member_msg) {
+		MidiString* m_string = &midi_string[in_channel - 1]; // only works in low zone!
+		switch (type) {
+		case MIDI_NOTE_OFF:
+			m_string->state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
+			break;
+		case MIDI_NOTE_ON: {
+			m_string->state = MS_PRESSED;
+			m_string->note = data1;
+			m_string->velocity = data2;
+			m_string->assigned_by_mpe = true;
+		} break;
+		case MIDI_PITCH_BEND:
+			m_string->pitchbend = (data1 + (data2 << 7)) - 0x2000;
+			break;
+		case MIDI_CHANNEL_PRESSURE:
+			m_string->pressure = data1;
+			break;
+		default:
+			break;
+		}
 	}
 }
 

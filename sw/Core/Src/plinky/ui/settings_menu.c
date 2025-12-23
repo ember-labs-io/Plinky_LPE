@@ -366,8 +366,10 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 			return "Off";
 		case 1:
 			return "Mono";
-		default:
+		case 2:
 			return "Poly";
+		case 3:
+			return "MPE";
 		}
 	case I_MIDI_OUT_CCS:
 	case I_MIDI_OUT_LFOS:
