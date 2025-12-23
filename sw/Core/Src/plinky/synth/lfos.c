@@ -93,19 +93,7 @@ static float (*lfo_funcs[NUM_LFO_SHAPES])(float pos, u32 half_cycle) = {
     [LFO_SAW] = eval_saw,
 };
 
-void update_lfo_scope(void) {
-	// every 16 frames, lfo_scope_frame increments and data for that frame is cleared
-	new_scope_frame = (synth_tick & 15) == 0;
-	if (new_scope_frame) {
-		lfo_scope_frame = (synth_tick >> 4) & 15;
-		lfo_scope_data[lfo_scope_frame][0] = 0;
-		lfo_scope_data[lfo_scope_frame][1] = 0;
-		lfo_scope_data[lfo_scope_frame][2] = 0;
-		lfo_scope_data[lfo_scope_frame][3] = 0;
-	}
-}
-
-void update_lfo(u8 lfo_id) {
+static void update_lfo(u8 lfo_id) {
 	static u64 lfo_clock_q32[NUM_LFOS] = {0}; // lfo phase acculumator clock, counts half(!) lfo cycles in q32
 	static s8 prev_scope_pos[NUM_LFOS] = {0};
 
@@ -201,6 +189,22 @@ void update_lfo(u8 lfo_id) {
 
 	// save to array for later use
 	lfo_cur[lfo_id] = lfo_val;
+}
+
+void lfos_tick(void) {
+	// every 16 frames, lfo_scope_frame increments and data for that frame is cleared
+	new_scope_frame = (synth_tick & 15) == 0;
+	if (new_scope_frame) {
+		lfo_scope_frame = (synth_tick >> 4) & 15;
+		lfo_scope_data[lfo_scope_frame][0] = 0;
+		lfo_scope_data[lfo_scope_frame][1] = 0;
+		lfo_scope_data[lfo_scope_frame][2] = 0;
+		lfo_scope_data[lfo_scope_frame][3] = 0;
+	}
+
+	// update each lfo
+	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++)
+		update_lfo(lfo_id);
 }
 
 void draw_lfos(void) {
