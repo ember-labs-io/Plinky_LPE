@@ -676,15 +676,10 @@ void process_midi(void) {
 	}
 
 	// usb midi in
-	const static u8 max_packets_per_call = 2;
 	u8 midi_packet[4];
-	u8 packets_handled = 0;
-	do {
-		if (!tud_midi_available() || !tud_midi_packet_read(midi_packet))
-			return;
+	// handle incoming packets
+	while (tud_midi_available() && tud_midi_packet_read(midi_packet))
 		process_midi_msg(midi_packet[1], midi_packet[2], midi_packet[3]);
-		packets_handled++;
-	} while (packets_handled < max_packets_per_call);
 }
 
 void midi_panic(void) {
