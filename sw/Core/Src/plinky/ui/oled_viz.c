@@ -8,7 +8,6 @@
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
 #include "synth/synth.h"
-#include <stdarg.h>
 
 // == TOOLS == //
 
