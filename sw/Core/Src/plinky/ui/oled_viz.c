@@ -126,24 +126,8 @@ static void draw_startup_visuals(void) {
 	// draw version number
 	gfx_text_color = 3;
 	u8 y = maxi(frame - 255 + 32, 20);
-	fdraw_str(47, y, F_12, param_index(P_LATCH_TGL) ? "v" FIRMWARE_VERSION : "LPE v" FIRMWARE_VERSION, version_tail);
+	fdraw_str(47, y, F_12, latch_active() ? "v" FIRMWARE_VERSION : "LPE v" FIRMWARE_VERSION, version_tail);
 	frame += 4;
-}
-
-static void draw_preset_info(void) {
-	// top-left, priority: cued preset, last pressed note, current preset
-	u8 xtab = draw_cued_preset_id();
-	if (!xtab)
-		xtab = draw_high_note();
-	if (!xtab)
-		xtab = draw_preset_id();
-	// step recording fills the center of the screen
-	if (seq_state() != SEQ_STEP_RECORDING)
-		draw_preset_name(xtab);
-	// bottom left priority: cued pattern, current pattern
-	xtab = draw_cued_pattern_id(param_index(P_ARP_TGL));
-	if (!xtab)
-		draw_pattern_id(param_index(P_ARP_TGL));
 }
 
 #ifdef FPS_WINDOW
@@ -205,7 +189,7 @@ static void draw_visuals(void) {
 			return; // this fills the rest of the display
 		}
 		draw_preset_info();
-		draw_voices(param_index(P_LATCH_TGL));
+		draw_voices(latch_active());
 		draw_latch_flag();
 		if (seq_state() == SEQ_STEP_RECORDING) {
 			seq_draw_step_recording();

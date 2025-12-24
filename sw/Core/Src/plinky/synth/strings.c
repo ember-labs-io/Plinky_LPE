@@ -98,7 +98,7 @@ static void generate_string_touch(u8 string_id) {
 
 		// === LATCH WRITE === //
 
-		if (param_index(P_LATCH_TGL) && touching && pres_increasing) {
+		if (latch_active() && touching && pres_increasing) {
 			if (first_touch_global) {
 				// start a new latch
 				clear_latch();
@@ -138,7 +138,7 @@ static void generate_string_touch(u8 string_id) {
 	// === LATCH RECALL === //
 
 	// latch pressure larger than touch pressure
-	if (param_index(P_LATCH_TGL) && latch_touch[string_id].pres > 0 && latch_touch[string_id].pres * 24 > pressure) {
+	if (latch_active() && latch_touch[string_id].pres > 0 && latch_touch[string_id].pres * 24 > pressure) {
 		// recall latch values
 		pressure = pres_decompress(latch_touch[string_id].pres);
 		position = pos_decompress(latch_touch[string_id].pos);
@@ -202,7 +202,7 @@ void generate_string_touches(void) {
 	static bool prev_latch = false;
 
 	// end latch when necessary
-	bool cur_latch = param_index(P_LATCH_TGL);
+	bool cur_latch = latch_active();
 	if (prev_latch && !cur_latch)
 		clear_latch();
 	prev_latch = cur_latch;

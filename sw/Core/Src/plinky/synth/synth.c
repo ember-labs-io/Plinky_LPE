@@ -102,11 +102,12 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 		const Touch* s_touch_sort = sorted_string_touch_ptr(voice_id) + 2;
 
 		// loop through oscillators
+		s32 microtone = param_val_poly(P_MICROTONE, voice_id);
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
 			// for midi
 			if (using_midi)
 				// generate pitch spread
-				fine_pitch = (osc_id - 2) * 64 * param_val_poly(P_MICROTONE, voice_id) >> 16;
+				fine_pitch = (osc_id - 2) * 64 * microtone >> 16;
 			// for touch
 			else {
 				u16 position = s_touch_sort++->pos; // touch position
@@ -119,7 +120,7 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 				u16 pitch_to_next_pad =
 				    abs(pitch_at_step(string_step_offset + pad_y + cv_step_offset + (fine_pos > 0 ? 1 : -1), scale)
 				        + cv_pitch_offset - note_pitch);
-				s32 micro_tune = ((64 + param_val_poly(P_MICROTONE, voice_id)) * pitch_to_next_pad) >> 10;
+				s32 micro_tune = ((64 + microtone) * pitch_to_next_pad) >> 10;
 				fine_pitch = (fine_pos * micro_tune) >> 14;
 			}
 
