@@ -7,8 +7,8 @@ REPO_REPORT.md
 
 bootloader/Release
 bootloader/Debug
-sw/Release
-sw/Debug
+sw/build/RELEASE
+sw/build/DEBUG
 sw/.settings/language.settings.xml
 sw/.settings/org.eclipse.cdt.core.prefs
 sw/.settings/org.eclipse.cdt.core.prefs
@@ -17,7 +17,7 @@ sw/.settings/com.st.stm32cube.ide.mcu.sfrview.prefs
 sw/.DS_Store
 sw/.vscode
 .vscode
-sw/nocube_makefile/local_paths.mk
+sw/build/local_paths.mk
 sw/plinkyblack Debug.cfg
 sw/plinkyblack Debug.launch
 sw/plinkyblack Release.cfg
