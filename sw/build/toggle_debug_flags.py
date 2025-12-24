@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-MAKEFILE_PATH = Path(__file__).parent / "Makefile"
+MAKEFILE_PATH = Path(__file__).parent.parent.parent / "Makefile"
 
 def toggle_flag(flag_name, display_name):
     """toggle the specified flag in the makefile"""
