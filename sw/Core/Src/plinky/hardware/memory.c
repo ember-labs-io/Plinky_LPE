@@ -638,6 +638,8 @@ void init_memory(void) {
 		sys_params.pattern_aligned = true;
 		log_ram_edit(SEG_SYS_PARAMS);
 	}
+	// align poly params with loaded preset
+	align_poly_params();
 	ram_initialized = true;
 }
 
@@ -864,6 +866,8 @@ void update_preset_ram(void) {
 		src = (Preset*)fp;
 	memcpy(&cur_preset, src, sizeof(Preset));
 	log_ram_edit(SEG_PRESET);
+	// align poly params to new preset
+	align_poly_params();
 	// update state
 	ram_preset_id = load_preset_id;
 	set_sys_param(SYS_PRESET_ID, ram_preset_id);
@@ -1045,6 +1049,8 @@ void long_press_mem_item(u8 item_id) {
 		case MEM_PRESET:
 			memcpy(&cur_preset, init_params_ptr(), sizeof(Preset));
 			log_ram_edit(SEG_PRESET);
+			// align poly params to cleared preset
+			align_poly_params();
 			set_action_msg(item_id, MEM_ACTION_CLEAR);
 			break;
 		// clear floating pattern

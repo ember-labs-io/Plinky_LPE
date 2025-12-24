@@ -18,7 +18,7 @@ static inline s16 step_at_string(u8 string_id, Scale scale) {
 	static u8 string_start_semis[NUM_STRINGS - 1];
 
 	if (string_id == 0)
-		return param_index_poly(P_DEGREE, string_id);
+		return param_index_poly(PP_DEGREE, string_id);
 
 	u8 first_stale_string = 0;
 	u16 new_string_hash[NUM_STRINGS - 1];
@@ -27,8 +27,8 @@ static inline s16 step_at_string(u8 string_id, Scale scale) {
 
 	// loop downwards from our string to 1 until we find the first up-to-date string
 	for (u8 s_id = string_id; s_id >= 1; s_id--) {
-		string_column[s_id - 1] = param_index_poly(P_COLUMN, s_id);
-		string_scale[s_id - 1] = param_index_poly(P_SCALE, s_id);
+		string_column[s_id - 1] = param_index_poly(PP_COLUMN, s_id);
+		string_scale[s_id - 1] = param_index_poly(PP_SCALE, s_id);
 		new_string_hash[s_id - 1] = string_column[s_id - 1] + (string_scale[s_id - 1] << 4);
 		// found up to date string
 		if (new_string_hash[s_id - 1] == string_hash[s_id - 1])
@@ -104,7 +104,7 @@ static inline s16 step_at_string(u8 string_id, Scale scale) {
 		}
 	}
 	// return with degree offset
-	return (string_id == 0 ? 0 : string_start_step[string_id - 1]) + param_index_poly(P_DEGREE, string_id);
+	return (string_id == 0 ? 0 : string_start_step[string_id - 1]) + param_index_poly(PP_DEGREE, string_id);
 }
 
 static inline s32 string_center_pitch(u8 string_id, Scale scale) {

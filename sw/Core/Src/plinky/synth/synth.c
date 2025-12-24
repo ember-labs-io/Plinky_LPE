@@ -71,11 +71,11 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 
 		s32 base_pitch = 12 *
 		                 // pitch from arp and the octave parameter
-		                 (((arp_oct_offset + param_index_poly(P_OCT, voice_id)) << 9)
+		                 (((arp_oct_offset + param_index_poly(PP_OCT, voice_id)) << 9)
 		                  // pitch from the pitch parameter
-		                  + (param_val_poly(P_PITCH, voice_id) >> 7));
+		                  + (param_val_poly(PP_PITCH, voice_id) >> 7));
 		// pitch from interval parameter
-		s32 osc_interval_pitch = (param_val_poly(P_INTERVAL, voice_id) * 12) >> 7;
+		s32 osc_interval_pitch = (param_val_poly(PP_INTERVAL, voice_id) * 12) >> 7;
 
 		bool using_midi = midi_string_used(voice_id);
 
@@ -84,7 +84,7 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 			note_pitch = midi_get_pitch(voice_id);
 		// for touch
 		else {
-			scale = param_index_poly(P_SCALE, voice_id);
+			scale = param_index_poly(PP_SCALE, voice_id);
 			if (scale >= NUM_SCALES)
 				scale = 0;
 
@@ -102,7 +102,7 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 		const Touch* s_touch_sort = sorted_string_touch_ptr(voice_id) + 2;
 
 		// loop through oscillators
-		s32 microtone = param_val_poly(P_MICROTONE, voice_id);
+		s32 microtone = param_val_poly(PP_MICROTONE, voice_id);
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
 			// for midi
 			if (using_midi)
@@ -164,7 +164,7 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 
 	// calc goal lpg
 	if (string_touched & mask) {
-		float sens = param_val_poly(P_ENV_LVL1, voice_id) * (2.f / 65536.f);
+		float sens = param_val_poly(PP_ENV_LVL1, voice_id) * (2.f / 65536.f);
 		env_goal = pressure * 1.f / TOUCH_MAX_POS * sens * sens;
 		if (env_goal < 0.f)
 			env_goal = 0.f;
@@ -174,10 +174,10 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 
 	// retrieve envelope
 	bool is_sample_preview = ui_mode == UI_SAMPLE_EDIT;
-	const float attack = is_sample_preview ? 0.5f : lpf_k((param_val_poly(P_ATTACK1, voice_id)));
-	const float decay = is_sample_preview ? 1.f : lpf_k((param_val_poly(P_DECAY1, voice_id)));
-	const float sustain = is_sample_preview ? 1.f : squaref(param_val_poly(P_SUSTAIN1, voice_id) * (1.f / 65536.f));
-	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(P_RELEASE1, voice_id)));
+	const float attack = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_ATTACK1, voice_id)));
+	const float decay = is_sample_preview ? 1.f : lpf_k((param_val_poly(PP_DECAY1, voice_id)));
+	const float sustain = is_sample_preview ? 1.f : squaref(param_val_poly(PP_SUSTAIN1, voice_id) * (1.f / 65536.f));
+	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_RELEASE1, voice_id)));
 
 	// new touch: start new envelope
 	if (envelope_trigger & mask) {
@@ -225,17 +225,17 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 	// == NOISE, DRIVE, LPG == //
 
 	// pre-calc noise, drive, resonance
-	int drive_lvl = param_val_poly(P_DISTORTION, voice_id) * 2 - 65536;
+	int drive_lvl = param_val_poly(PP_DISTORTION, voice_id) * 2 - 65536;
 	float fdrive = table_interp(pitches, ((32768 - 2048) + drive_lvl / 2));
 	if (drive_lvl < -65536 + 2048)
 		fdrive *= (drive_lvl + 65536) * (1.f / 2048.f); // ensure drive goes right to 0 when full minimum
 	float drive = fdrive * (0.75f / 65536.f);
-	float goal_noise = param_val_poly(P_NOISE, voice_id) * (1.f / 65536.f);
+	float goal_noise = param_val_poly(PP_NOISE, voice_id) * (1.f / 65536.f);
 	goal_noise *= goal_noise;
 	if (drive_lvl > 0)
 		goal_noise *= fdrive;
 	float noise_diff = (goal_noise - voice->noise_lvl) * (1.f / SAMPLES_PER_TICK);
-	int resonancei = 65536 - param_val_poly(P_RESO, voice_id);
+	int resonancei = 65536 - param_val_poly(PP_RESO, voice_id);
 	float resonance = 2.1f - (table_interp(pitches, resonancei) * (2.1f / pitches[1024]));
 	drive *= 2.f / (resonance + 2.f);
 
@@ -246,8 +246,8 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 	}
 
 	// two loops handling two oscillators each
-	float glide = lpf_k(param_val_poly(P_GLIDE, voice_id) >> 2) * (0.5f / SAMPLES_PER_TICK);
-	s32 osc_shape = param_val_poly(P_SHAPE, voice_id);
+	float glide = lpf_k(param_val_poly(PP_GLIDE, voice_id) >> 2) * (0.5f / SAMPLES_PER_TICK);
+	s32 osc_shape = param_val_poly(PP_SHAPE, voice_id);
 	float noise;
 	for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE / 2; osc_id++) {
 		s16* osc_dst = ((s16*)dst) + (osc_id & 1);
