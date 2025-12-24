@@ -108,6 +108,7 @@ CFLAGS_COMMON = -mcpu=cortex-m4 \
     -ffunction-sections \
     -fdata-sections \
     -Wall \
+	-Wenum-conversion \
     -fstack-usage \
     --specs=nano.specs \
     -mfpu=fpv4-sp-d16 \

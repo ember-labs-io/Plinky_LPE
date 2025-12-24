@@ -565,6 +565,35 @@ const static u8 midi_cc_table_rvs[NUM_PARAMS] = {
 	[P_IN_LVL] = 89,      [P_IN_WET_DRY] = 90,   [P_SYS_UNUSED1] = 255,  [P_MIX_UNUSED2] = 255,  [P_MIX_UNUSED3] = 255,  [P_MIX_WIDTH] = 255,     // Mixer 2
 };
 
+typedef enum PolyParam {
+    PP_SHAPE,         PP_DISTORTION,   PP_PITCH,         PP_OCT,             PP_GLIDE,         PP_INTERVAL,	// Sound 1
+    PP_NOISE,         PP_RESO,         PP_DEGREE,        PP_SCALE,           PP_MICROTONE,     PP_COLUMN,	// Sound 2
+    PP_ENV_LVL1,      PP_ATTACK1,      PP_DECAY1,        PP_SUSTAIN1,        PP_RELEASE1,					// Envelope 1
+    PP_ENV_LVL2,      PP_ATTACK2,      PP_DECAY2,        PP_SUSTAIN2,        PP_RELEASE2,                	// Envelope 2
+    PP_SCRUB,         PP_GR_SIZE,      PP_PLAY_SPD,      PP_SMP_STRETCH,                                 	// Sampler 1
+    PP_SCRUB_JIT,     PP_GR_SIZE_JIT,  PP_PLAY_SPD_JIT,                                                 	// Sampler 2
+
+    NUM_POLY_PARAMS,
+} PolyParam;
+
+const static Param param_from_poly_param[NUM_POLY_PARAMS] = {
+    [PP_SHAPE] = P_SHAPE,           [PP_DISTORTION] = P_DISTORTION,     [PP_PITCH] = P_PITCH,           [PP_OCT] = P_OCT,               [PP_GLIDE] = P_GLIDE,           [PP_INTERVAL] = P_INTERVAL,	// Sound 1
+    [PP_NOISE] = P_NOISE,           [PP_RESO] = P_RESO,                 [PP_DEGREE] = P_DEGREE,         [PP_SCALE] = P_SCALE,           [PP_MICROTONE] = P_MICROTONE,   [PP_COLUMN] = P_COLUMN,   	// Sound 2
+    [PP_ENV_LVL1] = P_ENV_LVL1,     [PP_ATTACK1] = P_ATTACK1,           [PP_DECAY1] = P_DECAY1,         [PP_SUSTAIN1] = P_SUSTAIN1,     [PP_RELEASE1] = P_RELEASE1,                                	// Envelope 1
+    [PP_ENV_LVL2] = P_ENV_LVL2,     [PP_ATTACK2] = P_ATTACK2,           [PP_DECAY2] = P_DECAY2,         [PP_SUSTAIN2] = P_SUSTAIN2,     [PP_RELEASE2] = P_RELEASE2,                               	// Envelope 2
+    [PP_SCRUB] = P_SCRUB,           [PP_GR_SIZE] = P_GR_SIZE,           [PP_PLAY_SPD] = P_PLAY_SPD,     [PP_SMP_STRETCH] = P_SMP_STRETCH,                                                          	// Sampler 1
+    [PP_SCRUB_JIT] = P_SCRUB_JIT,   [PP_GR_SIZE_JIT] = P_GR_SIZE_JIT,   [PP_PLAY_SPD_JIT] = P_PLAY_SPD_JIT,                                                                                       	// Sampler 2
+};
+
+const static PolyParam poly_param_from_param[NUM_PARAMS] = {
+    [P_SHAPE] = PP_SHAPE,           [P_DISTORTION] = PP_DISTORTION,     [P_PITCH] = PP_PITCH,           [P_OCT] = PP_OCT,               [P_GLIDE] = PP_GLIDE,           [P_INTERVAL] = PP_INTERVAL,	// Sound 1
+    [P_NOISE] = PP_NOISE,           [P_RESO] = PP_RESO,                 [P_DEGREE] = PP_DEGREE,         [P_SCALE] = PP_SCALE,           [P_MICROTONE] = PP_MICROTONE,   [P_COLUMN] = PP_COLUMN,   	// Sound 2
+    [P_ENV_LVL1] = PP_ENV_LVL1,     [P_ATTACK1] = PP_ATTACK1,           [P_DECAY1] = PP_DECAY1,         [P_SUSTAIN1] = PP_SUSTAIN1,     [P_RELEASE1] = PP_RELEASE1,                                	// Envelope 1
+    [P_ENV_LVL2] = PP_ENV_LVL2,     [P_ATTACK2] = PP_ATTACK2,           [P_DECAY2] = PP_DECAY2,         [P_SUSTAIN2] = PP_SUSTAIN2,     [P_RELEASE2] = PP_RELEASE2,                               	// Envelope 2
+    [P_SCRUB] = PP_SCRUB,           [P_GR_SIZE] = PP_GR_SIZE,           [P_PLAY_SPD] = PP_PLAY_SPD,     [P_SMP_STRETCH] = PP_SMP_STRETCH,                                                          	// Sampler 1
+    [P_SCRUB_JIT] = PP_SCRUB_JIT,   [P_GR_SIZE_JIT] = PP_GR_SIZE_JIT,   [P_PLAY_SPD_JIT] = PP_PLAY_SPD_JIT,    
+};
+
 // clang-format on
 
 // == GRAPHICS == //

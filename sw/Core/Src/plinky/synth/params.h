@@ -9,6 +9,7 @@ bool editing_param(void);
 bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
+void align_poly_params(void);
 void params_rcv_cc(u8 d1, u8 d2);
 
 // main
@@ -18,9 +19,9 @@ void params_tick(void);
 
 // param retrieval
 s32 param_val(Param param_id);
-s32 param_val_poly(Param param_id, u8 string_id);
+s32 param_val_poly(PolyParam pp_id, u8 string_id);
 s8 param_index(Param param_id);
-s8 param_index_poly(Param param_id, u8 string_id);
+s8 param_index_poly(PolyParam pp_id, u8 string_id);
 s8 param_index_unmod(Param param_id);
 u8 param_cc_value(Param param_id);
 

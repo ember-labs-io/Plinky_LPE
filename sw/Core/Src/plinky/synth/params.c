@@ -24,6 +24,12 @@
 		selected_param = (param_id);                                                                                   \
 		selected_mod_src = SRC_BASE;                                                                                   \
 	} while (0)
+#define ALIGN_POLY_PARAM(pp_id)                                                                                        \
+	do {                                                                                                               \
+		s16* poly_param = poly_params[pp_id];                                                                          \
+		poly_param[6] = poly_param[5] = poly_param[4] = poly_param[3] = poly_param[2] = poly_param[1] =                \
+		    poly_param[0] = cur_preset.params[param_from_poly_param[pp_id]][SRC_BASE];                                 \
+	} while (0)
 
 // There are three ranges of parameters:
 // Raw:
@@ -45,6 +51,7 @@
 
 static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
+static s16 poly_params[NUM_POLY_PARAMS][NUM_STRINGS - 1] = {};
 
 // stable snapshots for drawing oled and led visuals
 static Param param_snap;
@@ -53,7 +60,7 @@ static ModSource src_snap;
 static u32 clear_mods_duration = 0;
 
 // modulation values
-static s32 param_with_lfo[NUM_PARAMS];
+static s32 poly_param_lfo_offset[NUM_POLY_PARAMS];
 static u16 max_env_global = 0;
 static u32 max_pres_global = 0;
 static u16 sample_hold_global = {8 << 12};
@@ -93,6 +100,10 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 	return true;
 }
 
+#define PARAM_IS_POLY(param_id)                                                                                        \
+	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
+	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT))
+
 #define PARAM_SIGNED(param_id) (param_info[range_type[param_id]] & SIGNED)
 
 #define CC_TO_RAW(cc, param_id) (PARAM_SIGNED(param_id) ? ((cc) * 2049 >> 7) - RAW_SIZE : (cc) * 1025 >> 7)
@@ -120,6 +131,11 @@ bool latch_active(void) {
 
 s16 value_to_index(Param param_id, s32 value) {
 	return VALUE_TO_INDEX(value, PARAM_RANGE(param_id));
+}
+
+void align_poly_params(void) {
+	for (PolyParam pp_id = 0; pp_id < NUM_POLY_PARAMS; pp_id++)
+		ALIGN_POLY_PARAM(pp_id);
 }
 
 void params_rcv_cc(u8 d1, u8 d2) {
@@ -319,18 +335,18 @@ void revert_preset(Preset* preset) {
 	preset->version = OG_PRESET_VERSION;
 }
 
-static void apply_lfo_mods(Param param_id) {
-	s16* param = cur_preset.params[param_id];
-	s32 new_val = param[SRC_BASE] << 16;
+static void precalc_lfo_offset(PolyParam pp_id) {
+	s32 offset = 0;
+	s16* param = &cur_preset.params[param_from_poly_param[pp_id]][SRC_LFO_A];
 	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++)
-		new_val += lfo_cur[lfo_id] * param[SRC_LFO_A + lfo_id];
-	param_with_lfo[param_id] = new_val;
+		offset += lfo_cur[lfo_id] * param[lfo_id];
+	poly_param_lfo_offset[pp_id] = offset;
 }
 
 void params_tick(void) {
 	// envelope 2
-	for (Param param_id = P_ENV_LVL2; param_id <= P_RELEASE2; param_id++)
-		apply_lfo_mods(param_id);
+	for (PolyParam pp_id = PP_ENV_LVL2; pp_id <= PP_RELEASE2; pp_id++)
+		precalc_lfo_offset(pp_id);
 	max_pres_global = 0;
 	max_env_global = 0;
 	const s16* string_pressures = get_string_pressures();
@@ -349,7 +365,7 @@ void params_tick(void) {
 		                     // touching the string
 		                     ? (v->env2_decaying)
 		                           // decay stage: 2 times sustain parameter
-		                           ? 2.f * (param_val_poly(P_SUSTAIN2, string_id) * (1.f / 65536.f))
+		                           ? 2.f * (param_val_poly(PP_SUSTAIN2, string_id) * (1.f / 65536.f))
 		                           // attack stage: we aim for 2.2, the actual peak is at 2.0
 		                           : 2.2f
 		                     // not touching, release stage: 0
@@ -358,12 +374,12 @@ void params_tick(void) {
 		// get multiplier size (scaled exponentially)
 		float k = lpf_k(param_val_poly((lvl_diff > 0.f)
 		                                   // positive difference => moving up => attack param
-		                                   ? P_ATTACK2
+		                                   ? PP_ATTACK2
 		                                   : (v->env2_decaying && touching)
 		                                         // negative difference and decaying => decay param
-		                                         ? P_DECAY2
+		                                         ? PP_DECAY2
 		                                         // negative difference and not decaying => release param
-		                                         : P_RELEASE2,
+		                                         : PP_RELEASE2,
 		                               string_id));
 		// change env level by fraction of difference
 		v->env2_lvl += lvl_diff * k;
@@ -371,7 +387,7 @@ void params_tick(void) {
 		if (v->env2_lvl >= 2.f && touching)
 			v->env2_decaying = true;
 		// scale the envelope from a roughly [0, 2] float, to a u16 range scaled by the envelope level parameter
-		v->env2_lvl16 = SATURATE17(v->env2_lvl * param_val_poly(P_ENV_LVL2, string_id));
+		v->env2_lvl16 = SATURATE17(v->env2_lvl * param_val_poly(PP_ENV_LVL2, string_id));
 
 		// collect range pressure
 		max_pres_global = maxi(max_pres_global, string_pressures[string_id]);
@@ -391,29 +407,15 @@ void params_tick(void) {
 
 	adc_update_inputs();
 
-	// apply lfo modulation to the parameters of the lfo itself
-	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++) {
-		u8 lfo_row_offset = lfo_id * 6;
-		for (Param param_id = P_A_SCALE; param_id <= P_A_SYM; param_id++)
-			apply_lfo_mods(param_id + lfo_row_offset);
-	}
-
 	// process lfos
 	lfos_tick();
 
-	// apply lfo modulation to al other params
-	for (Param param_id = 0; param_id < NUM_PARAMS; ++param_id) {
+	// apply lfo modulation to poly params
+	for (PolyParam pp_id = 0; pp_id < NUM_POLY_PARAMS; ++pp_id) {
 		// we already did envelope 2 above
-		if (param_id == P_ENV_LVL2) {
-			param_id += 5;
-			continue;
-		}
-		// we already did the lfos above
-		if (param_id == P_A_SCALE) {
-			param_id += 23;
-			continue;
-		}
-		apply_lfo_mods(param_id);
+		if (pp_id == PP_ENV_LVL2)
+			pp_id = PP_SCRUB;
+		precalc_lfo_offset(pp_id);
 	}
 
 	// precalc
@@ -428,22 +430,60 @@ void params_tick(void) {
 	((param_id) == P_VOLUME ? (sys_params.volume_msb << 8) + sys_params.volume_lsb                                     \
 	                        : cur_preset.params[param_id][mod_src])
 
-// modulated parameter value, range -65536 to 65536
-static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
+// param value range +/- 65536
+
+s32 param_val(Param param_id) {
 	s16* param = cur_preset.params[param_id];
 
-	// pre-modulated with lfos, has 16 precision bits
-	s32 mod_val = param_with_lfo[param_id];
+	// add 16 precision bits to the raw value
+	s32 mod_val = param[SRC_BASE] << 16;
 
-	// apply envelope modulation
-	mod_val += env * param[SRC_ENV2];
+	// apply envelope 2 modulation
+	mod_val += max_env_global * param[SRC_ENV2];
 
 	// apply pressure modulation
-	mod_val += pres * param[SRC_PRES];
+	mod_val += max_pres_global * param[SRC_PRES];
+
+	// apply lfo modulation
+	for (u8 lfo_id = 0; lfo_id < NUM_LFOS; lfo_id++)
+		mod_val += lfo_cur[lfo_id] * param[SRC_LFO_A + lfo_id];
 
 	// apply sample & hold modulation
 	if (param[SRC_RND]) {
-		u16 rnd_id = (u16)(rnd + param_id);
+		u16 rnd_id = (u16)(sample_hold_global + param_id);
+		// positive => uniform distribution
+		if (param[SRC_RND] > 0)
+			mod_val += (rndtab[rnd_id] * param[SRC_RND]) << 8;
+		// negative => triangular distribution
+		else {
+			rnd_id += rnd_id;
+			mod_val += ((rndtab[rnd_id] - rndtab[rnd_id - 1]) * param[SRC_RND]) << 8;
+		}
+	}
+
+	// all 7 mod sources have now been applied, scale and clamp to 16 bit
+	return clampi(mod_val >> 10, PARAM_SIGNED(param_id) ? -65536 : 0, 65536);
+}
+
+s32 param_val_poly(PolyParam pp_id, u8 string_id) {
+	Param param_id = param_from_poly_param[pp_id];
+	s16* param = cur_preset.params[param_id];
+
+	// add 16 precision bits to the raw value
+	s32 mod_val = (string_id > 0 ? poly_params[pp_id][string_id - 1] : param[SRC_BASE]) << 16;
+
+	// apply envelope 2 modulation
+	mod_val += voices[string_id].env2_lvl16 * param[SRC_ENV2];
+
+	// apply pressure modulation
+	mod_val += clampi(get_string_pressures()[string_id] << 5, 0, 65535) * param[SRC_PRES];
+
+	// apply lfo modulation
+	mod_val += poly_param_lfo_offset[pp_id];
+
+	// apply sample & hold modulation
+	if (param[SRC_RND]) {
+		u16 rnd_id = (u16)(sample_hold_poly[string_id] + param_id);
 		// positive => uniform distribution
 		if (param[SRC_RND] > 0)
 			mod_val += (rndtab[rnd_id] * param[SRC_RND]) << 8;
@@ -472,17 +512,6 @@ static s32 param_val_mod(Param param_id, u16 rnd, u16 env, u16 pres) {
 	return clampi(mod_val >> 10, PARAM_SIGNED(param_id) ? -65536 : 0, 65536);
 }
 
-// param value range +/- 65536
-
-s32 param_val(Param param_id) {
-	return param_val_mod(param_id, sample_hold_global, max_env_global, max_pres_global);
-}
-
-s32 param_val_poly(Param param_id, u8 string_id) {
-	return param_val_mod(param_id, sample_hold_poly[string_id], voices[string_id].env2_lvl16,
-	                     clampi(get_string_pressures()[string_id] << 5, 0, 65535));
-}
-
 // index value is scaled to its appropriate range
 
 s8 param_index(Param param_id) {
@@ -494,8 +523,8 @@ s8 param_index(Param param_id) {
 	return index;
 }
 
-s8 param_index_poly(Param param_id, u8 string_id) {
-	return VALUE_TO_INDEX(param_val_poly(param_id, string_id), PARAM_RANGE(param_id));
+s8 param_index_poly(PolyParam pp_id, u8 string_id) {
+	return VALUE_TO_INDEX(param_val_poly(pp_id, string_id), PARAM_RANGE(param_from_poly_param[pp_id]));
 }
 
 s8 param_index_unmod(Param param_id) {
@@ -522,11 +551,12 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 		return;
 	// save
 	cur_preset.params[param_id][mod_src] = data;
+	// update poly param to new value
+	if (PARAM_IS_POLY(param_id))
+		ALIGN_POLY_PARAM(poly_param_from_param[param_id]);
 	// send to midi
 	if (sys_params.midi_out_params && mod_src == SRC_BASE)
 		midi_send_param(param_id);
-	// precalc modulation values
-	apply_lfo_mods(param_id);
 	log_ram_edit(SEG_PRESET);
 }
 
