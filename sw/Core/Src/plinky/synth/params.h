@@ -7,6 +7,8 @@
 const Preset* init_params_ptr(void);
 bool editing_param(void);
 bool arp_active(void);
+bool latch_active(void);
+s16 value_to_index(Param param_id, s32 value);
 void params_rcv_cc(u8 d1, u8 d2);
 
 // main
@@ -43,6 +45,7 @@ void hold_encoder_for_params(u16 duration);
 bool mod_clear_visuals(void);
 
 void take_param_snapshots(void);
+void draw_preset_info(void);
 bool params_want_to_draw(void);
 void draw_cur_param(void);
 void draw_arp_flag(void);

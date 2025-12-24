@@ -64,6 +64,10 @@ static Param mem_param = 255; // remembers previous selected_param, used by enco
 static s16 left_strip_start = 0;
 static ValueSmoother left_strip_smooth;
 
+// precalc
+static bool arp_toggle = false;
+static bool latch_toggle = false;
+
 // == UTILS == //
 
 static s32 SATURATE17(s32 a) {
@@ -102,7 +106,15 @@ bool editing_param(void) {
 
 // is the arp actively being executed?
 bool arp_active(void) {
-	return param_index(P_ARP_TGL) && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
+	return arp_toggle && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
+}
+
+bool latch_active(void) {
+	return latch_toggle;
+}
+
+s16 value_to_index(Param param_id, s32 value) {
+	return VALUE_TO_INDEX(value, PARAM_RANGE(param_id));
 }
 
 void params_rcv_cc(u8 d1, u8 d2) {
@@ -402,6 +414,10 @@ void params_tick(void) {
 		}
 		apply_lfo_mods(param_id);
 	}
+
+	// precalc
+	arp_toggle = param_index(P_ARP_TGL);
+	latch_toggle = param_index(P_LATCH_TGL);
 }
 
 // == RETRIEVAL == //
@@ -780,6 +796,22 @@ bool mod_clear_visuals(void) {
 void take_param_snapshots(void) {
 	param_snap = selected_param;
 	src_snap = selected_mod_src;
+}
+
+void draw_preset_info(void) {
+	// top-left, priority: cued preset, last pressed note, current preset
+	u8 xtab = draw_cued_preset_id();
+	if (!xtab)
+		xtab = draw_high_note();
+	if (!xtab)
+		xtab = draw_preset_id();
+	// step recording fills the center of the screen
+	if (seq_state() != SEQ_STEP_RECORDING)
+		draw_preset_name(xtab);
+	// bottom left priority: cued pattern, current pattern
+	xtab = draw_cued_pattern_id(arp_toggle);
+	if (!xtab)
+		draw_pattern_id(arp_toggle);
 }
 
 static const char* get_val_str(s32 val, u8 num_decimals, char* val_buf, char* unit, bool force_sign) {
@@ -1323,7 +1355,7 @@ void draw_arp_flag(void) {
 
 void draw_latch_flag(void) {
 	gfx_text_color = 0;
-	if (param_index(P_LATCH_TGL)) {
+	if (latch_toggle) {
 		fill_rectangle(128 - 38, 32 - 8, 128 - 17, 32);
 		draw_str(-(128 - 17), 32 - 7, F_8, "latch");
 		if (seq_state() == SEQ_STEP_RECORDING)

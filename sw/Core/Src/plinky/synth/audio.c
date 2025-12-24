@@ -14,6 +14,7 @@ s16 audio_in_peak = 0;
 s16 audio_in_hold = 0;
 ValueSmoother ext_gain_smoother;
 
+static s32 a_in_lvl_full = 0;
 static s16 audioin_is_stereo = 0;
 static s16 noise_gate = 0;
 static u16 audio_in_hold_time = 0;
@@ -263,7 +264,7 @@ void audio_pre(u32* audio_out, u32* audio_in) {
 			ext_gain_goal = gain_knob_value;
 	}
 	else
-		ext_gain_goal = param_val(P_IN_LVL);
+		ext_gain_goal = a_in_lvl_full;
 	smooth_value(&ext_gain_smoother, ext_gain_goal, 65536.f);
 }
 
@@ -291,7 +292,8 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	// synced
 	else {
 		// delay runs at half sample rate
-		u32 delay_samples = ((SAMPLE_RATE >> 1) * 75 * sync_divs_32nds[param_index(P_DLY_TIME)]) / bpm_10x;
+		u32 delay_samples =
+		    ((SAMPLE_RATE >> 1) * 75 * sync_divs_32nds[value_to_index(P_DLY_TIME, k_target_delaytime)]) / bpm_10x;
 		// halve the samples if they don't fit in the delay buffer
 		while (delay_samples > DL_SIZE_MASK - 64)
 			delay_samples >>= 1;
@@ -388,7 +390,8 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	int wetlvl = 65536 - maxi(-wetdry, 0);
 	int drylvl = 65536 - maxi(wetdry, 0);
 
-	int a_in_lvl = param_val(P_IN_LVL);
+	a_in_lvl_full = param_val(P_IN_LVL);
+	int a_in_lvl = a_in_lvl_full;
 	int ainwetlvl = 65536 - maxi(-ainwetdry, 0);
 	int aindrylvl = 65536 - maxi(ainwetdry, 0);
 
@@ -402,7 +405,6 @@ void audio_post(u32* audio_out, u32* audio_in) {
 	// scope params
 	static float peak = 0.f;
 	peak *= 0.99f;
-	int a_in_lvl_full = param_val(P_IN_LVL);
 	int scopescale = (65536 * 24) / maxi(16384, (int)peak);
 
 	// fx processing
