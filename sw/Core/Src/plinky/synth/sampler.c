@@ -97,13 +97,13 @@ void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noi
 	float gratejit = 0.f;
 	int smppos = 0;
 	if (ui_mode != UI_SAMPLE_EDIT) {
-		timestretch = param_val_poly(P_SMP_STRETCH, voice_id) * (2.f / 65536.f);
-		gsize = param_val_poly(P_GR_SIZE, voice_id) * (1.414f / 65536.f);
-		grate = param_val_poly(P_PLAY_SPD, voice_id) * (2.f / 65536.f);
-		smppos = (param_val_poly(P_SCRUB, voice_id) * cur_sample_info.samplelen) >> 16;
-		posjit = param_val_poly(P_SCRUB_JIT, voice_id) * (1.f / 65536.f);
-		sizejit = param_val_poly(P_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
-		gratejit = param_val_poly(P_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
+		timestretch = param_val_poly(PP_SMP_STRETCH, voice_id) * (2.f / 65536.f);
+		gsize = param_val_poly(PP_GR_SIZE, voice_id) * (1.414f / 65536.f);
+		grate = param_val_poly(PP_PLAY_SPD, voice_id) * (2.f / 65536.f);
+		smppos = (param_val_poly(PP_SCRUB, voice_id) * cur_sample_info.samplelen) >> 16;
+		posjit = param_val_poly(PP_SCRUB_JIT, voice_id) * (1.f / 65536.f);
+		sizejit = param_val_poly(PP_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
+		gratejit = param_val_poly(PP_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
 	}
 	int trig = envelope_trigger & (1 << voice_id);
 

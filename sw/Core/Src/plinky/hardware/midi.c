@@ -277,9 +277,9 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				                 + PITCH_OFFSET_FROM_NOTE(data1);
 				// find the best string for this midi note
 				u8 desired_string = 0;
-				u32 min_pitch_dist = abs(string_center_pitch(0, param_index_poly(P_SCALE, 0)) - midi_pitch);
+				u32 min_pitch_dist = abs(string_center_pitch(0, param_index_poly(PP_SCALE, 0)) - midi_pitch);
 				for (u8 i = 1; i < NUM_STRINGS; i++) {
-					u32 pitch_dist = abs(string_center_pitch(i, param_index_poly(P_SCALE, i)) - midi_pitch);
+					u32 pitch_dist = abs(string_center_pitch(i, param_index_poly(PP_SCALE, i)) - midi_pitch);
 					if (pitch_dist >= min_pitch_dist)
 						break;
 					min_pitch_dist = pitch_dist;
@@ -308,7 +308,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				}
 				// collect position on found string
 				if (string_id < NUM_STRINGS) {
-					Scale scale = param_index_poly(P_SCALE, string_id);
+					Scale scale = param_index_poly(PP_SCALE, string_id);
 					s16 string_step_offset = step_at_string(string_id, scale);
 					MidiString* m_string = &midi_string[string_id];
 					m_string->position = 7 << 8;
