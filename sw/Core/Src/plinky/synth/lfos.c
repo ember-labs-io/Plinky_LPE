@@ -106,7 +106,7 @@ static void update_lfo(u8 lfo_id) {
 	}
 	// synced
 	else {
-		u16 step_32nds = sync_divs_32nds[param_index(P_A_RATE + lfo_page_offset)];
+		u16 step_32nds = sync_divs_32nds[value_to_index(P_A_RATE + lfo_page_offset, lfo_rate)];
 		u16 prev_phase_q16 = (lfo_clock_q32[lfo_id] >> 16) & 0xFFFF;
 		u16 new_phase_q16 = clock_pos_q16(step_32nds);
 		// add cycle if the phase rolls over

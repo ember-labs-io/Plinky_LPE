@@ -139,7 +139,7 @@ static void calc_position(bool get_param) {
 		swing_param = param_val(P_SWING);
 		if (swing_param != 0) {
 			// scale param by max
-			swing_q21 = (u64)abs(param_val(P_SWING)) * MAX_SWING_Q21 >> 16;
+			swing_q21 = (u64)abs(swing_param) * MAX_SWING_Q21 >> 16;
 			// negative swing param means 1/16th swing, positive means 1/8th note swing
 			num_swing_32nds = swing_param < 0 ? 4 : 8;
 		}
