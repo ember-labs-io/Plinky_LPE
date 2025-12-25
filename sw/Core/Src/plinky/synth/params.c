@@ -134,35 +134,45 @@ void align_poly_params(void) {
 		ALIGN_POLY_PARAM(pp_id);
 }
 
-void params_rcv_cc(u8 d1, u8 d2) {
+// use string_id = 255 to indicate a monophonic cc
+void params_rcv_cc(u8 d1, u8 d2, u8 string_id) {
 	// CCs 0 through 31 are treated as regular 7 bit CCs by default
 	// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
 	// treated as 14 bit CCs
-	static u8 cc14[NUM_14BIT_CCS][2];
+	static u8 cc14[NUM_14BIT_CCS][NUM_STRINGS][2] = {};
 	static bool seen_14bit = false;
-	Param param_id;
-	s16 value;
 
 	if (!seen_14bit && d1 >= NUM_14BIT_CCS && d1 < 2 * NUM_14BIT_CCS)
 		seen_14bit = true;
 
+	// define param id
+	bool is_14bit = seen_14bit && d1 < 2 * NUM_14BIT_CCS;
+	u8 param_cc = is_14bit ? d1 % NUM_14BIT_CCS : d1;
+	Param param_id = midi_cc_table[param_cc];
+	if (param_id == NUM_PARAMS)
+		return;
+
+	bool is_poly = string_id != 255 && PARAM_IS_POLY(param_id);
+
+	// force string 0 for mono params
+	if (string_id && !is_poly)
+		string_id = 0;
+
+	u8* cc14_ptr;
+	if (param_cc < NUM_14BIT_CCS)
+		cc14_ptr = cc14[param_cc][string_id];
+
+	s16 value;
 	// 14 bit CCs
-	if (seen_14bit && d1 < 2 * NUM_14BIT_CCS) {
-		u8 param_cc = d1 % NUM_14BIT_CCS;
-		param_id = midi_cc_table[param_cc];
-		if (param_id == NUM_PARAMS)
-			return;
-		cc14[param_cc][d1 / NUM_14BIT_CCS] = d2;
-		value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * 1025 >> 14;
+	if (is_14bit) {
+		cc14_ptr[d1 / NUM_14BIT_CCS] = d2;
+		value = ((cc14_ptr[0] << 7) + cc14_ptr[1]) * 1025 >> 14;
 	}
 	// 7 bit CCs
 	else {
-		param_id = midi_cc_table[d1];
-		if (param_id == NUM_PARAMS)
-			return;
 		// save in cc14 array in case the second byte comes in later
-		if (d1 < NUM_14BIT_CCS)
-			cc14[d1][0] = d2;
+		if (param_cc < NUM_14BIT_CCS)
+			cc14_ptr[0] = d2;
 		value = d2 * 1033 >> 7;
 	}
 
@@ -171,7 +181,10 @@ void params_rcv_cc(u8 d1, u8 d2) {
 		value = value * 2 - RAW_SIZE;
 
 	// save
-	save_param_raw(param_id, SRC_BASE, value);
+	if (is_poly)
+		save_poly_param_raw(param_id, string_id, value);
+	else
+		save_param_raw(param_id, SRC_BASE, value);
 }
 
 // == MAIN == //
@@ -554,6 +567,25 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 		midi_set_param_value(param_id, clampi(data >> 3, 0, 127));
 	}
 	log_ram_edit(SEG_PRESET);
+}
+
+void save_poly_param_raw(Param param_id, u8 string_id, s16 data) {
+	if (string_id == 0) {
+		// don't save if no change
+		if (data == cur_preset.params[param_id][SRC_BASE])
+			return;
+		// save
+		cur_preset.params[param_id][SRC_BASE] = data;
+		// send to midi
+		if (sys_params.midi_out_params) {
+			if (PARAM_SIGNED(param_id))
+				data = (data + RAW_SIZE) >> 1;
+			midi_set_param_value(param_id, clampi(data >> 3, 0, 127));
+		}
+		log_ram_edit(SEG_PRESET);
+	}
+	else
+		poly_params[poly_param_from_param[param_id]][string_id - 1] = data;
 }
 
 void save_param_index(Param param_id, s8 index) {
