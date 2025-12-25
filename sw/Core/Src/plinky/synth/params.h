@@ -10,7 +10,7 @@ bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
 void align_poly_params(void);
-void params_rcv_cc(u8 d1, u8 d2);
+void params_rcv_cc(u8 d1, u8 d2, u8 string_id);
 
 // main
 bool update_preset(Preset* preset);
@@ -27,6 +27,7 @@ u8 param_cc_value(Param param_id);
 
 // param saving
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);
+void save_poly_param_raw(Param param_id, u8 string_id, s16 data);
 void save_param_index(Param param_id, s8 index);
 
 // pad action calls
