@@ -360,7 +360,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				break;
 			default:
 				// update parameters from ccs
-				params_rcv_cc(data1, data2);
+				params_rcv_cc(data1, data2, 255);
 				break;
 			}
 			break;
@@ -372,7 +372,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	// == mpe member channels == //
 
 	if (is_member_msg) {
-		MidiString* m_string = &midi_string[in_channel - 1]; // only works in low zone!
+		u8 member_string = in_channel - 1; // only works in low zone!
+		MidiString* m_string = &midi_string[member_string];
 		switch (type) {
 		case MIDI_NOTE_OFF:
 			m_string->state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
@@ -388,6 +389,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			break;
 		case MIDI_CHANNEL_PRESSURE:
 			m_string->pressure = data1;
+			break;
+		case MIDI_CONTROL_CHANGE:
+			// update parameters from ccs
+			params_rcv_cc(data1, data2, member_string);
 			break;
 		default:
 			break;
