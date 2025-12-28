@@ -8,7 +8,7 @@
 5. [NRPN Table](#5-nrpn-table)
 
 ## 1. Using 14 bit CCs for parameters
-All parameter CCs under 32 can be used as 14 bit CCs with an effective range of 0-16383. The listed CC acts as course control, while the listed CC + 32 acts as fine control
+All parameter CCs under 32 can be used as 14 bit CCs with an effective range of 0-16383. The listed CC acts as coarse control, while the listed CC + 32 acts as fine control
 
 > For example: The Noise parameter can be controlled with CC 2 (coarse) and CC 34 (fine)
 
@@ -20,7 +20,7 @@ By default Plinky will process all midi CCs as regular 7 bit controls. This mean
 
 With **14 bit CCs on**, all fine control values default to zero. This means sending value 127 to CC 2 will set the Noise coarse value to 127 while the fine control is still at 0. This maps to a parameter value of roughly 99.2%. After also sending value 127 to CC 34, both the coarse and fine controls are set to 127, which maps to 100.0%
 
-| Mode | Course CC sent | Fine CC sent | 14 bit value | Param value |
+| Mode | Coarse CC sent | Fine CC sent | 14 bit value | Param value |
 |-|-|-|-|-|
 | **14 bit CCs off** | 127 | N/A | N/A | 100.0% |
 | **14 bit CCs on** | 127 | 0 or nothing | 16256 |~99.2% |
