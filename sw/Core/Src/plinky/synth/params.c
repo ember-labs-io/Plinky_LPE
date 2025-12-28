@@ -137,7 +137,7 @@ void params_rcv_cc(u8 d1, u8 d2) {
 		if (param_id == NUM_PARAMS)
 			return;
 		cc14[param_cc][d1 / NUM_14BIT_CCS] = d2;
-		value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * RAW_SIZE / 16383;
+		value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * 1025 >> 14;
 	}
 	// 7 bit CCs
 	else {
@@ -147,7 +147,7 @@ void params_rcv_cc(u8 d1, u8 d2) {
 		// save in cc14 array in case the second byte comes in later
 		if (d1 < NUM_14BIT_CCS)
 			cc14[d1][0] = d2;
-		value = d2 * RAW_SIZE / 127;
+		value = d2 * 1033 >> 7;
 	}
 
 	// scale from unsigned to signed
