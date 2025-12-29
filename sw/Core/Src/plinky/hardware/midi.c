@@ -420,8 +420,26 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	u8 buf[4] = {status >> 4, status, data1, data2};
 
 #ifndef DEBUG_LOG
-	// send to serial
+
+	// serial midi out
+
 	const u8* src = buf + 1;
+
+	// running status
+	static u8 running_status = 0;
+	// match - skip first byte
+	if (status == running_status) {
+		num_bytes--;
+		src++;
+	}
+	// channel voice message - save running status
+	else if (status < MIDI_SYSTEM_EXCLUSIVE)
+		running_status = status;
+	// system common message - cancel running status
+	else if (status < MIDI_TIMING_CLOCK)
+		running_status = 0;
+
+	// send to buffer
 	while (num_bytes--)
 		midi_send_buffer[(midi_send_head++) & 15] = *src++;
 #endif
