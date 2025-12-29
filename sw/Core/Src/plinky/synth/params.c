@@ -95,6 +95,10 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 
 #define PARAM_SIGNED(param_id) (param_info[range_type[param_id]] & SIGNED)
 
+#define CC_TO_RAW(cc, param_id) (PARAM_SIGNED(param_id) ? ((cc) * 2049 >> 7) - RAW_SIZE : (cc) * 1025 >> 7)
+
+#define CC14_TO_RAW(cc14, param_id) (PARAM_SIGNED(param_id) ? ((cc14) * 2049 >> 14) - RAW_SIZE : (cc14) * 1025 >> 14)
+
 #define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
 const Preset* init_params_ptr(void) {
@@ -134,25 +138,21 @@ void params_rcv_cc(u8 d1, u8 d2) {
 	if (seen_14bit && d1 < 2 * NUM_14BIT_CCS) {
 		u8 param_cc = d1 % NUM_14BIT_CCS;
 		param_id = midi_cc_table[param_cc];
-		if (param_id == NUM_PARAMS)
+		if (param_id >= NUM_PARAMS)
 			return;
 		cc14[param_cc][d1 / NUM_14BIT_CCS] = d2;
-		value = ((cc14[param_cc][0] << 7) + cc14[param_cc][1]) * RAW_SIZE / 16383;
+		value = CC14_TO_RAW((cc14[param_cc][0] << 7) + cc14[param_cc][1], param_id);
 	}
 	// 7 bit CCs
 	else {
 		param_id = midi_cc_table[d1];
-		if (param_id == NUM_PARAMS)
+		if (param_id >= NUM_PARAMS)
 			return;
 		// save in cc14 array in case the second byte comes in later
 		if (d1 < NUM_14BIT_CCS)
 			cc14[d1][0] = d2;
-		value = d2 * RAW_SIZE / 127;
+		value = CC_TO_RAW(d2, param_id);
 	}
-
-	// scale from unsigned to signed
-	if (PARAM_SIGNED(param_id))
-		value = value * 2 - RAW_SIZE;
 
 	// save
 	save_param_raw(param_id, SRC_BASE, value);
