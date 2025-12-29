@@ -113,11 +113,16 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
 	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT))
 
+// "modulatable"
+#define PARAM_MODDABLE(param_id) (range_type[param_id] != R_UNUSED && param_id != P_VOLUME)
+
 #define PARAM_SIGNED(param_id) (param_info[range_type[param_id]] & SIGNED)
 
 #define CC_TO_RAW(cc, param_id) (PARAM_SIGNED(param_id) ? ((cc) * 2049 >> 7) - RAW_SIZE : (cc) * 1025 >> 7)
 
-#define CC14_TO_RAW(cc14, param_id) (PARAM_SIGNED(param_id) ? ((cc14) * 2049 >> 14) - RAW_SIZE : (cc14) * 1025 >> 14)
+#define CC14_TO_RAW_BI(cc14) (((cc14) * 2049 >> 14) - RAW_SIZE)
+
+#define CC14_TO_RAW(cc14, param_id) (PARAM_SIGNED(param_id) ? CC14_TO_RAW_BI(cc14) : (cc14) * 1025 >> 14)
 
 #define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
@@ -148,57 +153,90 @@ void align_poly_params(void) {
 }
 
 static void try_apply_nrpn(u8* nrpn_id, u8* nrpn_value, bool* nrpn_rcvd, bool mpe, u8 nrpn_string) {
+	typedef enum NRPN_Action {
+		NA_NONE,
+		NA_SET_PARAM,
+		NA_SET_MOD,
+	} NRPN_Action;
+
 	// value not fully received
 	if (!nrpn_rcvd[0] || !nrpn_rcvd[1])
 		return;
 
-	// string id validity check
-	bool poly = false;
-	u8 string_id = nrpn_id[0];
+	// work out the action to take
+	NRPN_Action nrpn_action = NA_NONE;
+	u8 msb = nrpn_id[0];
+	u8 lsb = nrpn_id[1];
+	u8 string_id;
+	bool poly;
 	// on a member channel
 	if (mpe) {
 		// poly param set through member channel
-		if (string_id == 0) {
+		if (msb == 0) {
+			nrpn_action = NA_SET_PARAM;
 			poly = true;
 			string_id = nrpn_string;
 		}
-		// any non-zero string id is invalid
+		// msb invalid
 		else
 			return;
 	}
 	// on the global channel
 	else {
-		// poly param set through global channel
-		if (string_id >= 8 && string_id < 16) {
-			string_id -= 8;
-			poly = true;
+		// global param set through global channel
+		if (msb == 0) {
+			nrpn_action = NA_SET_PARAM;
+			poly = false;
+			string_id = 0;
 		}
-		// if not a poly param, any non-zero string id is invalid
-		else if (string_id != 0)
+		// 1-7 => invalid
+		else if (msb < 8)
+			return;
+		// poly param set through global channel
+		else if (msb < 16) {
+			nrpn_action = NA_SET_PARAM;
+			poly = true;
+			string_id = msb - 8;
+		}
+		// set modulation
+		else if (msb < 23) {
+			nrpn_action = NA_SET_MOD;
+		}
+		// msb invalid
+		else
 			return;
 	}
 
 	// parameter validity check
-	Param param_id = nrpn_id[1];
+	Param param_id = lsb;
 	if (param_id >= NUM_PARAMS)
 		return;
 
-	// user tries to polyphonically set a non-polyphonic param
-	if (poly && !PARAM_IS_POLY(param_id))
-		poly = false;
+	// take action
+	u16 value14 = (nrpn_value[0] << 7) + nrpn_value[1];
+	switch (nrpn_action) {
+	case NA_NONE:
+		break;
+	case NA_SET_PARAM: {
+		// user tries to polyphonically set a non-polyphonic param
+		if (poly && !PARAM_IS_POLY(param_id))
+			poly = false;
 
-	// full 14 bit value
-	u16 raw = (nrpn_value[0] << 7) + nrpn_value[1];
-	// scale to raw
-	raw = (PARAM_SIGNED(param_id) ? (raw - 8192) * 2049 : raw * 1025) >> 14;
+		// scale 14 bit value to raw
+		s16 raw = CC14_TO_RAW(value14, param_id);
 
-	// save
-	if (poly) {
-		save_poly_param_raw(param_id, string_id, raw);
-		debug_log("str %u\n", string_id);
+		// save
+		if (poly)
+			save_poly_param_raw(param_id, string_id, raw);
+		else
+			save_param_raw(param_id, SRC_BASE, raw);
+		break;
 	}
-	else
-		save_param_raw(param_id, SRC_BASE, raw);
+	case NA_SET_MOD:
+		if (PARAM_MODDABLE(param_id))
+			save_param_raw(param_id, msb - 15, CC14_TO_RAW_BI(value14));
+		break;
+	}
 }
 
 void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
