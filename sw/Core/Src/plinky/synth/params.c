@@ -59,6 +59,15 @@ static ModSource src_snap;
 // enables clear modulation message
 static u32 clear_mods_duration = 0;
 
+// NRPNs
+static u8 nrpn_id[NUM_STRINGS][2] = {{127, 127}, {127, 127}, {127, 127}, {127, 127},
+                                     {127, 127}, {127, 127}, {127, 127}, {127, 127}};
+static u8 rpn_id[NUM_STRINGS][2] = {{127, 127}, {127, 127}, {127, 127}, {127, 127},
+                                    {127, 127}, {127, 127}, {127, 127}, {127, 127}};
+static u8 n_rpn_value[NUM_STRINGS][2] = {};           // shared value for nrpn and rpn
+static bool received_n_rpn_data[NUM_STRINGS][2] = {}; // is the full 14 bit value received?
+static bool rpn_last_received[NUM_STRINGS] = {};      // was rpn or nrpn number last received?
+
 // modulation values
 static s32 poly_param_lfo_offset[NUM_POLY_PARAMS];
 static u16 max_env_global = 0;
@@ -138,8 +147,140 @@ void align_poly_params(void) {
 		ALIGN_POLY_PARAM(pp_id);
 }
 
-// use string_id = 255 to indicate a monophonic cc
-void params_rcv_cc(u8 data1, u8 data2, u8 string_id) {
+static void try_apply_nrpn(u8* nrpn_id, u8* nrpn_value, bool* nrpn_rcvd, bool mpe, u8 nrpn_string) {
+	// value not fully received
+	if (!nrpn_rcvd[0] || !nrpn_rcvd[1])
+		return;
+
+	// string id validity check
+	bool poly = false;
+	u8 string_id = nrpn_id[0];
+	// on a member channel
+	if (mpe) {
+		// poly param set through member channel
+		if (string_id == 0) {
+			poly = true;
+			string_id = nrpn_string;
+		}
+		// any non-zero string id is invalid
+		else
+			return;
+	}
+	// on the global channel
+	else {
+		// poly param set through global channel
+		if (string_id >= 8 && string_id < 16) {
+			string_id -= 8;
+			poly = true;
+		}
+		// if not a poly param, any non-zero string id is invalid
+		else if (string_id != 0)
+			return;
+	}
+
+	// parameter validity check
+	Param param_id = nrpn_id[1];
+	if (param_id >= NUM_PARAMS)
+		return;
+
+	// user tries to polyphonically set a non-polyphonic param
+	if (poly && !PARAM_IS_POLY(param_id))
+		poly = false;
+
+	// full 14 bit value
+	u16 raw = (nrpn_value[0] << 7) + nrpn_value[1];
+	// scale to raw
+	raw = (PARAM_SIGNED(param_id) ? (raw - 8192) * 2049 : raw * 1025) >> 14;
+
+	// save
+	if (poly) {
+		save_poly_param_raw(param_id, string_id, raw);
+		debug_log("str %u\n", string_id);
+	}
+	else
+		save_param_raw(param_id, SRC_BASE, raw);
+}
+
+void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
+	// global ccs live on string 0
+	if (!mpe)
+		string_id = 0;
+
+	// 14 bit parameters (RPN/NRPN)
+	u8* n_id = nrpn_id[string_id];
+	u8* value = n_rpn_value[string_id];
+	bool* received = received_n_rpn_data[string_id];
+	bool* rpn_last = &rpn_last_received[string_id];
+
+	switch (data1) {
+	case CC_DATA_MSB:
+		value[0] = data2;
+		received[0] = true;
+		if (!*rpn_last)
+			try_apply_nrpn(n_id, value, received, mpe, string_id);
+		return;
+	case CC_DATA_LSB:
+		value[1] = data2;
+		received[1] = true;
+		if (!*rpn_last)
+			try_apply_nrpn(n_id, value, received, mpe, string_id);
+		return;
+	case CC_DATA_INC: {
+		// no valid value
+		if (!received[0] || !received[1])
+			return;
+		u16 value14 = (value[0] << 7) | value[1];
+		// maxed out
+		if (value14 == 16383)
+			return;
+		// increase
+		value14++;
+		value[0] = value14 >> 7;
+		value[1] = value14 & 127;
+		if (!*rpn_last)
+			try_apply_nrpn(n_id, value, received, mpe, string_id);
+		return;
+	}
+	case CC_DATA_DEC: {
+		// no valid value
+		if (!received[0] || !received[1])
+			return;
+		u16 value14 = (value[0] << 7) | value[1];
+		// minned out
+		if (value14 == 0)
+			return;
+		// decrease
+		value14--;
+		value[0] = value14 >> 7;
+		value[1] = value14 & 127;
+		if (!*rpn_last)
+			try_apply_nrpn(n_id, value, received, mpe, string_id);
+		return;
+	}
+	case CC_NRPN_LSB:
+		n_id[1] = data2;
+		received[0] = received[1] = false;
+		*rpn_last = false;
+		return;
+	case CC_NRPN_MSB:
+		n_id[0] = data2;
+		received[0] = received[1] = false;
+		*rpn_last = false;
+		return;
+	case CC_RPN_LSB:
+		rpn_id[string_id][1] = data2;
+		received[0] = received[1] = false;
+		*rpn_last = true;
+		return;
+	case CC_RPN_MSB:
+		rpn_id[string_id][0] = data2;
+		received[0] = received[1] = false;
+		*rpn_last = true;
+		return;
+	default:
+		break;
+	}
+
 	// CCs 0 through 31 are treated as regular 7 bit CCs by default
 	// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
 	// treated as 14 bit CCs
@@ -156,35 +297,35 @@ void params_rcv_cc(u8 data1, u8 data2, u8 string_id) {
 	if (param_id >= NUM_PARAMS)
 		return;
 
-	bool is_poly = string_id != 255 && PARAM_IS_POLY(param_id);
-
-	// force string 0 for mono params
-	if (string_id && !is_poly)
+	// make sure we don't treat global params as polyphonic
+	if (!PARAM_IS_POLY(param_id)) {
+		mpe = false;
 		string_id = 0;
+	}
 
 	u8* cc14_ptr;
 	if (param_cc < NUM_14BIT_CCS)
 		cc14_ptr = cc14[param_cc][string_id];
 
-	s16 value;
+	s16 raw;
 	// 14 bit CCs
 	if (is_14bit) {
 		cc14_ptr[data1 / NUM_14BIT_CCS] = data2;
-		value = CC14_TO_RAW((cc14_ptr[0] << 7) | cc14_ptr[1], param_id);
+		raw = CC14_TO_RAW((cc14_ptr[0] << 7) | cc14_ptr[1], param_id);
 	}
 	// 7 bit CCs
 	else {
 		// save in cc14 array in case the second byte comes in later
 		if (param_cc < NUM_14BIT_CCS)
 			cc14_ptr[0] = data2;
-		value = CC_TO_RAW(data2, param_id);
+		raw = CC_TO_RAW(data2, param_id);
 	}
 
 	// save
-	if (is_poly)
-		save_poly_param_raw(param_id, string_id, value);
+	if (mpe)
+		save_poly_param_raw(param_id, string_id, raw);
 	else
-		save_param_raw(param_id, SRC_BASE, value);
+		save_param_raw(param_id, SRC_BASE, raw);
 }
 
 // == MAIN == //

@@ -521,6 +521,36 @@ typedef enum MidiMessageType {
 
 } MidiMessageType;
 
+// list of reserved midi CCs:
+//
+// 0 - bank select
+// 1 - mod wheel
+// 6 - (N)RPN value msb
+// 10 - pan
+// 32 through 63 - LSB of 14 bit CCs 0 through 31
+// 64 - sustain pedal
+// 96 - data increment
+// 97 - data decrement
+// 98 - NRPN LSB
+// 99 - NRPN MSB
+// 100 - RPN LSB
+// 101 - RPN MSB
+//
+// available midi CCs: 30, 65-68, 70, 84, 86, 87, 88, 115
+
+typedef enum MidiCC {
+	CC_MOD_WHEEL = 1,
+	CC_DATA_MSB = 6,
+	CC_DATA_LSB = 38,
+	CC_SUSTAIN = 64,
+	CC_DATA_INC = 96,
+	CC_DATA_DEC = 97,
+	CC_NRPN_LSB = 98,
+	CC_NRPN_MSB = 99,
+	CC_RPN_LSB = 100,
+	CC_RPN_MSB = 101,
+} MidiCC;
+
 // clang-format off
  const static Param midi_cc_table[128] = {
 	//			0				1				2				3				4				5				6				7	
@@ -529,7 +559,6 @@ typedef enum MidiMessageType {
 	/*  16 */	P_GR_SIZE,		P_PLAY_SPD,		P_SMP_STRETCH,	P_ENV_LVL2,		P_ATTACK2,		P_DECAY2,		P_SUSTAIN2,		P_RELEASE2,
 	/*  24 */	P_A_RATE,		P_A_DEPTH,		P_A_OFFSET,		P_B_RATE,		P_B_DEPTH,		P_B_OFFSET,		NUM_PARAMS,		P_HPF,
 
-	/* 	CCs 32 through 63 reserved for 14-bit CCs, each of them representing the LSB of CC [number - 32] */
 	/*  32 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
 	/*  40 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
 	/*  48 */	NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,		NUM_PARAMS,
@@ -563,6 +592,26 @@ const static u8 midi_cc_table_rvs[NUM_PARAMS] = {
 	[P_Y_SCALE] = 255,    [P_Y_OFFSET] = 81,     [P_Y_DEPTH] = 80,       [P_Y_RATE] = 79,        [P_Y_SHAPE] = 255,      [P_Y_SYM] = 255,         // LFO Y
 	[P_SYN_LVL] = 7,      [P_SYN_WET_DRY] = 8,   [P_HPF] = 31,           [P_MIX_UNUSED1] = 255,  [P_MIX_UNUSED4] = 255,  [P_VOLUME] = 255,        // Mixer 1
 	[P_IN_LVL] = 89,      [P_IN_WET_DRY] = 90,   [P_SYS_UNUSED1] = 255,  [P_MIX_UNUSED2] = 255,  [P_MIX_UNUSED3] = 255,  [P_MIX_WIDTH] = 255,     // Mixer 2
+};
+
+const static u8 midi_nrpn_table[NUM_PARAMS] = {
+	//			0				1				2				3				4				5
+	/*   0 */	P_SHAPE,        P_DISTORTION,   P_PITCH,        P_OCT,          P_GLIDE,        P_INTERVAL,      // Sound 1
+	/*   6 */	P_NOISE,        P_RESO,         P_DEGREE,       P_SCALE,        P_MICROTONE,    P_COLUMN,        // Sound 2
+	/*  12 */	P_ENV_LVL1,     P_ATTACK1,      P_DECAY1,       P_SUSTAIN1,     P_RELEASE1,     P_ENV1_UNUSED,   // Envelope 1
+	/*  18 */	P_ENV_LVL2,     P_ATTACK2,      P_DECAY2,       P_SUSTAIN2,     P_RELEASE2,     P_ENV2_UNUSED,   // Envelope 2
+	/*  24 */	P_DLY_SEND,     P_DLY_TIME,     P_PING_PONG,    P_DLY_WOBBLE,   P_DLY_FEEDBACK, P_TEMPO,         // Delay
+	/*  30 */	P_RVB_SEND,     P_RVB_TIME,     P_SHIMMER,      P_RVB_WOBBLE,   P_RVB_UNUSED,   P_SWING,         // Reverb
+	/*  36 */	P_ARP_TGL,      P_ARP_ORDER,    P_ARP_CLK_DIV,  P_ARP_CHANCE,   P_ARP_EUC_LEN,  P_ARP_OCTAVES,   // Arp
+	/*  42 */	P_LATCH_TGL,    P_SEQ_ORDER,    P_SEQ_CLK_DIV,  P_SEQ_CHANCE,   P_SEQ_EUC_LEN,  P_GATE_LENGTH,   // Sequencer
+	/*  48 */	P_SCRUB,        P_GR_SIZE,      P_PLAY_SPD,     P_SMP_STRETCH,  P_SAMPLE,       P_PATTERN,       // Sampler 1
+	/*  54 */	P_SCRUB_JIT,    P_GR_SIZE_JIT,  P_PLAY_SPD_JIT, P_SMP_UNUSED1,  P_SMP_UNUSED2,  P_STEP_OFFSET,   // Sampler 2
+	/*  60 */	P_A_SCALE,      P_A_OFFSET,     P_A_DEPTH,      P_A_RATE,       P_A_SHAPE,      P_A_SYM,         // LFO A
+	/*  66 */	P_B_SCALE,      P_B_OFFSET,     P_B_DEPTH,      P_B_RATE,       P_B_SHAPE,      P_B_SYM,         // LFO B
+	/*  72 */	P_X_SCALE,      P_X_OFFSET,     P_X_DEPTH,      P_X_RATE,       P_X_SHAPE,      P_X_SYM,         // LFO X
+	/*  78 */	P_Y_SCALE,      P_Y_OFFSET,     P_Y_DEPTH,      P_Y_RATE,       P_Y_SHAPE,      P_Y_SYM,         // LFO Y
+	/*  84 */	P_SYN_LVL,      P_SYN_WET_DRY,  P_HPF,          P_MIX_UNUSED1,  P_MIX_UNUSED4,  P_VOLUME,        // Mixer 1
+	/*  90 */	P_IN_LVL,       P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIX_UNUSED2,  P_MIX_UNUSED3,  P_MIX_WIDTH,     // Mixer 2
 };
 
 typedef enum PolyParam {

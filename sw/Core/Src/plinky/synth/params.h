@@ -10,7 +10,7 @@ bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
 void align_poly_params(void);
-void params_rcv_cc(u8 d1, u8 d2, u8 string_id);
+void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 member_string);
 
 // main
 bool update_preset(Preset* preset);

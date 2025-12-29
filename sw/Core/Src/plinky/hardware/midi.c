@@ -341,12 +341,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			break;
 		case MIDI_CONTROL_CHANGE:
 			switch (data1) {
-			// mod wheel
-			case 1:
+			case CC_MOD_WHEEL:
 				mod_wheel = data2;
 				break;
-			// sustain
-			case 64:
+			case CC_SUSTAIN:
 				bool new_sustain = data2 >= 64;
 				if (new_sustain != sustain_pressed) {
 					sustain_pressed = new_sustain;
@@ -360,7 +358,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				break;
 			default:
 				// update parameters from ccs
-				params_rcv_cc(data1, data2, 255);
+				params_rcv_cc(data1, data2, false, 0);
 				break;
 			}
 			break;
@@ -392,7 +390,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			break;
 		case MIDI_CONTROL_CHANGE:
 			// update parameters from ccs
-			params_rcv_cc(data1, data2, member_string);
+			params_rcv_cc(data1, data2, true, member_string);
 			break;
 		default:
 			break;
