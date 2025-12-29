@@ -71,12 +71,12 @@ static u8 midi_send_head;
 static u8 midi_send_tail;
 
 // midi state
-static u8 mod_wheel;
+static u8 mod_wheel[NUM_STRINGS];
 static u8 channel_pressure;
 static s16 channel_pitchbend;
 static u16 channel_bend_sens = 2 * PITCH_PER_SEMI; // default: 2 semis
 static u16 voice_bend_sens = 48 * PITCH_PER_SEMI;  // default: 48 semis
-static bool sustain_pressed = false;
+static bool sustain_pressed[NUM_STRINGS] = {};
 static MidiString midi_string[NUM_STRINGS];
 
 // mpe
@@ -103,9 +103,10 @@ void midi_clear_all(void) {
 	memset(&midi_send_buffer, 0, 2 * MIDI_BUFFER_SIZE);
 	midi_send_head = 0;
 	midi_send_tail = 0;
+	memset(mod_wheel, 0, NUM_STRINGS);
 	channel_pressure = 0;
 	channel_pitchbend = 0;
-	sustain_pressed = false;
+	memset(sustain_pressed, false, NUM_STRINGS);
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		memcpy(&midi_string[string_id], &midi_init_string, sizeof(MidiString));
 	memset(&thru_buffer, 0, sizeof(thru_buffer));
@@ -143,7 +144,7 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	}
 
 	// apply pressure from mod wheel
-	midi_pressure = maxi(midi_pressure, mod_wheel);
+	midi_pressure = maxi(midi_pressure, mod_wheel[string_id]);
 
 	// map internal pressure based on velocity/pressure balance
 	u8 velo_mult = sys_params.midi_in_vel_balance;
@@ -261,7 +262,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		case MIDI_NOTE_OFF: {
 			u8 string_id = string_playing_note(data1);
 			if (string_id < NUM_STRINGS)
-				midi_string[string_id].state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
+				midi_string[string_id].state = sustain_pressed[string_id] ? MS_SUSTAINED : MS_RINGING_OUT;
 		} break;
 		case MIDI_NOTE_ON: {
 			// try to map to existing string
@@ -342,17 +343,16 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		case MIDI_CONTROL_CHANGE:
 			switch (data1) {
 			case CC_MOD_WHEEL:
-				mod_wheel = data2;
+				memset(mod_wheel, data2, NUM_STRINGS);
 				break;
 			case CC_SUSTAIN:
 				bool new_sustain = data2 >= 64;
-				if (new_sustain != sustain_pressed) {
-					sustain_pressed = new_sustain;
-					// on a sustain release, release all midi notes that were held by the sustain
-					if (!sustain_pressed) {
-						for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-							if (midi_string[string_id].state == MS_SUSTAINED)
-								midi_string[string_id].state = MS_RINGING_OUT;
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+					if (new_sustain != sustain_pressed[string_id]) {
+						sustain_pressed[string_id] = new_sustain;
+						// release midi note held by the sustain
+						if (!new_sustain && midi_string[string_id].state == MS_SUSTAINED)
+							midi_string[string_id].state = MS_RINGING_OUT;
 					}
 				}
 				break;
@@ -374,7 +374,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		MidiString* m_string = &midi_string[member_string];
 		switch (type) {
 		case MIDI_NOTE_OFF:
-			m_string->state = sustain_pressed ? MS_SUSTAINED : MS_RINGING_OUT;
+			m_string->state = sustain_pressed[member_string] ? MS_SUSTAINED : MS_RINGING_OUT;
 			break;
 		case MIDI_NOTE_ON: {
 			m_string->state = MS_PRESSED;
@@ -389,8 +389,24 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			m_string->pressure = data1;
 			break;
 		case MIDI_CONTROL_CHANGE:
-			// update parameters from ccs
-			params_rcv_cc(data1, data2, true, member_string);
+			switch (data1) {
+			case CC_MOD_WHEEL:
+				mod_wheel[member_string] = data2;
+				break;
+			case CC_SUSTAIN:
+				bool new_sustain = data2 >= 64;
+				if (new_sustain != sustain_pressed[member_string]) {
+					sustain_pressed[member_string] = new_sustain;
+					// release midi note held by the sustain
+					if (!new_sustain && midi_string[member_string].state == MS_SUSTAINED)
+						midi_string[member_string].state = MS_RINGING_OUT;
+				}
+				break;
+			default:
+				// update parameters from ccs
+				params_rcv_cc(data1, data2, true, member_string);
+				break;
+			}
 			break;
 		default:
 			break;
