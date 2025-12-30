@@ -21,7 +21,8 @@ typedef enum Item {
 	I_ACCEL_SENS = S_SYSTEM * 8,
 	I_ENC_DIR,
 	// midi
-	I_MIDI_IN_CH = S_MIDI * 8,
+	I_MIDI_IN_VEL_BALANCE = S_MIDI * 8,
+	I_MIDI_IN_CH,
 	I_MIDI_OUT_CH,
 	I_MIDI_CLOCK_IN_MULT,
 	// cv
@@ -43,6 +44,7 @@ const static u8 num_options[NUM_ITEMS] = {
     [I_MIDI_IN_CH] = 16,
     [I_MIDI_OUT_CH] = 16,
     [I_MIDI_CLOCK_IN_MULT] = 3,
+    [I_MIDI_IN_VEL_BALANCE] = 129,
     [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
     [I_CV_PPQN_IN] = NUM_PPQN_VALUES,
     [I_CV_PPQN_OUT] = NUM_PPQN_VALUES,
@@ -65,6 +67,7 @@ const static char* item_name[NUM_ITEMS] = {
     [I_MIDI_IN_CH] = "In channel",
     [I_MIDI_OUT_CH] = "Out channel",
     [I_MIDI_CLOCK_IN_MULT] = "Clock in mult",
+    [I_MIDI_IN_VEL_BALANCE] = "Vel/Pres",
     [I_CV_QUANT] = "Quant",
     [I_CV_PPQN_IN] = "PPQN in",
     [I_CV_PPQN_OUT] = "PPQN out",
@@ -102,6 +105,9 @@ static void select_item(Item item, bool force) {
 	case I_MIDI_CLOCK_IN_MULT:
 		cur_value = sys_params.midi_in_clock_mult;
 		break;
+	case I_MIDI_IN_VEL_BALANCE:
+		cur_value = sys_params.midi_in_vel_balance;
+		break;
 	case I_CV_QUANT:
 		cur_value = sys_params.cv_quant;
 		break;
@@ -116,7 +122,7 @@ static void select_item(Item item, bool force) {
 	}
 }
 
-static void save_value(u8 value) {
+static void save_value(s16 value) {
 	value = clampi(value, 0, num_options[cur_item] - 1);
 	switch (cur_item) {
 	case I_ACCEL_SENS:
@@ -124,6 +130,9 @@ static void save_value(u8 value) {
 		break;
 	case I_ENC_DIR:
 		set_sys_param(SYS_REVERSE_ENCODER, value);
+		break;
+	case I_MIDI_IN_VEL_BALANCE:
+		set_sys_param(SYS_MIDI_VEL_PRES_BALANCE, value);
 		break;
 	case I_MIDI_IN_CH:
 		if (set_sys_param(SYS_MIDI_IN_CHAN, value))
@@ -219,10 +228,19 @@ void settings_encoder_press(bool pressed, u16 duration) {
 void edit_settings_from_encoder(s8 enc_diff) {
 	// edit value
 	if (value_selected) {
-		// avoid encoder glitch while editing
-		if (cur_item == I_ENC_DIR && cur_value)
+		s16 new_value = cur_value;
+		if (
+		    // avoid encoder glitching while editing its direction
+		    (cur_item == I_ENC_DIR && cur_value)
+		    // editing balance feels more natural inverted
+		    || (cur_item == I_MIDI_IN_VEL_BALANCE))
 			enc_diff = -enc_diff;
-		save_value(maxi(cur_value + enc_diff, 0));
+		// update value
+		new_value += enc_diff;
+		// users should only be able to select 101 out of the 129 possible values
+		if (cur_item == I_MIDI_IN_VEL_BALANCE && (((new_value * 100) & 127) >= 100))
+			new_value += enc_diff > 0 ? 1 : -1;
+		save_value(new_value);
 		return;
 	}
 	// edit item selection
@@ -251,6 +269,11 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return val_buf;
 	case I_ENC_DIR:
 		return value ? "Rvrse" : "Normal";
+	// shown as a percentage
+	case I_MIDI_IN_VEL_BALANCE:
+		value = value * 100 >> 7;
+		sprintf(val_buf, "%d/%d", value, 100 - value);
+		return val_buf;
 	// 1-based
 	case I_MIDI_IN_CH:
 	case I_MIDI_OUT_CH:

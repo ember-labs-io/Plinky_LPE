@@ -86,8 +86,16 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	    || midi_string[string_id].suppressed)
 		return;
 
-	// a midi note is playing this string => get touch
-	*pressure = 1 + (midi_string[string_id].velocity + maxi(midi_string[string_id].pressure, channel_pressure)) * 16;
+	// synthesize internal pressure from midi velocity and midi pressure
+	u8 velo_mult = sys_params.midi_in_vel_balance;
+	*pressure =
+	    // scaled velocity, offset to max out at 128
+	    (velo_mult * (midi_string[string_id].velocity + 1)
+	     // scaled pressure, offset to max out at 128
+	     + (128 - velo_mult) * (maxi(midi_string[string_id].pressure, channel_pressure) + 1)
+	     // scale to max out at TOUCH_FULL_PRES
+	     + 4)
+	    >> 3;
 	*position = midi_string[string_id].position;
 }
 
