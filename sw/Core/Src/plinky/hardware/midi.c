@@ -38,6 +38,14 @@ extern UART_HandleTypeDef huart3;
 		             0, 127);                                                                                          \
 	})
 
+#define FORCE_RELEASE_MIDI_STRING(string_id)                                                                           \
+	do {                                                                                                               \
+		sustain_pressed[string_id] = false;                                                                            \
+		MidiStringState* state = &midi_string[string_id].state;                                                        \
+		if (*state == MS_PRESSED || *state == MS_SUSTAINED)                                                            \
+			*state = MS_RINGING_OUT;                                                                                   \
+	} while (0)
+
 typedef enum MidiStringState {
 	MS_UNUSED,
 	MS_PRESSED,
@@ -377,6 +385,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					}
 				}
 				break;
+			case CC_ALL_NOTES_OFF:
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+					FORCE_RELEASE_MIDI_STRING(string_id);
+				break;
 			default:
 				// update parameters from ccs
 				params_rcv_cc(data1, data2, false, 0);
@@ -426,6 +438,9 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					if (!new_sustain && midi_string[member_string].state == MS_SUSTAINED)
 						midi_string[member_string].state = MS_RINGING_OUT;
 				}
+				break;
+			case CC_ALL_NOTES_OFF:
+				FORCE_RELEASE_MIDI_STRING(member_string);
 				break;
 			default:
 				// update parameters from ccs

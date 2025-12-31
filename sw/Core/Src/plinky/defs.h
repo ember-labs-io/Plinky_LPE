@@ -558,6 +558,7 @@ typedef enum MidiCC {
 	CC_NRPN_MSB = 99,
 	CC_RPN_LSB = 100,
 	CC_RPN_MSB = 101,
+	CC_ALL_NOTES_OFF = 123,
 } MidiCC;
 
 // clang-format off
