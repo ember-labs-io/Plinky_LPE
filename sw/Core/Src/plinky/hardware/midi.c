@@ -385,6 +385,20 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					}
 				}
 				break;
+			case CC_RESET_ALL_CTR:
+				// global
+				channel_pressure = 0;
+				channel_pitchbend = 0;
+				// per string
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+					mod_wheel[string_id][1] = mod_wheel[string_id][0] = 0;
+					sustain_pressed[string_id] = false;
+					MidiString* m_string = &midi_string[string_id];
+					m_string->pitchbend = 0;
+					m_string->pressure = 0;
+				}
+				reset_all_n_rpn_ids();
+				break;
 			case CC_ALL_NOTES_OFF:
 				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 					FORCE_RELEASE_MIDI_STRING(string_id);
@@ -438,6 +452,17 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					if (!new_sustain && midi_string[member_string].state == MS_SUSTAINED)
 						midi_string[member_string].state = MS_RINGING_OUT;
 				}
+				break;
+			case CC_RESET_ALL_CTR:
+				mod_wheel[member_string][1] = mod_wheel[member_string][0] = 0;
+				sustain_pressed[member_string] = false;
+				MidiString* m_string = &midi_string[member_string];
+				m_string->pitchbend = 0;
+				m_string->pressure = 0;
+				params_rcv_cc(CC_NRPN_LSB, 127, true, member_string);
+				params_rcv_cc(CC_NRPN_MSB, 127, true, member_string);
+				params_rcv_cc(CC_RPN_LSB, 127, true, member_string);
+				params_rcv_cc(CC_RPN_MSB, 127, true, member_string);
 				break;
 			case CC_ALL_NOTES_OFF:
 				FORCE_RELEASE_MIDI_STRING(member_string);
