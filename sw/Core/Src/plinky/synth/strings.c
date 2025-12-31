@@ -11,6 +11,15 @@
 #include "time.h"
 
 #define GET_STRING_TOUCH(string_id) (&string_touch[(string_id)][strings_read_frame])
+#define CLEAR_STRING(string_id)                                                                                        \
+	do {                                                                                                               \
+		string_touch[string_id][7].pos = string_touch[string_id][6].pos = string_touch[string_id][5].pos =             \
+		    string_touch[string_id][4].pos = string_touch[string_id][3].pos = string_touch[string_id][2].pos =         \
+		        string_touch[string_id][1].pos = string_touch[string_id][0].pos = TOUCH_MIN_POS;                       \
+		string_touch[string_id][7].pres = string_touch[string_id][6].pres = string_touch[string_id][5].pres =          \
+		    string_touch[string_id][4].pres = string_touch[string_id][3].pres = string_touch[string_id][2].pres =      \
+		        string_touch[string_id][1].pres = string_touch[string_id][0].pres = TOUCH_MIN_PRES;                    \
+	} while (0)
 
 // current frame in string_touch
 static u8 strings_write_frame;
@@ -32,8 +41,6 @@ u8 envelope_trigger = 0;
 // physical touch mask during the write_frame, used by latch
 static u8 phys_string_touch = 0;
 
-// latching
-
 typedef struct TouchMemCompressed {
 	u8 pos;
 	u8 pres;
@@ -45,7 +52,14 @@ void clear_latch(void) {
 	memset(latch_touch, 0, sizeof(latch_touch));
 }
 
-// -- latching
+void clear_string(u8 string_id) {
+	CLEAR_STRING(string_id);
+}
+
+void clear_strings(void) {
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+		CLEAR_STRING(string_id);
+}
 
 u16 get_string_pos(u8 string_id) {
 	return GET_STRING_TOUCH(string_id)->pos;

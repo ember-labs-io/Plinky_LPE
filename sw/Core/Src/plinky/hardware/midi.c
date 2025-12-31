@@ -6,6 +6,7 @@
 // regular includes
 #include "hardware/touchstrips.h"
 #include "memory.h"
+#include "synth/audio.h"
 #include "synth/lfos.h"
 #include "synth/params.h"
 #include "synth/pitch_tools.h"
@@ -385,6 +386,13 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					}
 				}
 				break;
+			case CC_ALL_SOUNDS_OFF:
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+					FORCE_RELEASE_MIDI_STRING(string_id);
+				clear_strings();
+				delay_clear();
+				reverb_clear();
+				break;
 			case CC_RESET_ALL_CTR:
 				// global
 				channel_pressure = 0;
@@ -452,6 +460,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					if (!new_sustain && midi_string[member_string].state == MS_SUSTAINED)
 						midi_string[member_string].state = MS_RINGING_OUT;
 				}
+				break;
+			case CC_ALL_SOUNDS_OFF:
+				FORCE_RELEASE_MIDI_STRING(member_string);
+				clear_string(member_string);
 				break;
 			case CC_RESET_ALL_CTR:
 				mod_wheel[member_string][1] = mod_wheel[member_string][0] = 0;
