@@ -249,6 +249,7 @@ typedef enum SysParam {
 	SYS_MIDI_CHANNEL_BEND_RANGE_IN,
 	SYS_MIDI_STRING_BEND_RANGE_IN,
 	SYS_MIDI_STRING_BEND_RANGE_OUT,
+	SYS_LOCAL_ON,
 } SysParam;
 
 typedef enum MidiPressureType {
@@ -560,6 +561,7 @@ typedef enum MidiCC {
 	CC_RPN_MSB = 101,
 	CC_ALL_SOUNDS_OFF = 120,
 	CC_RESET_ALL_CTR = 121,
+	CC_LOCAL_CONTROL = 122,
 	CC_ALL_NOTES_OFF = 123,
 } MidiCC;
 
@@ -985,7 +987,8 @@ typedef struct SysParams {
 	u8 midi_string_bend_range_in : 3;
 	u8 midi_string_bend_range_out : 3;
 	u8 midi_soft_thru : 1;
-	u8 paddy : 7;
+	u8 local_on : 1;
+	u8 paddy : 6;
 	u8 pad[16 - 12];
 	u8 version;
 } SysParams;

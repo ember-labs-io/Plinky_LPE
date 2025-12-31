@@ -73,7 +73,7 @@ const Touch* sorted_string_touch_ptr(u8 string_id) {
 	return &string_touch_sorted[string_id][0];
 }
 
-// this combines inputs from touchstrips, latch, arp & sequencer, and saves the resulting Touch in
+// this combines inputs from touchstrips, midi, latch, arp & sequencer and saves the resulting Touch in
 // string_touch[string_id]
 static void generate_string_touch(u8 string_id) {
 	static bool suppress_latch = false;
@@ -89,12 +89,14 @@ static void generate_string_touch(u8 string_id) {
 
 	// === TOUCH INPUT === //
 
-	// is this string available for the synth?
+	// can we read touch input from this string?
 	if (
+	    // we have local control
+	    sys_params.local_on
 	    // default ui, exception for the edit-strip
-	    (ui_mode == UI_DEFAULT && !(string_id == 0 && editing_param()))
-	    // sampler in preview mode when a sample is loaded
-	    || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER)) {
+	    && ((ui_mode == UI_DEFAULT && !(string_id == 0 && editing_param()))
+	        // sampler in preview mode when a sample is loaded
+	        || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER))) {
 		bool touching = strip_touched & mask;
 		bool first_touch_global = false;
 

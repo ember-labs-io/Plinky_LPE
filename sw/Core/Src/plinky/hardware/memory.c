@@ -249,6 +249,9 @@ bool set_sys_param(SysParam param, u16 value) {
 	case SYS_MIDI_STRING_BEND_RANGE_OUT:
 		saved_value = sys_params.midi_string_bend_range_out;
 		break;
+	case SYS_LOCAL_ON:
+		saved_value = sys_params.local_on;
+		break;
 	}
 	if (value == saved_value)
 		return false;
@@ -322,6 +325,9 @@ bool set_sys_param(SysParam param, u16 value) {
 		break;
 	case SYS_MIDI_STRING_BEND_RANGE_OUT:
 		sys_params.midi_string_bend_range_out = value;
+		break;
+	case SYS_LOCAL_ON:
+		sys_params.local_on = value;
 		break;
 	}
 	log_ram_edit(SEG_SYS_PARAMS);
