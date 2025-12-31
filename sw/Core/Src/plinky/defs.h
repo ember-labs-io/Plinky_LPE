@@ -549,6 +549,7 @@ typedef enum MidiMessageType {
 typedef enum MidiCC {
 	CC_MOD_WHEEL = 1,
 	CC_DATA_MSB = 6,
+	CC_MOD_WHEEL_LSB = 33,
 	CC_DATA_LSB = 38,
 	CC_SUSTAIN = 64,
 	CC_DATA_INC = 96,
