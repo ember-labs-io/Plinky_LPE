@@ -5,6 +5,7 @@
 #include "hardware/memory.h"
 #include "hardware/midi.h"
 #include "hardware/touchstrips.h"
+#include "synth/strings.h"
 
 #define NUM_ITEMS 64
 
@@ -21,6 +22,7 @@ typedef enum Item {
 	// system
 	I_ACCEL_SENS = S_SYSTEM * 8,
 	I_ENC_DIR,
+	I_LOCAL_CONTROL,
 	// midi in
 	I_MIDI_IN_CH = S_MIDI_IN * 8,
 	I_MIDI_IN_VEL_BALANCE,
@@ -54,6 +56,7 @@ typedef enum Item {
 const static u8 num_options[NUM_ITEMS] = {
     [I_ACCEL_SENS] = 201,
     [I_ENC_DIR] = 2,
+    [I_LOCAL_CONTROL] = 2,
     [I_MIDI_IN_CH] = 16,
     [I_MIDI_OUT_CH] = 16,
     [I_MIDI_IN_CLOCK_MULT] = 3,
@@ -85,6 +88,7 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 const static char* item_name[NUM_ITEMS] = {
     [I_ACCEL_SENS] = "Acc sens",
     [I_ENC_DIR] = "Enc dir",
+    [I_LOCAL_CONTROL] = "Local Ctrl",
     [I_MIDI_IN_CH] = "Channel",
     [I_MIDI_IN_VEL_BALANCE] = "Vel/Pres",
     [I_MIDI_IN_PRES_TYPE] = "AfterTch",
@@ -127,6 +131,9 @@ static void select_item(Item item, bool force) {
 		break;
 	case I_ENC_DIR:
 		cur_value = sys_params.reverse_encoder;
+		break;
+	case I_LOCAL_CONTROL:
+		cur_value = sys_params.local_on;
 		break;
 	case I_MIDI_IN_CH:
 		cur_value = sys_params.midi_in_chan;
@@ -192,6 +199,10 @@ static void save_value(s16 value) {
 		break;
 	case I_ENC_DIR:
 		set_sys_param(SYS_REVERSE_ENCODER, value);
+		break;
+	case I_LOCAL_CONTROL:
+		if (set_sys_param(SYS_LOCAL_ON, value) && !value)
+			clear_latch();
 		break;
 	case I_MIDI_IN_CH:
 		if (set_sys_param(SYS_MIDI_IN_CHAN, value))
@@ -401,6 +412,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		case 3:
 			return "MPE";
 		}
+	case I_LOCAL_CONTROL:
 	case I_MIDI_OUT_CCS:
 	case I_MIDI_OUT_LFOS:
 	case I_MIDI_OUT_PARAMS:

@@ -407,6 +407,11 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				}
 				reset_all_n_rpn_ids();
 				break;
+			case CC_LOCAL_CONTROL:
+				bool on = data2 >= 64;
+				if (set_sys_param(SYS_LOCAL_ON, on) && !on)
+					clear_latch();
+				break;
 			case CC_ALL_NOTES_OFF:
 				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 					FORCE_RELEASE_MIDI_STRING(string_id);
