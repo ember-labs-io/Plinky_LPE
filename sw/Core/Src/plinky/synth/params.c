@@ -152,6 +152,11 @@ void align_poly_params(void) {
 		ALIGN_POLY_PARAM(pp_id);
 }
 
+void reset_all_n_rpn_ids(void) {
+	memset(nrpn_id, 127, sizeof(nrpn_id));
+	memset(rpn_id, 127, sizeof(nrpn_id));
+}
+
 static void try_apply_nrpn(u8* nrpn_id, u8* nrpn_value, bool* nrpn_rcvd, bool mpe, u8 nrpn_string) {
 	typedef enum NRPN_Action {
 		NA_NONE,
