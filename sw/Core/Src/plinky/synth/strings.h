@@ -13,5 +13,7 @@ const s16* get_string_pressures(void);
 const Touch* sorted_string_touch_ptr(u8 string_id);
 
 void clear_latch(void);
+void clear_string(u8 string_id);
+void clear_strings(void);
 
 void generate_string_touches(void);
