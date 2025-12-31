@@ -32,8 +32,10 @@ extern UART_HandleTypeDef huart3;
 	({                                                                                                                 \
 		u8 velo_mult = sys_params.midi_out_vel_balance;                                                                \
 		velo_mult == 128                                                                                               \
-		    ? 0                                                                                                        \
-		    : clampi((((full_pressure) << 3) - velo_mult * (midi_velocity) - 128) / (128 - velo_mult), 0, 127);        \
+		    ? 0 /* scale pressure to 14 bit | subtract velocity part | revert offset | integer division rounding */    \
+		    : clampi((((full_pressure) << 3) - velo_mult * (midi_velocity) - 128 + ((128 - velo_mult) >> 1))           \
+		                 / (128 - velo_mult),                                                                          \
+		             0, 127);                                                                                          \
 	})
 
 typedef enum MidiStringState {
@@ -71,7 +73,8 @@ static u8 midi_send_head;
 static u8 midi_send_tail;
 
 // midi state
-static u8 mod_wheel[NUM_STRINGS];
+static u8 mod_wheel[NUM_STRINGS][2];
+static bool mod_wheel_14bit = false;
 static u8 channel_pressure;
 static s16 channel_pitchbend;
 static u16 channel_bend_sens_in;
@@ -104,7 +107,7 @@ void midi_clear_all(void) {
 	memset(&midi_send_buffer, 0, 2 * MIDI_BUFFER_SIZE);
 	midi_send_head = 0;
 	midi_send_tail = 0;
-	memset(mod_wheel, 0, NUM_STRINGS);
+	memset(mod_wheel, 0, sizeof(mod_wheel));
 	channel_pressure = 0;
 	channel_pitchbend = 0;
 	memset(sustain_pressed, false, NUM_STRINGS);
@@ -131,32 +134,36 @@ void midi_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 		return;
 
 	// synthesize internal pressure from midi velocity and midi pressure
-	u8 midi_pressure = 0;
+	u16 midi_pressure14 = 0;
 	switch (sys_params.midi_in_pres_type) {
 	case MP_CHANNEL_PRESSURE:
-		midi_pressure = channel_pressure;
+		midi_pressure14 = channel_pressure << 7;
 		break;
 	case MP_POLY_AFTERTOUCH:
 	case MP_MPE_PRESSURE:
-		midi_pressure = maxi(midi_string[string_id].pressure, channel_pressure);
+		midi_pressure14 = maxi(midi_string[string_id].pressure << 7, channel_pressure);
 		break;
 	default:
 		break;
 	}
 
-	// apply pressure from mod wheel
-	midi_pressure = maxi(midi_pressure, mod_wheel[string_id]);
+	// pressure from mod wheel
+	u16 wheel_value14 = mod_wheel[string_id][0] << 7;
+	// map to (127 << 7) to conform with 7 bit behavior
+	if (mod_wheel_14bit)
+		wheel_value14 = (wheel_value14 + mod_wheel[string_id][1]) * 127 >> 7;
+	midi_pressure14 = maxi(midi_pressure14, wheel_value14);
 
 	// map internal pressure based on velocity/pressure balance
 	u8 velo_mult = sys_params.midi_in_vel_balance;
 	*pressure =
-	    // scaled velocity, offset to max out at 128
-	    (velo_mult * (midi_string[string_id].velocity + 1)
-	     // scaled pressure, offset to max out at 128
-	     + (128 - velo_mult) * (midi_pressure + 1)
+	    // scaled velocity, offset to max out at 1 << 14
+	    (velo_mult * ((midi_string[string_id].velocity << 7) + 128)
+	     // scaled pressure, offset to max out at 1 << 14
+	     + (128 - velo_mult) * (midi_pressure14 + 128)
 	     // scale to max out at TOUCH_FULL_PRES
-	     + 4)
-	    >> 3;
+	     + 512)
+	    >> 10;
 	*position = midi_string[string_id].position;
 }
 
@@ -351,7 +358,13 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		case MIDI_CONTROL_CHANGE:
 			switch (data1) {
 			case CC_MOD_WHEEL:
-				memset(mod_wheel, data2, NUM_STRINGS);
+				mod_wheel[7][0] = mod_wheel[6][0] = mod_wheel[5][0] = mod_wheel[4][0] = mod_wheel[3][0] =
+				    mod_wheel[2][0] = mod_wheel[1][0] = mod_wheel[0][0] = data2;
+				break;
+			case CC_MOD_WHEEL_LSB:
+				mod_wheel[7][1] = mod_wheel[6][1] = mod_wheel[5][1] = mod_wheel[4][1] = mod_wheel[3][1] =
+				    mod_wheel[2][1] = mod_wheel[1][1] = mod_wheel[0][1] = data2;
+				mod_wheel_14bit = true;
 				break;
 			case CC_SUSTAIN:
 				bool new_sustain = data2 >= 64;
@@ -399,7 +412,11 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		case MIDI_CONTROL_CHANGE:
 			switch (data1) {
 			case CC_MOD_WHEEL:
-				mod_wheel[member_string] = data2;
+				mod_wheel[member_string][0] = data2;
+				break;
+			case CC_MOD_WHEEL_LSB:
+				mod_wheel[member_string][1] = data2;
+				mod_wheel_14bit = true;
 				break;
 			case CC_SUSTAIN:
 				bool new_sustain = data2 >= 64;
