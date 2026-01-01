@@ -5,9 +5,19 @@
 // on the virtual touches in the eight strings, applies the envelope and basic sound parameters
 // this module also sends out pitch/pressure/gate cv signals based on the generated oscillators
 
-extern Voice voices[NUM_VOICES];
+// only used by midi
+float voice_vol(u8 voice_id);
 
+// spi
+s16* grain_buf_ptr(void);
+u32 grain_address(u8 grain_id);
+s16 grain_buf_end_get(u8 grain_id);
+
+// main
 void handle_synth_voices(u32* dst);
+
+// visuals
 u8 draw_high_note(void);
 void draw_max_pres(void);
 void draw_voices(bool show_latch);
+void draw_sample_playback(SampleInfo* s);

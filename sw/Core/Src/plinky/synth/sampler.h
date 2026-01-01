@@ -3,22 +3,9 @@
 
 extern SamplerMode sampler_mode;
 
-// spi
-extern int grain_pos[NUM_GRAINS];
-extern s16 grain_buf_end[NUM_GRAINS];
-
-s16* grain_buf_ptr(void);
-
 void open_sampler(u8 with_sample_id);
 
-// play sampler audio
-
 void sampler_recording_tick(u32* dst, u32* audioin);
-void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noise_diff, float drive, u32* dst);
-void sampler_playing_tick(void);
-
-// recording samples
-
 void start_erasing_sample_buffer(void);
 void clear_flash_sample(void);
 void start_recording_sample(void);
@@ -48,7 +35,6 @@ u8 get_waveform4(SampleInfo* s, int x);
 u16 getwaveform4zoom(SampleInfo* s, int x, int zoom);
 
 void sampler_oled_visuals(void);
-void draw_sample_playback(SampleInfo* s);
 
 void update_peak_hist(void);
 void sampler_leds(u8 pulse_half, u8 pulse);

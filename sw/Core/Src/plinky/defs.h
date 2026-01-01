@@ -938,30 +938,6 @@ typedef struct GrainPair {
 	int outflags;
 } GrainPair;
 
-typedef struct Voice {
-	// oscillator (sampler only uses the pitch value)
-	Osc osc[OSCS_PER_VOICE];
-	// env 1
-	float env1_lvl;
-	bool env1_decaying;
-	ValueSmoother lpg_smoother[2];
-	// env 1 visuals
-	float env1_peak;
-	float env1_norm;
-	// env 2
-	float env2_lvl;
-	u16 env2_lvl16;
-	bool env2_decaying;
-	// noise
-	float noise_lvl;
-	// sampler state
-	GrainPair grain_pair[2];
-	int playhead8;
-	u8 slice_id;
-	u16 touch_pos_start;
-	ValueSmoother touch_pos;
-} Voice;
-
 typedef struct SysParams {
 	u8 preset_id;
 	u8 midi_in_chan : 4;
