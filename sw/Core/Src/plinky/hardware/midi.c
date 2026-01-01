@@ -189,7 +189,7 @@ void midi_precalc_bends(void) {
 // a midi note ends when it's ringing out and it's gone quiet, or overwritten by a different press
 void midi_try_end_note(u8 string_id) {
 	if (midi_string[string_id].state == MS_RINGING_OUT
-	    && (voices[string_id].env1_lvl < 0.001f || midi_string[string_id].suppressed))
+	    && (voice_vol(string_id) < 0.001f || midi_string[string_id].suppressed))
 		midi_string[string_id].state = MS_UNUSED;
 }
 
@@ -314,7 +314,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				u8 min_string_dist = 255;
 				for (u8 i = 0; i < NUM_VOICES; i++) {
 					u8 dist = abs(i - desired_string);
-					if (midi_string[i].state == MS_UNUSED && voices[i].env1_lvl < 0.001f && dist < min_string_dist) {
+					if (midi_string[i].state == MS_UNUSED && voice_vol(i) < 0.001f && dist < min_string_dist) {
 						min_string_dist = dist;
 						string_id = i;
 					}
@@ -323,7 +323,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				float min_vol = __FLT_MAX__;
 				if (string_id == 255) {
 					for (u8 i = 0; i < NUM_VOICES; i++) {
-						float vol = voices[i].env1_lvl;
+						float vol = voice_vol(i);
 						if ((midi_string[i].state == MS_UNUSED || midi_string[i].state == MS_RINGING_OUT)
 						    && !(string_touched & (1 << i)) && vol < min_vol) {
 							min_vol = vol;

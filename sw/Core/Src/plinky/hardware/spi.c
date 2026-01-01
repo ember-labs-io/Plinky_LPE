@@ -1,7 +1,7 @@
 #include "spi.h"
 #include "expander.h"
 #include "memory.h"
-#include "synth/sampler.h"
+#include "synth/synth.h"
 
 extern SPI_HandleTypeDef hspi2;
 
@@ -130,7 +130,7 @@ static int spi_readgrain_dma(int grain_id) {
 	spi_release_cs();
 	u32 addr;
 again:
-	addr = grain_pos[grain_id] * 2;
+	addr = grain_address(grain_id);
 	spi_bit_tx[0] = 3;
 	spi_bit_tx[1] = addr >> 16;
 	spi_bit_tx[2] = addr >> 8;
@@ -139,8 +139,8 @@ again:
 	++spi_state;
 	int start = 0;
 	if (grain_id)
-		start = grain_buf_end[grain_id - 1];
-	int len = grain_buf_end[grain_id] - start;
+		start = grain_buf_end_get(grain_id - 1);
+	int len = grain_buf_end_get(grain_id) - start;
 
 	if (len <= 2) {
 		if (spi_state == LAST_GRAIN_SPI_STATE) {

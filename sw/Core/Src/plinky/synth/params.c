@@ -18,19 +18,6 @@
 #include "ui/oled_viz.h"
 #include "ui/pad_actions.h"
 
-#define EDITING_PARAM (selected_param < NUM_PARAMS)
-#define SELECT_PARAM(param_id)                                                                                         \
-	do {                                                                                                               \
-		selected_param = (param_id);                                                                                   \
-		selected_mod_src = SRC_BASE;                                                                                   \
-	} while (0)
-#define ALIGN_POLY_PARAM(pp_id)                                                                                        \
-	do {                                                                                                               \
-		s16* poly_param = poly_params[pp_id];                                                                          \
-		poly_param[6] = poly_param[5] = poly_param[4] = poly_param[3] = poly_param[2] = poly_param[1] =                \
-		    poly_param[0] = cur_preset.params[param_from_poly_param[pp_id]][SRC_BASE];                                 \
-	} while (0)
-
 // There are three ranges of parameters:
 // Raw:
 //  - saved parameters
@@ -49,9 +36,18 @@
 //    index (range = 3)   |........-2|........-1|.........0.........|1.........|2.........|
 //    raw            -1024|......-683|......-342|.........0.........|342.......|683.......|1024
 
+#define EDITING_PARAM (selected_param < NUM_PARAMS)
+
+typedef struct Envelope {
+	float level;
+	u16 level16;
+	bool decaying;
+} Envelope;
+
 static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
 static s16 poly_params[NUM_POLY_PARAMS][NUM_STRINGS - 1] = {};
+static Envelope envelope2[NUM_STRINGS];
 
 // stable snapshots for drawing oled and led visuals
 static Param param_snap;
@@ -126,6 +122,17 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 
 #define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
+static void select_param(Param param_id) {
+	selected_param = param_id;
+	selected_mod_src = SRC_BASE;
+}
+
+static void align_poly_param(PolyParam pp_id) {
+	s16* poly_param = poly_params[pp_id];
+	poly_param[6] = poly_param[5] = poly_param[4] = poly_param[3] = poly_param[2] = poly_param[1] = poly_param[0] =
+	    cur_preset.params[param_from_poly_param[pp_id]][SRC_BASE];
+}
+
 const Preset* init_params_ptr(void) {
 	return &init_params;
 }
@@ -149,7 +156,7 @@ s16 value_to_index(Param param_id, s32 value) {
 
 void align_poly_params(void) {
 	for (PolyParam pp_id = 0; pp_id < NUM_POLY_PARAMS; pp_id++)
-		ALIGN_POLY_PARAM(pp_id);
+		align_poly_param(pp_id);
 }
 
 void reset_all_n_rpn_ids(void) {
@@ -550,46 +557,46 @@ void params_tick(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
 		// update envelope 2
 		u8 mask = 1 << string_id;
-		Voice* v = &voices[string_id];
+		Envelope* env = &envelope2[string_id];
 		// reset envelope on new touch
 		if (envelope_trigger & mask) {
-			v->env2_lvl = 0.f;
-			v->env2_decaying = false;
+			env->level = 0.f;
+			env->decaying = false;
 		}
 		bool touching = string_touched & mask;
 		// set lvl_goal
 		float lvl_goal = touching
 		                     // touching the string
-		                     ? (v->env2_decaying)
+		                     ? (env->decaying)
 		                           // decay stage: 2 times sustain parameter
 		                           ? 2.f * (param_val_poly(PP_SUSTAIN2, string_id) * (1.f / 65536.f))
 		                           // attack stage: we aim for 2.2, the actual peak is at 2.0
 		                           : 2.2f
 		                     // not touching, release stage: 0
 		                     : 0.f;
-		float lvl_diff = lvl_goal - v->env2_lvl;
+		float lvl_diff = lvl_goal - env->level;
 		// get multiplier size (scaled exponentially)
 		float k = lpf_k(param_val_poly((lvl_diff > 0.f)
 		                                   // positive difference => moving up => attack param
 		                                   ? PP_ATTACK2
-		                                   : (v->env2_decaying && touching)
+		                                   : (env->decaying && touching)
 		                                         // negative difference and decaying => decay param
 		                                         ? PP_DECAY2
 		                                         // negative difference and not decaying => release param
 		                                         : PP_RELEASE2,
 		                               string_id));
 		// change env level by fraction of difference
-		v->env2_lvl += lvl_diff * k;
+		env->level += lvl_diff * k;
 		// if we went past the peak during the attack stage, start the decay stage
-		if (v->env2_lvl >= 2.f && touching)
-			v->env2_decaying = true;
+		if (env->level >= 2.f && touching)
+			env->decaying = true;
 		// scale the envelope from a roughly [0, 2] float, to a u16 range scaled by the envelope level parameter
-		v->env2_lvl16 = SATURATE17(v->env2_lvl * param_val_poly(PP_ENV_LVL2, string_id));
+		env->level16 = SATURATE17(env->level * param_val_poly(PP_ENV_LVL2, string_id));
 
 		// collect range pressure
 		max_pres_global = maxi(max_pres_global, string_pressures[string_id]);
 		// collect range envelope
-		max_env_global = maxf(max_env_global, voices[string_id].env2_lvl16);
+		max_env_global = maxf(max_env_global, env->level16);
 		// generate polyphonic sample & hold random value on new touch
 		if (envelope_trigger & mask)
 			sample_hold_poly[string_id] += 4813;
@@ -670,7 +677,7 @@ s32 param_val_poly(PolyParam pp_id, u8 string_id) {
 	s32 mod_val = (string_id > 0 ? poly_params[pp_id][string_id - 1] : param[SRC_BASE]) << 16;
 
 	// apply envelope 2 modulation
-	mod_val += voices[string_id].env2_lvl16 * param[SRC_ENV2];
+	mod_val += envelope2[string_id].level16 * param[SRC_ENV2];
 
 	// apply pressure modulation
 	mod_val += clampi(get_string_pressures()[string_id] << 5, 0, 65535) * param[SRC_PRES];
@@ -750,7 +757,7 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	cur_preset.params[param_id][mod_src] = data;
 	// update poly param to new value
 	if (PARAM_IS_POLY(param_id))
-		ALIGN_POLY_PARAM(poly_param_from_param[param_id]);
+		align_poly_param(poly_param_from_param[param_id]);
 	// send to midi
 	if (sys_params.midi_out_params && mod_src == SRC_BASE)
 		midi_send_param(param_id);
@@ -794,7 +801,7 @@ bool try_restore_param(bool mode_a) {
 			if (range_type[new_param] == R_UNUSED)
 				return false;
 		}
-		SELECT_PARAM(new_param);
+		select_param(new_param);
 		return true;
 	}
 	// restore other param on same pad
@@ -803,7 +810,7 @@ bool try_restore_param(bool mode_a) {
 		if (range_type[new_param] == R_UNUSED)
 			flash_message(F_20_BOLD, I_CROSS "No Param", 0);
 		else
-			SELECT_PARAM(new_param);
+			select_param(new_param);
 		return true;
 	}
 	// nothing to restore
@@ -879,10 +886,10 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 
 void press_param_pad(u8 pad_id, bool is_press_start) {
 	u8 prev_param = selected_param;
-	SELECT_PARAM((pad_id & 7) * 12 + ((pad_id >> 3) - 1) + (ui_mode == UI_EDITING_B ? 6 : 0));
+	select_param((pad_id & 7) * 12 + ((pad_id >> 3) - 1) + (ui_mode == UI_EDITING_B ? 6 : 0));
 	// pressed an unused param
 	if (range_type[selected_param] == R_UNUSED) {
-		SELECT_PARAM(prev_param);
+		select_param(prev_param);
 		flash_message(F_20_BOLD, I_CROSS "No Param", 0);
 	}
 	// parameters that do something the moment they are pressed
