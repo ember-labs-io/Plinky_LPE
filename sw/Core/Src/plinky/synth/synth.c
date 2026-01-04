@@ -7,22 +7,31 @@
 #include "hardware/memory.h"
 #include "hardware/midi.h"
 #include "hardware/spi.h"
+#include "hardware/touchstrips.h"
 #include "params.h"
-#include "pitch_tools.h"
 #include "sampler.h"
-#include "strings.h"
+#include "sequencer.h"
+#include "time.h"
 
-// Alex notes:
-//
-// pitch table is (64*8) steps per semitone, ie 512 per semitone
-// so heres my maths, this comes out at 435
-// 8887421 comes from the value of pitch when playing a C
-// the pitch of middle c in plinky as written is (4.0/(65536.0*65536.0/8887421.0/31250.0f))
-// which is 1.0114729530400526 too low
-// which is 0.19749290999 semitones flat
-// *512 = 101. so I need to add 101 to pitch_base
+typedef struct Osc {
+	u32 phase;
+	u32 prev_sample;
+	s32 phase_diff;
+	s32 goal_phase_diff;
+	s32 pitch;
+} Osc;
 
-#define PITCH_BASE ((32768 - (12 << 9)) + 512 + 101) // pitch value for C4
+typedef struct GrainPair {
+	int fpos24;
+	int pos[2];
+	int vol24;
+	int dvol24;
+	int dpos24;
+	float grate_ratio;
+	float multisample_grate;
+	int bufadjust; // for reverse grains, we adjust the dma buffer address by this many samples
+	int outflags;
+} GrainPair;
 
 typedef struct Voice {
 	// oscillator (sampler only uses the pitch value)
@@ -44,8 +53,25 @@ typedef struct Voice {
 	ValueSmoother touch_pos;
 } Voice;
 
-static Voice voices[NUM_VOICES];
+// Alex notes:
+//
+// pitch table is (64*8) steps per semitone, ie 512 per semitone
+// so heres my maths, this comes out at 435
+// 8887421 comes from the value of pitch when playing a C
+// the pitch of middle c in plinky as written is (4.0/(65536.0*65536.0/8887421.0/31250.0f))
+// which is 1.0114729530400526 too low
+// which is 0.19749290999 semitones flat
+// *512 = 101. so I need to add 101 to pitch_base
 
+#define PITCH_BASE ((32768 - (12 << 9)) + 512 + 101) // pitch value for C4
+
+static Voice voices[NUM_VOICES];
+static SynthString synth_string[NUM_STRINGS];
+
+static u8 synth_write_frame;
+static u8 synth_read_frame;
+
+static u8 phys_touch_mask = 0;
 static bool cv_trig_high = false;   // should cv trigger be high?
 static s32 cv_gate_value;           // cv gate value
 static bool got_high_pitch = false; // did we save a high pitch?
@@ -54,8 +80,208 @@ static bool got_low_pitch = false;  // did we save a low pitch?
 static s32 low_string_pitch = 0;    // pitch on lowest touched string
 static u16 synth_max_pres = 0;      // highest pressure seen
 
-float voice_vol(u8 voice_id) {
-	return voices[voice_id].env1_lvl;
+const SynthString* get_synth_string(u8 string_id) {
+	return &synth_string[string_id];
+}
+
+// === UTILS === //
+
+static s32 pitch_at_step(s8 step, Scale scale) {
+	u8 steps_in_scale = scale_table[scale][0];
+	s16 oct = step / steps_in_scale;
+	step -= oct * steps_in_scale;
+	if (step < 0) {
+		step += steps_in_scale;
+		oct--;
+	}
+	return oct * PITCH_PER_OCT + scale_table[scale][step + 1];
+}
+
+s16 step_at_string(u8 string_id, Scale scale) {
+	static u16 string_hash[NUM_STRINGS - 1];
+	static u16 string_start_step[NUM_STRINGS - 1];
+	static u8 string_start_semis[NUM_STRINGS - 1];
+
+	if (string_id == 0)
+		return param_index_poly(PP_DEGREE, string_id);
+
+	u8 first_stale_string = 0;
+	u16 new_string_hash[NUM_STRINGS - 1];
+	u8 string_column[NUM_STRINGS - 1];
+	u8 string_scale[NUM_STRINGS - 1];
+
+	// loop downwards from our string to 1 until we find the first up-to-date string
+	for (u8 s_id = string_id; s_id >= 1; s_id--) {
+		string_column[s_id - 1] = param_index_poly(PP_COLUMN, s_id);
+		string_scale[s_id - 1] = param_index_poly(PP_SCALE, s_id);
+		new_string_hash[s_id - 1] = string_column[s_id - 1] + (string_scale[s_id - 1] << 4);
+		// found up to date string
+		if (new_string_hash[s_id - 1] == string_hash[s_id - 1])
+			break;
+		first_stale_string = s_id;
+	}
+
+	// recalculate from first_invalid to string_id
+	if (first_stale_string > 0) {
+		for (u8 s_id = first_stale_string; s_id <= string_id; ++s_id) {
+			// invalidate higher strings when we reach the originally requested string
+			if (s_id == string_id)
+				for (u8 s = string_id + 1; s < NUM_STRINGS; ++s)
+					string_hash[s - 1] = 0;
+
+			// find base octave and pitch in that octave
+			u8 start_semis = string_column[s_id - 1];
+			if (s_id > 1)
+				start_semis += string_start_semis[s_id - 2];
+			u8 base_oct = start_semis / 12;
+			u16 pitch_in_base_oct = SEMIS_TO_PITCH(start_semis % 12);
+
+			// find closest scale step
+			const u16* scale_pitch = scale_table[string_scale[s_id - 1]];
+			u8 steps_in_scale = *scale_pitch++;
+
+			// estimate by linear mapping
+			u8 estimated_step = pitch_in_base_oct * (steps_in_scale - 1) / scale_pitch[steps_in_scale - 1];
+			u16 least_dist = abs(scale_pitch[estimated_step] - pitch_in_base_oct);
+
+			u8 step_in_oct = estimated_step;
+			bool check_higher_steps = true;
+
+			// search downward
+			if (step_in_oct > 0) {
+				do {
+					step_in_oct--;
+					u16 dist = abs(scale_pitch[step_in_oct] - pitch_in_base_oct);
+					if (dist >= least_dist) {
+						step_in_oct++;
+						break;
+					}
+					least_dist = dist;
+					// if we found a closer step downwards, we know we won't find a closer step upwards
+					check_higher_steps = false;
+				} while (step_in_oct > 0);
+			}
+
+			// search upward
+			if (check_higher_steps && step_in_oct < steps_in_scale - 1) {
+				step_in_oct = estimated_step;
+				do {
+					step_in_oct++;
+					u16 dist = abs(scale_pitch[step_in_oct] - pitch_in_base_oct);
+					if (dist >= least_dist) {
+						step_in_oct--;
+						break;
+					}
+					least_dist = dist;
+				} while (step_in_oct < steps_in_scale - 1);
+			}
+
+			// check first note of next octave
+			if (step_in_oct == steps_in_scale - 1 && PITCH_PER_OCT - pitch_in_base_oct < least_dist) {
+				step_in_oct = 0;
+				base_oct++;
+			}
+
+			// save results
+			string_hash[s_id - 1] = new_string_hash[s_id - 1];
+			string_start_semis[s_id - 1] = base_oct * 12 + PITCH_TO_SEMIS(scale_pitch[step_in_oct]);
+			string_start_step[s_id - 1] = base_oct * steps_in_scale + step_in_oct;
+		}
+	}
+	// return with degree offset
+	return (string_id == 0 ? 0 : string_start_step[string_id - 1]) + param_index_poly(PP_DEGREE, string_id);
+}
+
+static s32 string_center_pitch(u8 string_id, Scale scale) {
+	s16 step = step_at_string(string_id, scale) + 3;
+	u8 steps_in_scale = scale_table[scale][0];
+	// get octave
+	s16 oct = step / steps_in_scale;
+	step -= oct * steps_in_scale;
+	if (step < 0) {
+		step += steps_in_scale;
+		oct--;
+	}
+	// get pitch-in-octave of pad 3
+	s32 pitch3 = scale_table[scale][step + 1];
+	// get pitch-in-octave of pad 4
+	step = (step + 1) % steps_in_scale;
+	s32 pitch4 = scale_table[scale][step + 1];
+	if (pitch4 < pitch3)
+		pitch4 += PITCH_PER_OCT;
+	// return average plus octave offset
+	return ((pitch3 + pitch4) >> 1) + oct * PITCH_PER_OCT;
+}
+
+u8 find_string_for_pitch(s32 pitch) {
+	// find desired string: center pitch closest to pitch
+	u8 desired_string = 0;
+	u32 prev_pitch_dist = __UINT32_MAX__;
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+		u32 pitch_dist = abs(string_center_pitch(string_id, param_index_poly(PP_SCALE, string_id)) - pitch);
+		if (pitch_dist >= prev_pitch_dist)
+			break;
+		prev_pitch_dist = pitch_dist;
+		desired_string = string_id;
+	}
+
+	// find closest non-sounding string
+	u8 best_string = 255;
+	u8 prev_dist = 255;
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+		u8 dist = abs(string_id - desired_string);
+		if (dist >= prev_dist)
+			break;
+		// log non-sounding strings
+		if (!synth_string[string_id].touched && voices[string_id].env1_lvl < 0.001f)
+			best_string = string_id;
+		prev_dist = dist;
+	}
+
+	// return found string, if any
+	if (best_string != 255)
+		return best_string;
+
+	// find quietest non-touched string
+	float min_vol = __FLT_MAX__;
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+		float vol = voices[string_id].env1_lvl;
+		if (!synth_string[string_id].touched && vol < min_vol) {
+			min_vol = vol;
+			best_string = string_id;
+		}
+	}
+
+	// returns 255 if no non-pressed strings were found
+	return best_string;
+}
+
+u16 string_position_from_pitch(u8 string_id, s32 pitch) {
+	Scale scale = param_index_poly(PP_SCALE, string_id);
+	s16 string_step_offset = step_at_string(string_id, scale);
+	u16 position = 7 << 8;
+	for (u8 pad = 7; pad > 0; pad--) {
+		if (pitch < pitch_at_step(string_step_offset + pad, scale))
+			break;
+		position = (7 - pad) << 8;
+	}
+	return position;
+}
+
+void clear_latch(void) {
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+		synth_string[string_id].latch_touch.pos = 0;
+		synth_string[string_id].latch_touch.pres = 0;
+	}
+}
+
+void clear_synth_string(u8 string_id) {
+	synth_string[string_id] = init_synth_string;
+}
+
+void clear_synth_strings(void) {
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+		synth_string[string_id] = init_synth_string;
 }
 
 // === UNORGANIZED SAMPLER CODE === //
@@ -112,11 +338,11 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 		sizejit = param_val_poly(PP_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
 		gratejit = param_val_poly(PP_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
 	}
-	int trig = envelope_trigger & (1 << voice_id);
+	int trig = synth_string[voice_id].env_trigger;
 
 	int prevsliceidx = voice->slice_id;
 	bool gp = ui_mode == UI_SAMPLE_EDIT;
-	u16 touch_pos = get_string_pos(voice_id);
+	u16 touch_pos = synth_string[voice_id].cur_touch.pos;
 
 	// decide on the sample for the NEXT frame
 	if (trig) { // on trigger frames, we FADE out the old grains! then the next dma fetch will be the new sample and
@@ -347,217 +573,233 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 
 // === END OF UNORGANIZED SAMPLER CODE === //
 
-static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
-	Voice* voice = &voices[voice_id];
-	u8 mask = 1 << voice_id;
-	float env_lvl = voice->env1_lvl;
+// === MAIN === //
 
-	// track max pressure
-	if (pressure > synth_max_pres)
-		synth_max_pres = pressure;
+// this combines inputs from touchstrips, midi, latch, arp & sequencer and saves the resulting Touch in
+// string_touch[string_id]
+static void generate_string_touch(u8 string_id) {
+	static bool suppress_latch = false;
+	SynthString* s_string = &synth_string[string_id];
+	LatchTouch* s_latch = &s_string->latch_touch;
+	u8 mask = 1 << string_id;
+	bool pres_increasing = false;
+	// the touch we're processing
+	const Touch* touch = get_touch(string_id, 0);
+	// we save the resulting touch in here until we write it to s_string
+	s16 pressure = TOUCH_MIN_PRES;
+	s16 position = TOUCH_MIN_POS;
 
-	// turn off midi note on this voice when needed
-	midi_try_end_note(voice_id);
+	// === TOUCH INPUT === //
 
-	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes
-	// against eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value
-	// of this is, since we already have an expression of the max pressure on the pressure CV out - should we make
-	// gate out binary?
+	// can we read touch input from this string?
+	if (
+	    // we have local control
+	    sys_params.local_on
+	    // default ui, exception for the edit-strip
+	    && ((ui_mode == UI_DEFAULT && !(string_id == 0 && editing_param()))
+	        // sampler in preview mode when a sample is loaded
+	        || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER))) {
+		bool touching = strip_touched & mask;
+		bool first_touch_global = false;
 
-	// generate cv gate
-	cv_gate_value = maxi(cv_gate_value, (s32)(pressure * 65536.f / TOUCH_FULL_PRES));
-
-	// == GENERATE OSCILLATOR PITCHES == //
-
-	if ((string_touched & mask) || env_lvl > 0.001f) {
-		s32 note_pitch = 0;   // pitch offset caused by the played note
-		s32 fine_pitch = 0;   // pitch offset caused by micro_tone / spread
-		s32 osc_pitch = 0;    // resulting pitch of current oscillator
-		s32 summed_pitch = 0; // summed pitch of four oscillators
-
-		// these only get used by touch
-		Scale scale = NUM_SCALES;
-		s32 cv_pitch_offset = 0;
-		s8 cv_step_offset = 0;
-		s16 string_step_offset = 0;
-
-		// saving string values that are the same for all oscillators
-
-		s32 base_pitch = 12 *
-		                 // pitch from arp and the octave parameter
-		                 (((arp_oct_offset + param_index_poly(PP_OCT, voice_id)) << 9)
-		                  // pitch from the pitch parameter
-		                  + (param_val_poly(PP_PITCH, voice_id) >> 7));
-		// pitch from interval parameter
-		s32 osc_interval_pitch = (param_val_poly(PP_INTERVAL, voice_id) * 12) >> 7;
-
-		bool using_midi = midi_string_used(voice_id);
-
-		// for midi
-		if (using_midi)
-			note_pitch = midi_get_pitch(voice_id);
-		// for touch
-		else {
-			scale = param_index_poly(PP_SCALE, voice_id);
-			if (scale >= NUM_SCALES)
-				scale = 0;
-
-			// cv
-			s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
-			if (sys_params.cv_quant == CVQ_SCALE)
-				cv_step_offset = (((PITCH_TO_SEMIS(cv_pitch)) * scale_table[scale][0] + 1) / 12); // quantized cv
-			else
-				cv_pitch_offset = cv_pitch; // unquantized cv
-			string_step_offset = step_at_string(voice_id, scale);
+		if (touching) {
+			// new touch while nothing was touched
+			if (!phys_touch_mask)
+				first_touch_global = true;
+			phys_touch_mask |= mask;
+			pressure = touch->pres;
+			position = touch->pos;
+			pres_increasing = pressure > get_touch(string_id, 1)->pres;
 		}
+		else
+			phys_touch_mask &= ~mask;
 
-		// we discard the two highest and lowest positions and use elements 2 through 5 to generate our oscillator
-		// pitches
-		const Touch* s_touch_sort = sorted_string_touch_ptr(voice_id) + 2;
+		// === LATCH WRITE === //
 
-		// loop through oscillators
-		s32 microtone = param_val_poly(PP_MICROTONE, voice_id);
-		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
-			// for midi
-			if (using_midi)
-				// generate pitch spread
-				fine_pitch = (osc_id - 2) * 64 * microtone >> 16;
-			// for touch
-			else {
-				u16 position = s_touch_sort++->pos; // touch position
-				u8 pad_y = 7 - (position >> 8);     // pad on string
-				// pitch at step + cv
-				note_pitch = pitch_at_step(string_step_offset + pad_y + cv_step_offset, scale) + cv_pitch_offset;
+		if (latch_active() && touching && pres_increasing) {
+			if (first_touch_global) {
+				// start a new latch
+				clear_latch();
 
-				// detuning scaled by microtune param
-				s16 fine_pos = 127 - (position & 255); // offset from pad center
-				u16 pitch_to_next_pad =
-				    abs(pitch_at_step(string_step_offset + pad_y + cv_step_offset + (fine_pos > 0 ? 1 : -1), scale)
-				        + cv_pitch_offset - note_pitch);
-				s32 micro_tune = ((64 + microtone) * pitch_to_next_pad) >> 10;
-				fine_pitch = (fine_pos * micro_tune) >> 14;
+				// in step record mode, trying to start a new latch temporarily turns off latching
+				// trying to start a new latch outside of step record mode turns it on again
+				suppress_latch = seq_state() == SEQ_STEP_RECORDING;
 			}
+			// save latch values
+			if (!suppress_latch) {
+				s_latch->pres = pres_compress(pressure);
+				s_latch->pos = pos_compress(position);
+			}
+			// RJ: I could not work out a way to work with average values that wasn't
+			// sluggish or gave undesired intermediate values - slides and in-between notes
+			// Current solution is just saving one value and randomizing when reading it out
+			// Result feels great, but good to reconsider when the exact contents of
+			// touchstrip and string_touch are more clear
 
-			// send osc 0 pitch to midi
-			if (osc_id == 0)
-				midi_set_goal_note(
-				    voice_id, clampi((base_pitch + note_pitch + (PITCH_PER_SEMI >> 1)) / PITCH_PER_SEMI + 24, 0, 127));
-
-			s32 used_interval_pitch = (osc_id & 1) ? osc_interval_pitch : 0;
-
-			// calculate resulting pitch
-			osc_pitch =
-			    // octave and pitch parameters
-			    base_pitch +
-			    // pitch from scale step / midi note
-			    note_pitch +
-			    // pitch from osc interval parameter
-			    used_interval_pitch +
-			    // pitch from micro_tone / pitch spread
-			    fine_pitch;
-
-			// save values
-			summed_pitch += osc_pitch - used_interval_pitch;
-			voice->osc[osc_id].pitch = osc_pitch;
-			voice->osc[osc_id].goal_phase_diff =
-			    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
+			// Averaging code for reference:
+			//
+			// u8 max_pos = 0, min_pos = 255, maxpressure = 0;
+			// Touch* f = string_touch[string_id];
+			// for (int j = 0; j < 8; ++j, ++f) {
+			// 	u8 p = clampi((f->pos + 4) / 8, 0, 255);
+			// 	min_pos = mini(p, min_pos);
+			// 	max_pos = maxi(p, max_pos);
+			// 	u8 pr = clampi(f->pres / 12, 0, 255);
+			// 	maxpressure = maxi(maxpressure, pr);
+			// }
+			// latch[string_id].pres = maxpressure;
+			// latch[string_id].min_pos = min_pos;
+			// latch[string_id].max_pos = max_pos;
 		}
+	}
 
-		// these are saving respectively the lowest and highest string that are pressed
-		if (!got_low_pitch) {
-			low_string_pitch = summed_pitch;
-			got_low_pitch = true;
+	// recall latch if it's larger than the pressure we're holding
+	if (latch_active() && s_latch->pres > 0 && s_latch->pres * 24 > pressure) {
+		// recall latch values
+		pressure = pres_decompress(s_latch->pres);
+		position = pos_decompress(s_latch->pos);
+		pres_increasing = true;
+
+		// Averaging code for reference:
+		//
+		// int min_pos = latch[string_id].min_pos * 8 + 2;
+		// int max_pos = latch[string_id].max_pos * 8 + 6;
+		// int avgpos = (min_pos + max_pos) / 2;
+		// int range = (max_pos - min_pos) / 4;
+		// pressure = latchpres ? rand_range(latchpres - 12, latchpres) : -1024;
+		// position = rand_range(avgpos-range,avgpos+range);
+	}
+
+	// record touch to sequencer
+	seq_try_rec_touch(string_id, pressure, position, pres_increasing);
+
+	// retrieve touch from sequencer
+	if (pressure <= 0)
+		seq_try_get_touch(string_id, &pressure, &position);
+
+	// any available pressure from touch/latch/sequencer overrides midi
+	if (pressure > 0)
+		s_string->using_midi = false;
+	// retrieve touch from midi
+	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity))
+		s_string->using_midi = true;
+
+	// scale pressure with cv gate input
+	pressure = pressure * adc_get_smooth(ADC_S_GATE);
+
+	// === FINISHING UP === //
+
+	Touch prev_touch = s_string->touch_frames[(synth_write_frame + 7) & 7];
+
+	// no pressure => retain previous frame's position
+	if (pressure <= 0)
+		position = prev_touch.pos;
+	// new finger touch => fill (non-pressed) history with slightly randomized variant of current position
+	else if (prev_touch.pres <= 0) {
+		Touch* s_touch = s_string->touch_frames;
+		for (u8 frame = 0; frame < NUM_TOUCH_FRAMES; frame++, s_touch++)
+			if (frame != synth_write_frame && s_touch->pres <= 0)
+				s_touch->pos = position ^ (s_touch->pos & 3);
+	}
+
+	// save results to the synth string
+	s_string->touch_frames[synth_write_frame].pres = pressure;
+	s_string->touch_frames[synth_write_frame].pos = position;
+
+	// sort touch frames by position
+	sort8((int*)s_string->touch_sorted, (int*)s_string->touch_frames);
+}
+
+// manage generating the string_touch array
+void generate_string_touches(void) {
+	static u8 no_arp_touch_mask = 0;
+	static u8 no_arp_touch_mask_1back = 0;
+	static bool do_second_half = false;
+	static u8 phys_string_touch_1back = 0;
+	static bool prev_latch = false;
+
+	// end latch when necessary
+	bool cur_latch = latch_active();
+	if (prev_latch && !cur_latch)
+		clear_latch();
+	prev_latch = cur_latch;
+
+	// update half of the strings (0 - 3 / 4 - 7)
+	for (u8 string_id = 0; string_id < NUM_STRINGS / 2; ++string_id)
+		generate_string_touch(string_id + do_second_half * NUM_STRINGS / 2);
+	// end of a full update of all strings
+	if (do_second_half) {
+		// lift the last finger in step record mode: auto-step forward
+		if (seq_state() == SEQ_STEP_RECORDING && !phys_touch_mask && phys_string_touch_1back)
+			seq_inc_step();
+		phys_string_touch_1back = phys_touch_mask;
+
+		// processing the strings happens at a significantly higher framerate than reading out the touchstrips
+		// u8 touch_frame tracks which frame in the touches array is currently being written to
+		// u8 strings_write_frame tracks which frame in the string_touch array we are writing to
+		// we never want any half-filled frames in the string_touch array, so we only update strings_write_frame after
+		// processing a full frame of strings
+
+		// in practice, all internal functionality (arp, sequencer, mod sources, etc) get processed at the higher
+		// framerate - whenever touchstrips.h has read out a full frame of touches, strings_write_frame increments to
+		// make use of the new touch-data
+
+		if (synth_write_frame != touch_frame) {
+			// we read from the frame that was written just before
+			synth_read_frame = synth_write_frame;
+			// we write to the frame that is currently being processed by the touchstrips
+			synth_write_frame = touch_frame;
+			arp_next_strings_frame_trig();
 		}
-		high_string_pitch = summed_pitch;
-		got_high_pitch = true;
 	}
 
-	// == UPDATE ENVELOPE == //
+	// toggle which half we process
+	do_second_half = !do_second_half;
 
-	float env_goal = 0.f;
+	// calculate string touches
+	no_arp_touch_mask_1back = no_arp_touch_mask;
+	no_arp_touch_mask = 0;
+	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
+		if (synth_string[string_id].touch_frames[synth_read_frame].pres > 0)
+			no_arp_touch_mask |= 1 << string_id;
+	u8 envelope_trigger = no_arp_touch_mask & ~no_arp_touch_mask_1back;
 
-	// calc goal lpg
-	if (string_touched & mask) {
-		float sens = param_val_poly(PP_ENV_LVL1, voice_id) * (2.f / 65536.f);
-		env_goal = pressure * 1.f / TOUCH_MAX_POS * sens * sens;
-		if (env_goal < 0.f)
-			env_goal = 0.f;
-		env_goal *= env_goal;
-		env_goal *= 1.f + ((voice->osc[2].pitch - 43000) * (1.f / 65536.f)); // pitch compensation
+	// new (physical or virtual) touch: restart arp
+	if (arp_active() && no_arp_touch_mask && !no_arp_touch_mask_1back) {
+		arp_reset();
+		// if the sequencer is not playing, reset the clock so the arp gets a trigger
+		if (!seq_playing())
+			clock_reset();
 	}
 
-	// retrieve envelope
-	bool is_sample_preview = ui_mode == UI_SAMPLE_EDIT;
-	const float attack = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_ATTACK1, voice_id)));
-	const float decay = is_sample_preview ? 1.f : lpf_k((param_val_poly(PP_DECAY1, voice_id)));
-	const float sustain = is_sample_preview ? 1.f : squaref(param_val_poly(PP_SUSTAIN1, voice_id) * (1.f / 65536.f));
-	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_RELEASE1, voice_id)));
+	// generate final touch mask
+	u8 touch_mask = no_arp_touch_mask;
+	// replace touch_mask by arp touches, update envelope triggers
+	if (arp_active())
+		envelope_trigger = arp_tick(no_arp_touch_mask, &touch_mask) ? touch_mask : 0;
 
-	// new touch: start new envelope
-	if (envelope_trigger & mask) {
-		env_lvl *= sustain;
-		voice->env1_decaying = false;
-		voice->env1_peak = env_goal;
-		cv_trig_high = true; // send cv trigger
+	// precalc and populate strings for this frame
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+		SynthString* s_string = &synth_string[string_id];
+		Touch* c_touch = &s_string->cur_touch;
+		u8 mask = 1 << string_id;
+
+		// basic properties
+		s_string->touched = !!(touch_mask & mask);
+		s_string->env_trigger = !!(envelope_trigger & mask);
+		// save frame touch to current touch
+		*c_touch = s_string->touch_frames[synth_read_frame];
+		// clear pressure if not touched
+		if (!s_string->touched)
+			c_touch->pres = TOUCH_MIN_PRES;
+		// generate start velocity for non-midi touches
+		if (!s_string->using_midi && s_string->env_trigger)
+			s_string->start_velocity = clampi((c_touch->pres << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
 	}
+}
 
-	if (env_goal <= 0.f) // no pressure => release phase (aka not decaying)
-		voice->env1_decaying = false;
-	else if (voice->env1_decaying) // in decay phase => aim for sustain level
-		env_goal *= sustain;
-
-	// apply envelope
-	float lpg_diff = env_goal - env_lvl;
-	lpg_diff *= (lpg_diff > 0.f) ? attack : env_goal ? decay : release;
-	env_lvl += lpg_diff;
-
-	// release phase
-	if (env_goal <= 0.f)
-		voice->env1_norm = voice->env1_peak == 0 ? 0 : env_lvl / voice->env1_peak;
-	// decay/sustain phase
-	else if (voice->env1_decaying) {
-		voice->env1_norm = 1;
-		voice->env1_peak = env_lvl;
-	}
-	// attack phase
-	else {
-		voice->env1_norm = env_lvl / env_goal;
-		if (env_goal > voice->env1_peak)
-			voice->env1_peak = env_goal;
-	}
-	// we hit the peak! time to decay
-	if (env_lvl > env_goal * 0.95f)
-		voice->env1_decaying = true;
-	// constrain to max 1.0
-	if (env_lvl > 1.f) {
-		env_lvl = 1.f;
-		voice->env1_decaying = true;
-	}
-
-	env_goal = env_lvl;
-
-	// == NOISE, DRIVE, LPG == //
-
-	// pre-calc noise, drive, resonance
-	int drive_lvl = param_val_poly(PP_DISTORTION, voice_id) * 2 - 65536;
-	float fdrive = table_interp(pitches, ((32768 - 2048) + drive_lvl / 2));
-	if (drive_lvl < -65536 + 2048)
-		fdrive *= (drive_lvl + 65536) * (1.f / 2048.f); // ensure drive goes right to 0 when full minimum
-	float drive = fdrive * (0.75f / 65536.f);
-	float goal_noise = param_val_poly(PP_NOISE, voice_id) * (1.f / 65536.f);
-	goal_noise *= goal_noise;
-	if (drive_lvl > 0)
-		goal_noise *= fdrive;
-	float noise_diff = (goal_noise - voice->noise_lvl) * (1.f / SAMPLES_PER_TICK);
-	int resonancei = 65536 - param_val_poly(PP_RESO, voice_id);
-	float resonance = 2.1f - (table_interp(pitches, resonancei) * (2.1f / pitches[1024]));
-	drive *= 2.f / (resonance + 2.f);
-
-	if (USING_SAMPLER) {
-		apply_sample_lpg_noise(voice_id, voice, env_goal, noise_diff, drive, dst);
-		return;
-	}
-
+static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noise_diff, float drive,
+                                  float resonance, u32* dst) {
 	// two loops handling two oscillators each
 	float glide = lpf_k(param_val_poly(PP_GLIDE, voice_id) >> 2) * (0.5f / SAMPLES_PER_TICK);
 	s32 osc_shape = param_val_poly(PP_SHAPE, voice_id);
@@ -567,7 +809,7 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 		noise = voice->noise_lvl;
 		int rand_table_pos = rand() & 16383;
 		float osc_lpg = voice->env1_lvl;
-		float osc_lpg_diff = (env_goal - osc_lpg) * (1.f / SAMPLES_PER_TICK);
+		float osc_lpg_diff = (goal_lpg - osc_lpg) * (1.f / SAMPLES_PER_TICK);
 
 		Osc* osc = &voice->osc[osc_id];
 
@@ -698,8 +940,221 @@ static void run_voice(u8 voice_id, u32* dst, s16 pressure) {
 		voice->lpg_smoother[osc_id].y2 = y2;
 	} // osc loop
 
-	voice->env1_lvl = env_goal;
+	voice->env1_lvl = goal_lpg;
 	voice->noise_lvl = noise;
+}
+
+static void run_voice(u8 voice_id, u32* dst) {
+	// the synth string we read data from
+	SynthString* s_string = &synth_string[voice_id];
+	// the voice we write the resulting data to
+	Voice* voice = &voices[voice_id];
+	s16 pressure = s_string->cur_touch.pres;
+	float env_lvl = voice->env1_lvl;
+	bool voice_audible = env_lvl > 0.001f;
+
+	// track max pressure
+	if (pressure > synth_max_pres)
+		synth_max_pres = pressure;
+
+	// turn off midi note if it has rung out
+	if (s_string->using_midi && !s_string->touched && !voice_audible)
+		s_string->using_midi = false;
+
+	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes
+	// against eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value
+	// of this is, since we already have an expression of the max pressure on the pressure CV out - should we make
+	// gate out binary?
+
+	// generate cv gate
+	cv_gate_value = maxi(cv_gate_value, (s32)(pressure * 65536.f / TOUCH_FULL_PRES));
+
+	// == GENERATE OSCILLATOR PITCHES == //
+
+	if (s_string->touched || voice_audible) {
+		s32 note_pitch = 0;   // pitch offset caused by the played note
+		s32 fine_pitch = 0;   // pitch offset caused by micro_tone / spread
+		s32 osc_pitch = 0;    // resulting pitch of current oscillator
+		s32 summed_pitch = 0; // summed pitch of four oscillators
+
+		// these only get used by touch
+		Scale scale = NUM_SCALES;
+		s32 cv_pitch_offset = 0;
+		s8 cv_step_offset = 0;
+		s16 string_step_offset = 0;
+
+		// saving string values that are the same for all oscillators
+
+		s32 base_pitch = 12 *
+		                 // pitch from arp and the octave parameter
+		                 (((arp_oct_offset + param_index_poly(PP_OCT, voice_id)) << 9)
+		                  // pitch from the pitch parameter
+		                  + (param_val_poly(PP_PITCH, voice_id) >> 7));
+		// pitch from interval parameter
+		s32 osc_interval_pitch = (param_val_poly(PP_INTERVAL, voice_id) * 12) >> 7;
+
+		// for midi
+		if (s_string->using_midi)
+			note_pitch = midi_get_pitch(voice_id);
+		// for touch
+		else {
+			scale = param_index_poly(PP_SCALE, voice_id);
+			if (scale >= NUM_SCALES)
+				scale = 0;
+
+			// cv
+			s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
+			if (sys_params.cv_quant == CVQ_SCALE)
+				cv_step_offset = (((PITCH_TO_SEMIS(cv_pitch)) * scale_table[scale][0] + 1) / 12); // quantized cv
+			else
+				cv_pitch_offset = cv_pitch; // unquantized cv
+			string_step_offset = step_at_string(voice_id, scale);
+		}
+
+		// we discard the two highest and lowest positions and use elements 2 through 5 to generate our oscillator
+		// pitches
+		Touch* s_touch_sort = &s_string->touch_sorted[2];
+
+		// loop through oscillators
+		s32 microtone = param_val_poly(PP_MICROTONE, voice_id);
+		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
+			// for midi
+			if (s_string->using_midi)
+				// generate pitch spread
+				fine_pitch = (osc_id - 2) * 64 * microtone >> 16;
+			// for touch
+			else {
+				u16 position = s_touch_sort++->pos; // touch position
+				u8 pad_y = 7 - (position >> 8);     // pad on string
+				// pitch at step + cv
+				note_pitch = pitch_at_step(string_step_offset + pad_y + cv_step_offset, scale) + cv_pitch_offset;
+
+				// detuning scaled by microtune param
+				s16 fine_pos = 127 - (position & 255); // offset from pad center
+				u16 pitch_to_next_pad =
+				    abs(pitch_at_step(string_step_offset + pad_y + cv_step_offset + (fine_pos > 0 ? 1 : -1), scale)
+				        + cv_pitch_offset - note_pitch);
+				s32 micro_tune = ((64 + microtone) * pitch_to_next_pad) >> 10;
+				fine_pitch = (fine_pos * micro_tune) >> 14;
+			}
+
+			// save note number from osc 0
+			if (osc_id == 0)
+				s_string->note_number =
+				    clampi((base_pitch + note_pitch + (PITCH_PER_SEMI >> 1)) / PITCH_PER_SEMI + 24, 0, 127);
+
+			s32 used_interval_pitch = (osc_id & 1) ? osc_interval_pitch : 0;
+
+			// calculate resulting pitch
+			osc_pitch =
+			    // octave and pitch parameters
+			    base_pitch +
+			    // pitch from scale step / midi note
+			    note_pitch +
+			    // pitch from osc interval parameter
+			    used_interval_pitch +
+			    // pitch from micro_tone / pitch spread
+			    fine_pitch;
+
+			// save values
+			summed_pitch += osc_pitch - used_interval_pitch;
+			voice->osc[osc_id].pitch = osc_pitch;
+			voice->osc[osc_id].goal_phase_diff =
+			    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
+		}
+
+		// these are saving respectively the lowest and highest string that are pressed
+		if (!got_low_pitch) {
+			low_string_pitch = summed_pitch;
+			got_low_pitch = true;
+		}
+		high_string_pitch = summed_pitch;
+		got_high_pitch = true;
+	}
+
+	// == UPDATE ENVELOPE == //
+
+	float env_goal = 0.f;
+
+	// calc goal lpg
+	if (s_string->touched) {
+		float sens = param_val_poly(PP_ENV_LVL1, voice_id) * (2.f / 65536.f);
+		env_goal = pressure * 1.f / TOUCH_FULL_PRES * sens * sens;
+		if (env_goal < 0.f)
+			env_goal = 0.f;
+		env_goal *= env_goal;
+		env_goal *= 1.f + ((voice->osc[2].pitch - 43000) * (1.f / 65536.f)); // pitch compensation
+	}
+
+	// retrieve envelope params
+	bool is_sample_preview = ui_mode == UI_SAMPLE_EDIT;
+	const float attack = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_ATTACK1, voice_id)));
+	const float decay = is_sample_preview ? 1.f : lpf_k((param_val_poly(PP_DECAY1, voice_id)));
+	const float sustain = is_sample_preview ? 1.f : squaref(param_val_poly(PP_SUSTAIN1, voice_id) * (1.f / 65536.f));
+	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_RELEASE1, voice_id)));
+
+	// retrigger envelope
+	if (s_string->env_trigger) {
+		env_lvl *= sustain;
+		voice->env1_decaying = false;
+		voice->env1_peak = env_goal;
+		cv_trig_high = true; // send cv trigger
+	}
+
+	if (env_goal <= 0.f) // no pressure => release phase (aka not decaying)
+		voice->env1_decaying = false;
+	else if (voice->env1_decaying) // in decay phase => aim for sustain level
+		env_goal *= sustain;
+
+	// apply envelope
+	float lpg_diff = env_goal - env_lvl;
+	lpg_diff *= (lpg_diff > 0.f) ? attack : env_goal ? decay : release;
+	env_lvl += lpg_diff;
+
+	// release phase
+	if (env_goal <= 0.f)
+		voice->env1_norm = voice->env1_peak == 0 ? 0 : env_lvl / voice->env1_peak;
+	// decay/sustain phase
+	else if (voice->env1_decaying) {
+		voice->env1_norm = 1;
+		voice->env1_peak = env_lvl;
+	}
+	// attack phase
+	else {
+		voice->env1_norm = env_lvl / env_goal;
+		if (env_goal > voice->env1_peak)
+			voice->env1_peak = env_goal;
+	}
+	// we hit the peak! time to decay
+	if (env_lvl > env_goal * 0.95f)
+		voice->env1_decaying = true;
+	// constrain to max 1.0
+	if (env_lvl > 1.f) {
+		env_lvl = 1.f;
+		voice->env1_decaying = true;
+	}
+
+	// == NOISE, DRIVE, LPG == //
+
+	// pre-calc noise, drive, resonance
+	int drive_lvl = param_val_poly(PP_DISTORTION, voice_id) * 2 - 65536;
+	float fdrive = table_interp(pitches, ((32768 - 2048) + drive_lvl / 2));
+	if (drive_lvl < -65536 + 2048)
+		fdrive *= (drive_lvl + 65536) * (1.f / 2048.f); // ensure drive goes right to 0 when full minimum
+	float drive = fdrive * (0.75f / 65536.f);
+	float goal_noise = param_val_poly(PP_NOISE, voice_id) * (1.f / 65536.f);
+	goal_noise *= goal_noise;
+	if (drive_lvl > 0)
+		goal_noise *= fdrive;
+	float noise_diff = (goal_noise - voice->noise_lvl) * (1.f / SAMPLES_PER_TICK);
+	int resonancei = 65536 - param_val_poly(PP_RESO, voice_id);
+	float resonance = 2.1f - (table_interp(pitches, resonancei) * (2.1f / pitches[1024]));
+	drive *= 2.f / (resonance + 2.f);
+
+	if (USING_SAMPLER)
+		apply_sample_lpg_noise(voice_id, voice, env_lvl, noise_diff, drive, dst);
+	else
+		apply_synth_lpg_noise(voice_id, voice, env_lvl, noise_diff, drive, resonance, dst);
 }
 
 void handle_synth_voices(u32* dst) {
@@ -711,9 +1166,8 @@ void handle_synth_voices(u32* dst) {
 	synth_max_pres = 0;
 
 	// run all voices
-	const s16* string_pressures = get_string_pressures();
 	for (u8 voice_id = 0; voice_id < NUM_VOICES; ++voice_id)
-		run_voice(voice_id, dst, string_pressures[voice_id]);
+		run_voice(voice_id, dst);
 
 	// send cv values
 	send_cv_trigger(cv_trig_high);
@@ -759,7 +1213,7 @@ void handle_synth_voices(u32* dst) {
 			// we only budget for LAST_GRAIN_SPI_STATE transfers. so after that, len goes to 0. also helps CPU load
 			if (i < 8 - MAX_SAMPLE_VOICES)
 				len = 0;
-			else if (voices[fi].env1_lvl <= 0.01f && !(string_touched & (1 << fi)))
+			else if (voices[fi].env1_lvl <= 0.01f && !synth_string[fi].touched)
 				len = 0; // if your finger is up and the volume is 0, we can just skip this one.
 			lengths[fi] = (pos + len * 4 > GRAINBUF_BUDGET) ? 0 : len;
 			pos += len * 4;
@@ -772,6 +1226,8 @@ void handle_synth_voices(u32* dst) {
 		}
 	}
 }
+
+// === VISUALS === //
 
 u8 draw_high_note(void) {
 	if (synth_max_pres > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
@@ -797,7 +1253,7 @@ void draw_voices(bool show_latch) {
 		// top
 		fill_rectangle(x, OLED_HEIGHT - bar_height - 1, x + bar_width, OLED_HEIGHT - bar_height + 1);
 		// bar
-		if (string_touched & (1 << voice_id))
+		if (synth_string[voice_id].touched)
 			half_rectangle(x, OLED_HEIGHT - bar_height + 1, x + bar_width, OLED_HEIGHT);
 		// outline
 		hline(x, OLED_HEIGHT - bar_height - 2, x + bar_width, 0);

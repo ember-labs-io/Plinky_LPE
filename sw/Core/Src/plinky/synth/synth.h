@@ -5,8 +5,15 @@
 // on the virtual touches in the eight strings, applies the envelope and basic sound parameters
 // this module also sends out pitch/pressure/gate cv signals based on the generated oscillators
 
-// only used by midi
-float voice_vol(u8 voice_id);
+const SynthString* get_synth_string(u8 string_id);
+
+// utils
+s16 step_at_string(u8 string_id, Scale scale); // only for led_viz!
+u8 find_string_for_pitch(s32 pitch);
+u16 string_position_from_pitch(u8 string_id, s32 pitch);
+void clear_latch(void);
+void clear_synth_string(u8 string_id);
+void clear_synth_strings(void);
 
 // spi
 s16* grain_buf_ptr(void);
@@ -14,6 +21,7 @@ u32 grain_address(u8 grain_id);
 s16 grain_buf_end_get(u8 grain_id);
 
 // main
+void generate_string_touches(void);
 void handle_synth_voices(u32* dst);
 
 // visuals

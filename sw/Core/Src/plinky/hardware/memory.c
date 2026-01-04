@@ -5,7 +5,7 @@
 #include "synth/params.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
-#include "synth/strings.h"
+#include "synth/synth.h"
 #include "ui/oled_viz.h"
 #include "ui/pad_actions.h"
 #include "usb/web_editor.h"

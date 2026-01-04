@@ -112,6 +112,7 @@ static inline void DebugLog(const char* fmt, ...) {
 #define USING_SAMPLER (cur_sample_info.samplelen != 0)
 #define PITCH_TO_SEMIS(pitch) ((pitch) >> 9)
 #define SEMIS_TO_PITCH(semi) ((semi) << 9)
+#define NOTE_NR_TO_PITCH(note) SEMIS_TO_PITCH(note - 24)
 
 static u8 const zero[2048] = {0};
 

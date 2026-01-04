@@ -12,7 +12,6 @@
 #include "param_defs.h"
 #include "sampler.h"
 #include "sequencer.h"
-#include "strings.h"
 #include "synth.h"
 #include "time.h"
 #include "ui/oled_viz.h"
@@ -36,24 +35,22 @@
 //    index (range = 3)   |........-2|........-1|.........0.........|1.........|2.........|
 //    raw            -1024|......-683|......-342|.........0.........|342.......|683.......|1024
 
-#define EDITING_PARAM (selected_param < NUM_PARAMS)
-
 typedef struct Envelope {
 	float level;
 	u16 level16;
 	bool decaying;
 } Envelope;
 
+#define EDITING_PARAM (selected_param < NUM_PARAMS)
+
+static s16 poly_params[NUM_POLY_PARAMS][NUM_STRINGS - 1] = {};
+
+// editing params
 static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
-static s16 poly_params[NUM_POLY_PARAMS][NUM_STRINGS - 1] = {};
-static Envelope envelope2[NUM_STRINGS];
-
-// stable snapshots for drawing oled and led visuals
-static Param param_snap;
-static ModSource src_snap;
-// enables clear modulation message
-static u32 clear_mods_duration = 0;
+static Param mem_param = 255; // remembers previous selected_param, used by encoder and A/B shift-presses
+static s16 edit_strip_start_pos = 0;
+static ValueSmoother edit_strip_pos = {};
 
 // NRPNs
 static u8 nrpn_id[NUM_STRINGS][2] = {{127, 127}, {127, 127}, {127, 127}, {127, 127},
@@ -64,21 +61,22 @@ static u8 n_rpn_value[NUM_STRINGS][2] = {};           // shared value for nrpn a
 static bool received_n_rpn_data[NUM_STRINGS][2] = {}; // is the full 14 bit value received?
 static bool rpn_last_received[NUM_STRINGS] = {};      // was rpn or nrpn number last received?
 
-// modulation values
-static s32 poly_param_lfo_offset[NUM_POLY_PARAMS];
-static u16 max_env_global = 0;
+// mod sources
+static Envelope envelope2[NUM_STRINGS] = {};
+static u16 max_envelope2 = 0;
 static u32 max_pres_global = 0;
+static s32 poly_param_lfo_offset[NUM_POLY_PARAMS] = {};
+static u16 sample_hold[NUM_STRINGS] = {0, 1 << 12, 2 << 12, 3 << 12, 4 << 12, 5 << 12, 6 << 12, 7 << 12};
 static u16 sample_hold_global = {8 << 12};
-static u16 sample_hold_poly[NUM_STRINGS] = {0, 1 << 12, 2 << 12, 3 << 12, 4 << 12, 5 << 12, 6 << 12, 7 << 12};
-
-// editing params
-static Param mem_param = 255; // remembers previous selected_param, used by encoder and A/B shift-presses
-static s16 left_strip_start = 0;
-static ValueSmoother left_strip_smooth;
 
 // precalc
 static bool arp_toggle = false;
 static bool latch_toggle = false;
+
+// visuals
+static Param param_snap;            // stable snapshot
+static ModSource src_snap;          // stable snapshot
+static u32 clear_mods_duration = 0; // enables clear modulation message
 
 // == UTILS == //
 
@@ -157,11 +155,6 @@ s16 value_to_index(Param param_id, s32 value) {
 void align_poly_params(void) {
 	for (PolyParam pp_id = 0; pp_id < NUM_POLY_PARAMS; pp_id++)
 		align_poly_param(pp_id);
-}
-
-void reset_all_n_rpn_ids(void) {
-	memset(nrpn_id, 127, sizeof(nrpn_id));
-	memset(rpn_id, 127, sizeof(nrpn_id));
 }
 
 static void try_apply_nrpn(u8* nrpn_id, u8* nrpn_value, bool* nrpn_rcvd, bool mpe, u8 nrpn_string) {
@@ -551,29 +544,30 @@ void params_tick(void) {
 	// envelope 2
 	for (PolyParam pp_id = PP_ENV_LVL2; pp_id <= PP_RELEASE2; pp_id++)
 		precalc_lfo_offset(pp_id);
+	bool any_envelope_triggered = false;
 	max_pres_global = 0;
-	max_env_global = 0;
-	const s16* string_pressures = get_string_pressures();
+	max_envelope2 = 0;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
+		const SynthString* s_string = get_synth_string(string_id);
 		// update envelope 2
-		u8 mask = 1 << string_id;
 		Envelope* env = &envelope2[string_id];
-		// reset envelope on new touch
-		if (envelope_trigger & mask) {
+		if (s_string->env_trigger) {
+			// reset envelope
 			env->level = 0.f;
 			env->decaying = false;
+			// generate new sample & hold id
+			sample_hold[string_id] += 4813;
+			any_envelope_triggered = true;
 		}
-		bool touching = string_touched & mask;
-		// set lvl_goal
-		float lvl_goal = touching
-		                     // touching the string
-		                     ? (env->decaying)
-		                           // decay stage: 2 times sustain parameter
-		                           ? 2.f * (param_val_poly(PP_SUSTAIN2, string_id) * (1.f / 65536.f))
-		                           // attack stage: we aim for 2.2, the actual peak is at 2.0
-		                           : 2.2f
-		                     // not touching, release stage: 0
-		                     : 0.f;
+		bool touching = s_string->touched;
+		// touching the string
+		float lvl_goal = touching ? (env->decaying)
+		                                // decay stage: 2 times sustain parameter
+		                                ? 2.f * (param_val_poly(PP_SUSTAIN2, string_id) * (1.f / 65536.f))
+		                                // attack stage: we aim for 2.2, the actual peak is at 2.0
+		                                : 2.2f
+		                          // not touching, release stage: aim for 0
+		                          : 0.f;
 		float lvl_diff = lvl_goal - env->level;
 		// get multiplier size (scaled exponentially)
 		float k = lpf_k(param_val_poly((lvl_diff > 0.f)
@@ -593,25 +587,21 @@ void params_tick(void) {
 		// scale the envelope from a roughly [0, 2] float, to a u16 range scaled by the envelope level parameter
 		env->level16 = SATURATE17(env->level * param_val_poly(PP_ENV_LVL2, string_id));
 
-		// collect range pressure
-		max_pres_global = maxi(max_pres_global, string_pressures[string_id]);
-		// collect range envelope
-		max_env_global = maxf(max_env_global, env->level16);
-		// generate polyphonic sample & hold random value on new touch
-		if (envelope_trigger & mask)
-			sample_hold_poly[string_id] += 4813;
+		// collect max pressure
+		max_pres_global = maxi(max_pres_global, s_string->cur_touch.pres);
+		// collect max envelope
+		max_envelope2 = maxf(max_envelope2, env->level16);
 	}
 	// scale range pressure to u16 range
-	max_pres_global *= 32;
+	max_pres_global <<= 5;
 	// generate global sample & hold random value on new touch
-	if (envelope_trigger)
+	if (any_envelope_triggered)
 		sample_hold_global += 4813;
 
 	accel_tick();
 
-	adc_update_inputs();
+	adc_dac_tick();
 
-	// process lfos
 	lfos_tick();
 
 	// apply lfo modulation to poly params
@@ -643,7 +633,7 @@ s32 param_val(Param param_id) {
 	s32 mod_val = param[SRC_BASE] << 16;
 
 	// apply envelope 2 modulation
-	mod_val += max_env_global * param[SRC_ENV2];
+	mod_val += max_envelope2 * param[SRC_ENV2];
 
 	// apply pressure modulation
 	mod_val += max_pres_global * param[SRC_PRES];
@@ -680,14 +670,14 @@ s32 param_val_poly(PolyParam pp_id, u8 string_id) {
 	mod_val += envelope2[string_id].level16 * param[SRC_ENV2];
 
 	// apply pressure modulation
-	mod_val += clampi(get_string_pressures()[string_id] << 5, 0, 65535) * param[SRC_PRES];
+	mod_val += clampi(get_synth_string(string_id)->cur_touch.pres << 5, 0, 65535) * param[SRC_PRES];
 
 	// apply lfo modulation
 	mod_val += poly_param_lfo_offset[pp_id];
 
 	// apply sample & hold modulation
 	if (param[SRC_RND]) {
-		u16 rnd_id = (u16)(sample_hold_poly[string_id] + param_id);
+		u16 rnd_id = (u16)(sample_hold[string_id] + param_id);
 		// positive => uniform distribution
 		if (param[SRC_RND] > 0)
 			mod_val += (rndtab[rnd_id] * param[SRC_RND]) << 8;
@@ -823,9 +813,9 @@ void close_edit_mode(void) {
 	clear_last_encoder_use();
 }
 
-static void reset_left_strip(void) {
-	left_strip_start = PARAM_VAL_RAW(selected_param, selected_mod_src);
-	set_smoother(&left_strip_smooth, left_strip_start);
+static void reset_edit_strip_pos(void) {
+	edit_strip_start_pos = PARAM_VAL_RAW(selected_param, selected_mod_src);
+	set_smoother(&edit_strip_pos, edit_strip_start_pos);
 }
 
 void touch_edit_strip(u16 position, bool is_press_start) {
@@ -836,7 +826,7 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 		return;
 
 	if (is_press_start)
-		reset_left_strip();
+		reset_edit_strip_pos();
 
 	// scale the press position to a param size value
 	float press_value =
@@ -846,19 +836,19 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 	if (is_signed)
 		press_value = press_value * 2 - RAW_SIZE;
 	// smooth the pressed value
-	smooth_value(&left_strip_smooth, press_value, 256);
-	float smoothed_value = clampf(left_strip_smooth.y2, is_signed ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
+	smooth_value(&edit_strip_pos, press_value, 256);
+	float smoothed_value = clampf(edit_strip_pos.y2, is_signed ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
 	// value stops exactly at +/- 100%
 	bool notch_at_50 =
 	    selected_mod_src == SRC_BASE && (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
 	if (notch_at_50) {
-		if (smoothed_value < RAW_HALF && left_strip_start > RAW_HALF)
+		if (smoothed_value < RAW_HALF && edit_strip_start_pos > RAW_HALF)
 			smoothed_value = RAW_HALF;
-		if (smoothed_value > RAW_HALF && left_strip_start < RAW_HALF)
+		if (smoothed_value > RAW_HALF && edit_strip_start_pos < RAW_HALF)
 			smoothed_value = RAW_HALF;
-		if (smoothed_value < -RAW_HALF && left_strip_start > -RAW_HALF)
+		if (smoothed_value < -RAW_HALF && edit_strip_start_pos > -RAW_HALF)
 			smoothed_value = -RAW_HALF;
-		if (smoothed_value > -RAW_HALF && left_strip_start < -RAW_HALF)
+		if (smoothed_value > -RAW_HALF && edit_strip_start_pos < -RAW_HALF)
 			smoothed_value = -RAW_HALF;
 	}
 
@@ -902,7 +892,7 @@ void press_param_pad(u8 pad_id, bool is_press_start) {
 			trigger_tap_tempo();
 	}
 	if (selected_param != prev_param)
-		reset_left_strip();
+		reset_edit_strip_pos();
 }
 
 void press_mod_pad(u8 pad_y) {

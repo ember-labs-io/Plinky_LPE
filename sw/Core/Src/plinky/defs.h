@@ -889,6 +889,33 @@ typedef struct Touch {
 	u16 pos;
 } Touch;
 
+const static Touch init_touch = {TOUCH_MIN_PRES, TOUCH_MIN_POS};
+
+// compressed to fit in u8s
+typedef struct LatchTouch {
+	u8 pos;
+	u8 pres;
+} LatchTouch;
+
+typedef struct SynthString {
+	Touch touch_frames[NUM_TOUCH_FRAMES]; // last eight frames of touches
+	Touch touch_sorted[NUM_TOUCH_FRAMES]; // sorted copy of touch
+	Touch cur_touch;                      // active touch for this frame
+	s8 note_number;
+	u8 start_velocity;
+	s16 pitchbend; // 512 per semi
+	LatchTouch latch_touch;
+	bool touched : 1;
+	bool env_trigger : 1;
+	bool using_midi : 1;
+} SynthString;
+
+const static SynthString init_synth_string = {
+    .touch_frames = {init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch},
+    .touch_sorted = {init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch},
+    .cur_touch = init_touch,
+};
+
 typedef struct TouchCalibData {
 	u16 pres[PADS_PER_STRIP];
 	s16 pos[PADS_PER_STRIP];
@@ -917,26 +944,6 @@ typedef struct ConditionalStep {
 	bool play_step;
 	bool advance_step;
 } ConditionalStep;
-
-typedef struct Osc {
-	u32 phase;
-	u32 prev_sample;
-	s32 phase_diff;
-	s32 goal_phase_diff;
-	s32 pitch;
-} Osc;
-
-typedef struct GrainPair {
-	int fpos24;
-	int pos[2];
-	int vol24;
-	int dvol24;
-	int dpos24;
-	float grate_ratio;
-	float multisample_grate;
-	int bufadjust; // for reverse grains, we adjust the dma buffer address by this many samples
-	int outflags;
-} GrainPair;
 
 typedef struct SysParams {
 	u8 preset_id;

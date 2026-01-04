@@ -123,7 +123,7 @@ static void adc_smooth_value(ValueSmoother* s, float new_val) {
 	s->y2 += (s->y1 - s->y2) * g;
 }
 
-void adc_update_inputs(void) {
+void adc_dac_tick(void) {
 	// why don't we clamp in the calib stage? and why aren't all calls to value_calib clamped?
 	adc_smooth_value(adc_smoother + ADC_S_A_CV, clampf(adc_get_calib(ADC_A_CV), -1.f, 1.f));
 	adc_smooth_value(adc_smoother + ADC_S_B_CV, clampf(adc_get_calib(ADC_B_CV), -1.f, 1.f));

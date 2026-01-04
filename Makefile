@@ -44,7 +44,6 @@ SRCS = \
 	sw/Core/Src/plinky/synth/params.c \
 	sw/Core/Src/plinky/synth/sampler.c \
 	sw/Core/Src/plinky/synth/sequencer.c \
-	sw/Core/Src/plinky/synth/strings.c \
 	sw/Core/Src/plinky/synth/synth.c \
 	sw/Core/Src/plinky/synth/time.c \
 	sw/Core/Src/plinky/ui/led_viz.c \
