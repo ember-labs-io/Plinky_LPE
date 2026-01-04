@@ -5,7 +5,7 @@
 #include "hardware/memory.h"
 #include "hardware/midi.h"
 #include "hardware/touchstrips.h"
-#include "synth/strings.h"
+#include "synth/synth.h"
 
 #define NUM_ITEMS 64
 

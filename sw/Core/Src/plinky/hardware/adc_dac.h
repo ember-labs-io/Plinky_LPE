@@ -14,7 +14,7 @@ float adc_get_smooth(ADCSmoothIndex index);
 s32 apply_dac_pitch_calib(bool pitch_hi, s32 pitch_uncalib);
 s32 get_dac_pitch_octave(bool pitch_hi);
 
-void adc_update_inputs(void);
+void adc_dac_tick(void);
 
 // cv
 

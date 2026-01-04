@@ -5,10 +5,9 @@
 #include "pad_actions.h"
 #include "settings_menu.h"
 #include "synth/params.h"
-#include "synth/pitch_tools.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
-#include "synth/strings.h"
+#include "synth/synth.h"
 
 static u8 pulse_eighth;
 static u8 pulse_half;
@@ -31,7 +30,6 @@ static void precalc_waves(float** next_wave_ptr) {
 	float* next_wave = *next_wave_ptr;
 
 	u8 i = 0;
-	const s16* string_pressures = get_string_pressures();
 	for (u8 y = 0; y < 8; ++y) {
 		for (u8 x = 0; x < 8; ++x, ++i) {
 			float corners = 0.f;
@@ -56,8 +54,9 @@ static void precalc_waves(float** next_wave_ptr) {
 			}
 			float target = corners * (1.f / 12.f) + edges * (1.f * 2.f / 12.f);
 			target *= life_damping;
-			if (get_string_pos(x) >> 8 == y) {
-				float pressure = string_pressures[x] * (1.f / 2048.f);
+			const Touch* c_touch = &get_synth_string(x)->cur_touch;
+			if (c_touch->pos >> 8 == y) {
+				float pressure = c_touch->pres * (1.f / 2048.f);
 				target = lerp(target, life_input_power, clampf(pressure * 2.f, 0.f, 1.f));
 			}
 			float pos = prev_wave[i];
@@ -89,7 +88,6 @@ static void draw_main_leds(void) {
 	// prepare pitch calc
 	s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
 
-	const s16* string_pressures = get_string_pressures();
 	for (u8 x = 0; x < 8; ++x) {
 		// prepare sample points
 		int sp0 = cur_sample_info.splitpoints[x];
@@ -117,8 +115,9 @@ static void draw_main_leds(void) {
 			k = maxi(k, clampi((int)((next_wave[x + y * 8]) * 64.f) - 20, 0, 128));
 
 			// draw finger press
-			if (get_string_pos(x) / 256 == y)
-				k = maxi(k, mini(string_pressures[x] / 8, 255));
+			const Touch* c_touch = &get_synth_string(x)->cur_touch;
+			if (c_touch->pos / 256 == y)
+				k = maxi(k, mini(c_touch->pres / 8, 255));
 
 			// draw seq press
 			k = maxi(k, seq_press_led(x, y));

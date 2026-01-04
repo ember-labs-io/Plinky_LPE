@@ -14,7 +14,6 @@
 #include "synth/params.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
-#include "synth/strings.h"
 #include "synth/synth.h"
 #include "synth/time.h"
 #include "ui/led_viz.h"
@@ -183,7 +182,7 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 	log_time();
 
 	// midi
-	process_midi();
+	midi_tick();
 
 	// clock
 	clock_tick();
@@ -193,7 +192,7 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 
 	log_time();
 
-	// combine physical, latch, sequencer touches; run arp
+	// combine physical, latch, sequencer, arp touches
 	generate_string_touches();
 
 	log_time();

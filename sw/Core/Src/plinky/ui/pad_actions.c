@@ -6,7 +6,7 @@
 #include "synth/params.h"
 #include "synth/sampler.h"
 #include "synth/sequencer.h"
-#include "synth/strings.h"
+#include "synth/synth.h"
 #include "synth/time.h"
 
 FunctionPad function_pressed = FN_NONE;

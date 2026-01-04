@@ -7,7 +7,6 @@
 #include "hardware/memory.h"
 #include "hardware/spi.h"
 #include "params.h"
-#include "strings.h"
 #include "synth.h"
 
 SamplerMode sampler_mode = SM_PREVIEW;
