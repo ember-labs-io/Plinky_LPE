@@ -830,7 +830,10 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, s8* note_num
 s32 midi_get_pitch(u8 string_id) {
 	MidiString* m_string = &midi_string[string_id];
 	return NOTE_NR_TO_PITCH(m_string->note_number)
-	       + ((m_string->mpe ? m_string->pitchbend * max_string_bend_pitch : channel_pitchbend * max_channel_bend_pitch)
+	       // always add channel pitchbend
+	       + ((channel_pitchbend * max_channel_bend_pitch
+	           // add poly pitchbend for mpe strings
+	           + (m_string->mpe ? m_string->pitchbend * max_string_bend_pitch : 0))
 	          >> 13);
 }
 
