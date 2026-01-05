@@ -66,6 +66,7 @@ static MidiString midi_string[NUM_STRINGS];
 // mpe
 static u8 manager_chan = 0;
 static u8 num_member_chans = 8;
+static u8 midi_out_channel;
 
 // cue midi out
 static u8 clocks_to_send = 0;
@@ -152,9 +153,9 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	// exit if serial buffer full
 	if (midi_send_head - midi_send_tail + num_bytes > MIDI_BUFFER_SIZE)
 		return false;
-	// prepare message
+	// set midi channel
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
-		status += sys_params.midi_out_chan;
+		status += midi_out_channel;
 	// prepare usb packet
 	u8 buf[4] = {status >> 4, status, data1, data2};
 
@@ -265,8 +266,11 @@ static bool cue_midi_string_out(void) {
 	const Touch* touch = get_touch(string_id, 0);
 	const SynthString* s_string = get_synth_string(string_id);
 	u16 string_pres = clampi(s_string->cur_touch.pres, 0, TOUCH_FULL_PRES);
-	u8 string_vel = mini(s_string->start_velocity, 1);
+	u8 string_vel = maxi(s_string->start_velocity, 1);
 	LastSentString* m_last = &last_sent_string[string_id];
+	bool using_mpe = sys_params.midi_out_pres_type == MP_MPE_PRESSURE;
+
+	midi_out_channel = using_mpe ? string_id + 1 : sys_params.midi_out_chan;
 
 	switch (msg_state) {
 	case MSG_NOTE: {
@@ -296,18 +300,20 @@ static bool cue_midi_string_out(void) {
 		msg_state++;
 		// fall thru
 	}
+	// this handles MIDI_POLY_KEY_PRESSURE for default midi and MIDI_CHANNEL_PRESSURE for mpe
 	case MSG_POLY_PRESSURE: {
 		static u8 poly_pres = 0;
 		static u8 min_diff = 5;
-		// only update when poly pressure is selected
-		if (sys_params.midi_out_pres_type == MP_POLY_AFTERTOUCH) {
+		// only update for mpe and poly aftertouch
+		if (using_mpe || sys_params.midi_out_pres_type == MP_POLY_AFTERTOUCH) {
 			poly_pres = midi_out_pressure(string_pres, string_vel);
 			// require a difference of 5, unless this is an extreme value
 			min_diff = (poly_pres == 0 || poly_pres == 127) ? 1 : 5;
 		}
 		// send if changed
 		if (abs(poly_pres - m_last->pressure) >= min_diff) {
-			if (!send_midi_msg(MIDI_POLY_KEY_PRESSURE, m_last->note_number, poly_pres))
+			if (using_mpe ? !send_midi_msg(MIDI_CHANNEL_PRESSURE, poly_pres, 0)
+			              : !send_midi_msg(MIDI_POLY_KEY_PRESSURE, m_last->note_number, poly_pres))
 				return false;
 			m_last->pressure = poly_pres;
 		}
