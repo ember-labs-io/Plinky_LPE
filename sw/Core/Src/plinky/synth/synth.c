@@ -684,9 +684,6 @@ static void generate_string_touch(u8 string_id) {
 	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity))
 		s_string->using_midi = true;
 
-	// scale pressure with cv gate input
-	pressure = pressure * adc_get_smooth(ADC_S_GATE);
-
 	// === FINISHING UP === //
 
 	Touch prev_touch = s_string->touch_frames[(synth_write_frame + 7) & 7];
@@ -979,8 +976,6 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 		// these only get used by touch
 		Scale scale = NUM_SCALES;
-		s32 cv_pitch_offset = 0;
-		s8 cv_step_offset = 0;
 		s16 string_step_offset = 0;
 
 		// saving string values that are the same for all oscillators
@@ -1001,13 +996,6 @@ static void run_voice(u8 voice_id, u32* dst) {
 			scale = param_index_poly(PP_SCALE, voice_id);
 			if (scale >= NUM_SCALES)
 				scale = 0;
-
-			// cv
-			s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
-			if (sys_params.cv_quant == CVQ_SCALE)
-				cv_step_offset = (((PITCH_TO_SEMIS(cv_pitch)) * scale_table[scale][0] + 1) / 12); // quantized cv
-			else
-				cv_pitch_offset = cv_pitch; // unquantized cv
 			string_step_offset = step_at_string(voice_id, scale);
 		}
 
@@ -1027,13 +1015,12 @@ static void run_voice(u8 voice_id, u32* dst) {
 				u16 position = s_touch_sort++->pos; // touch position
 				u8 pad_y = 7 - (position >> 8);     // pad on string
 				// pitch at step + cv
-				note_pitch = pitch_at_step(string_step_offset + pad_y + cv_step_offset, scale) + cv_pitch_offset;
+				note_pitch = pitch_at_step(string_step_offset + pad_y, scale);
 
 				// detuning scaled by microtune param
 				s16 fine_pos = 127 - (position & 255); // offset from pad center
 				u16 pitch_to_next_pad =
-				    abs(pitch_at_step(string_step_offset + pad_y + cv_step_offset + (fine_pos > 0 ? 1 : -1), scale)
-				        + cv_pitch_offset - note_pitch);
+				    abs(pitch_at_step(string_step_offset + pad_y + (fine_pos > 0 ? 1 : -1), scale) - note_pitch);
 				s32 micro_tune = ((64 + microtone) * pitch_to_next_pad) >> 10;
 				fine_pitch = (fine_pos * micro_tune) >> 14;
 			}

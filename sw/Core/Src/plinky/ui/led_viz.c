@@ -85,9 +85,6 @@ static void draw_main_leds(void) {
 	float* next_wave;
 	precalc_waves(&next_wave);
 
-	// prepare pitch calc
-	s32 cv_pitch = adc_get_smooth(ADC_S_PITCH);
-
 	for (u8 x = 0; x < 8; ++x) {
 		// prepare sample points
 		int sp0 = cur_sample_info.splitpoints[x];
@@ -96,9 +93,6 @@ static void draw_main_leds(void) {
 		Scale scale = param_index_poly(PP_SCALE, x);
 		u8 steps_in_scale = scale_table[scale][0];
 		s16 start_step = step_at_string(x, scale);
-		// quantized cv offset
-		if (sys_params.cv_quant == CVQ_SCALE)
-			start_step += (PITCH_TO_SEMIS(cv_pitch) * steps_in_scale + 6) / 12;
 
 		// Find first pad that lands on step % steps_in_scale == 0
 		s16 first_y = ((-start_step % steps_in_scale) + steps_in_scale) % steps_in_scale;
