@@ -76,6 +76,15 @@ static bool mod_wheel_14bit = false;
 static u8 manager_chan = 0;
 static u8 num_member_chans = 8;
 
+// NRPNs
+static u14 nrpn_id[NUM_STRINGS] = {{UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX},
+                                   {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}};
+static u14 rpn_id[NUM_STRINGS] = {{UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX},
+                                  {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}};
+static u14 n_rpn_value[NUM_STRINGS] = {};             // shared value for nrpn and rpn
+static bool received_n_rpn_data[NUM_STRINGS][2] = {}; // is the full 14 bit value received?
+static u8 rpn_last_received = 0;                      // was rpn or nrpn number last received?
+
 // cue midi out
 static u8 midi_out_channel;
 static u8 clocks_to_send = 0;
@@ -151,10 +160,9 @@ static void reset_controls(u8 string_id) {
 	m_string->pitchbend.value = UINT14_HALF;
 	update_string_pitchbend(string_id);
 	m_string->pressure = 0;
-	params_rcv_cc(CC_NRPN_LSB, 127, true, string_id);
-	params_rcv_cc(CC_NRPN_MSB, 127, true, string_id);
-	params_rcv_cc(CC_RPN_LSB, 127, true, string_id);
-	params_rcv_cc(CC_RPN_MSB, 127, true, string_id);
+	nrpn_id[string_id].value = UINT14_MAX;
+	rpn_id[string_id].value = UINT14_MAX;
+	received_n_rpn_data[string_id][0] = received_n_rpn_data[string_id][1] = false;
 }
 
 static void register_press(u8 string_id, bool mpe, u8 note, u8 velocity, u16 position) {
@@ -527,6 +535,151 @@ static void cue_midi_out(void) {
 	} while (buffer_free && midi_send_head == initial_send_head && strings_checked < NUM_STRINGS);
 }
 
+static void try_apply_n_rpn(bool is_rpn, u8 nrpn_string, bool mpe) {
+	typedef enum NRPN_Action {
+		NA_NONE,
+		NA_SET_PARAM,
+		NA_SET_MOD,
+	} NRPN_Action;
+
+	// value not fully received
+	if (!received_n_rpn_data[nrpn_string][0] || !received_n_rpn_data[nrpn_string][1])
+		return;
+
+	// rpn
+	if (is_rpn)
+		return;
+
+	// nrpn: work out the action to take
+	NRPN_Action nrpn_action = NA_NONE;
+	u8 id_msb = nrpn_id[nrpn_string].msb;
+	u8 string_id;
+	bool poly;
+	// on a member channel
+	if (mpe) {
+		// poly param set through member channel
+		if (id_msb == 0) {
+			nrpn_action = NA_SET_PARAM;
+			poly = true;
+			string_id = nrpn_string;
+		}
+		// msb invalid
+		else
+			return;
+	}
+	// on the global channel
+	else {
+		// 0 => global param set through global channel
+		if (id_msb == 0) {
+			nrpn_action = NA_SET_PARAM;
+			poly = false;
+			string_id = 0;
+		}
+		// 1-7 => invalid
+		else if (id_msb < 8)
+			return;
+		// 8-15 => poly param set through global channel
+		else if (id_msb < 16) {
+			nrpn_action = NA_SET_PARAM;
+			poly = true;
+			string_id = id_msb - 8;
+		}
+		// 16 => invalid
+		else if (id_msb == 16)
+			return;
+		// 17-23 => set modulation
+		else if (id_msb < 24) {
+			nrpn_action = NA_SET_MOD;
+		}
+		// msb invalid
+		else
+			return;
+	}
+
+	// take action
+	u8 param_id = nrpn_id[nrpn_string].lsb;
+
+	if (param_id >= NUM_PARAMS)
+		return;
+
+	switch (nrpn_action) {
+	case NA_NONE:
+		break;
+	case NA_SET_PARAM:
+		set_param_from_nrpn(param_id, n_rpn_value[nrpn_string], poly, string_id);
+		break;
+	case NA_SET_MOD:
+		set_mod_from_nrpn(param_id, n_rpn_value[nrpn_string], id_msb - 16);
+		break;
+	}
+}
+
+static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe, u8 string_id) {
+	u14* n_id = &nrpn_id[string_id];
+	u14* r_id = &rpn_id[string_id];
+	u14* value = &n_rpn_value[string_id];
+	bool* received = received_n_rpn_data[string_id];
+	u8 mask = 1 << string_id;
+	bool rpn_last = rpn_last_received & mask;
+
+	switch (cc_number) {
+	case CC_DATA_MSB:
+		value->msb = cc_value;
+		received[0] = true;
+		try_apply_n_rpn(rpn_last, string_id, mpe);
+		return true;
+	case CC_DATA_LSB:
+		value->lsb = cc_value;
+		received[1] = true;
+		try_apply_n_rpn(rpn_last, string_id, mpe);
+		return true;
+	case CC_DATA_INC:
+		// no valid value
+		if (!received[0] || !received[1])
+			return true;
+		// maxed out
+		if (value->value == UINT14_MAX)
+			return true;
+		// increase
+		value->value++;
+		try_apply_n_rpn(rpn_last, string_id, mpe);
+		return true;
+	case CC_DATA_DEC:
+		// no valid value
+		if (!received[0] || !received[1])
+			return true;
+		// minned out
+		if (value->value == 0)
+			return true;
+		// decrease
+		value->value--;
+		try_apply_n_rpn(rpn_last, string_id, mpe);
+		return true;
+	case CC_NRPN_LSB:
+		n_id->lsb = cc_value;
+		received[0] = received[1] = false;
+		rpn_last_received &= ~mask;
+		return true;
+	case CC_NRPN_MSB:
+		n_id->msb = cc_value;
+		received[0] = received[1] = false;
+		rpn_last_received &= ~mask;
+		return true;
+	case CC_RPN_LSB:
+		r_id->lsb = cc_value;
+		received[0] = received[1] = false;
+		rpn_last_received |= mask;
+		return true;
+	case CC_RPN_MSB:
+		r_id->msb = cc_value;
+		received[0] = received[1] = false;
+		rpn_last_received |= mask;
+		return true;
+	default:
+		return false;
+	}
+}
+
 // apply midi messages to plinky
 static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	MidiMessageType type = status & MIDI_TYPE_MASK;
@@ -645,6 +798,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			channel_pressure = data1;
 			break;
 		case MIDI_CONTROL_CHANGE:
+			if (try_handle_n_rpn(data1, data2, false, 0))
+				break;
 			switch (data1) {
 			// update all string mod wheels
 			case CC_MOD_WHEEL:
@@ -730,6 +885,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			m_string->pressure = data1;
 			break;
 		case MIDI_CONTROL_CHANGE:
+			if (try_handle_n_rpn(data1, data2, true, string_id))
+				break;
 			switch (data1) {
 			case CC_MOD_WHEEL:
 				m_string->mod_wheel.msb = data2;
