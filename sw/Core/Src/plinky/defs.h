@@ -92,6 +92,11 @@ static u16 const sync_divs_32nds[NUM_SYNC_DIVS] = {1,  2,  3,  4,  5,   6,   8, 
                                                    48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512, 640, 768, 1024};
 static u8 const ppqn_values[NUM_PPQN_VALUES] = {1, 2, 4, 8, 16, 24, 48};
 
+// MIDI
+
+#define NUM_BEND_RANGES 8
+static u8 const bend_ranges[NUM_BEND_RANGES] = {1, 2, 7, 12, 14, 24, 48, 96};
+
 // GRAPHICS
 
 #define OLED_WIDTH 128
@@ -241,6 +246,9 @@ typedef enum SysParam {
 	SYS_MIDI_OUT_LFOS,
 	SYS_MIDI_OUT_PARAMS,
 	SYS_MIDI_SOFT_THRU,
+	SYS_MIDI_CHANNEL_BEND_RANGE_IN,
+	SYS_MIDI_STRING_BEND_RANGE_IN,
+	SYS_MIDI_STRING_BEND_RANGE_OUT,
 } SysParam;
 
 typedef enum MidiPressureType {
@@ -967,10 +975,14 @@ typedef struct SysParams {
 	MidiPressureType midi_in_pres_type : 2;
 	MidiPressureType midi_out_pres_type : 2;
 	u8 midi_out_ccs : 1;
+	u8 midi_channel_bend_range_in : 3;
 	u8 midi_out_lfos : 1;
 	u8 midi_out_params : 1;
+	u8 midi_string_bend_range_in : 3;
+	u8 midi_string_bend_range_out : 3;
 	u8 midi_soft_thru : 1;
-	u8 pad[16 - 10];
+	u8 paddy : 7;
+	u8 pad[16 - 12];
 	u8 version;
 } SysParams;
 
