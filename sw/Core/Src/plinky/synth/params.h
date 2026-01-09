@@ -10,6 +10,8 @@ bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
 void align_poly_params(void);
+void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id);
+void set_mod_from_nrpn(Param param_id, u14 value, ModSource mod_src);
 void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 member_string);
 
 // main
