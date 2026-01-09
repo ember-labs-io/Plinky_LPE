@@ -5,6 +5,7 @@
 bool midi_string_used(u8 string_id);
 void midi_try_get_touch(u8 string_id, s16* pressure, s16* position);
 s32 midi_get_pitch(u8 string_id);
+void midi_precalc_bends(void);
 void midi_try_end_note(u8 string_id);
 void midi_clear_all(void);
 

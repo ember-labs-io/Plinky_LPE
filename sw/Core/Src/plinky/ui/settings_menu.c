@@ -26,6 +26,8 @@ typedef enum Item {
 	I_MIDI_IN_VEL_BALANCE,
 	I_MIDI_IN_PRES_TYPE,
 	I_MIDI_IN_CLOCK_MULT,
+	I_MIDI_CHANNEL_BEND_RANGE_IN,
+	I_MIDI_STRING_BEND_RANGE_IN,
 	// midi out
 	I_MIDI_OUT_CH = S_MIDI_OUT * 8,
 	I_MIDI_OUT_VEL_BALANCE,
@@ -34,6 +36,7 @@ typedef enum Item {
 	I_MIDI_OUT_LFOS,
 	I_MIDI_OUT_PARAMS,
 	I_MIDI_SOFT_THRU,
+	I_MIDI_STRING_BEND_RANGE_OUT,
 	// cv
 	I_CV_QUANT = S_CV * 8,
 	I_CV_PPQN_IN,
@@ -56,12 +59,15 @@ const static u8 num_options[NUM_ITEMS] = {
     [I_MIDI_IN_CLOCK_MULT] = 3,
     [I_MIDI_IN_VEL_BALANCE] = 129,
     [I_MIDI_OUT_VEL_BALANCE] = 129,
+    [I_MIDI_CHANNEL_BEND_RANGE_IN] = NUM_BEND_RANGES,
+    [I_MIDI_STRING_BEND_RANGE_IN] = NUM_BEND_RANGES,
     [I_MIDI_IN_PRES_TYPE] = NUM_MIDI_PRESSURE_TYPES,
     [I_MIDI_OUT_PRES_TYPE] = NUM_MIDI_PRESSURE_TYPES,
     [I_MIDI_OUT_CCS] = 3,
     [I_MIDI_OUT_LFOS] = 2,
     [I_MIDI_OUT_PARAMS] = 2,
     [I_MIDI_SOFT_THRU] = 2,
+    [I_MIDI_STRING_BEND_RANGE_OUT] = NUM_BEND_RANGES,
     [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
     [I_CV_PPQN_IN] = NUM_PPQN_VALUES,
     [I_CV_PPQN_OUT] = NUM_PPQN_VALUES,
@@ -83,6 +89,8 @@ const static char* item_name[NUM_ITEMS] = {
     [I_MIDI_IN_VEL_BALANCE] = "Vel/Pres",
     [I_MIDI_IN_PRES_TYPE] = "AfterTch",
     [I_MIDI_IN_CLOCK_MULT] = "Clock mult",
+    [I_MIDI_CHANNEL_BEND_RANGE_IN] = "Bend",
+    [I_MIDI_STRING_BEND_RANGE_IN] = "Ch bend",
     [I_MIDI_OUT_CH] = "Channel",
     [I_MIDI_OUT_VEL_BALANCE] = "Vel/Pres",
     [I_MIDI_OUT_PRES_TYPE] = "AfterTch",
@@ -90,6 +98,7 @@ const static char* item_name[NUM_ITEMS] = {
     [I_MIDI_OUT_LFOS] = "LFO CCs",
     [I_MIDI_OUT_PARAMS] = "Param CCs",
     [I_MIDI_SOFT_THRU] = "Thru",
+    [I_MIDI_STRING_BEND_RANGE_OUT] = "Ch bend",
     [I_CV_QUANT] = "Quant",
     [I_CV_PPQN_IN] = "PPQN in",
     [I_CV_PPQN_OUT] = "PPQN out",
@@ -131,6 +140,12 @@ static void select_item(Item item, bool force) {
 	case I_MIDI_IN_CLOCK_MULT:
 		cur_value = sys_params.midi_in_clock_mult;
 		break;
+	case I_MIDI_CHANNEL_BEND_RANGE_IN:
+		cur_value = sys_params.midi_channel_bend_range_in;
+		break;
+	case I_MIDI_STRING_BEND_RANGE_IN:
+		cur_value = sys_params.midi_string_bend_range_in;
+		break;
 	case I_MIDI_OUT_CH:
 		cur_value = sys_params.midi_out_chan;
 		break;
@@ -151,6 +166,9 @@ static void select_item(Item item, bool force) {
 		break;
 	case I_MIDI_SOFT_THRU:
 		cur_value = sys_params.midi_soft_thru;
+		break;
+	case I_MIDI_STRING_BEND_RANGE_OUT:
+		cur_value = sys_params.midi_string_bend_range_out;
 		break;
 	case I_CV_QUANT:
 		cur_value = sys_params.cv_quant;
@@ -188,6 +206,14 @@ static void save_value(s16 value) {
 	case I_MIDI_IN_CLOCK_MULT:
 		set_sys_param(SYS_MIDI_IN_CLOCK_MULT, value);
 		break;
+	case I_MIDI_CHANNEL_BEND_RANGE_IN:
+		set_sys_param(SYS_MIDI_CHANNEL_BEND_RANGE_IN, value);
+		midi_precalc_bends();
+		break;
+	case I_MIDI_STRING_BEND_RANGE_IN:
+		set_sys_param(SYS_MIDI_STRING_BEND_RANGE_IN, value);
+		midi_precalc_bends();
+		break;
 	case I_MIDI_OUT_CH:
 		if (set_sys_param(SYS_MIDI_OUT_CHAN, value))
 			midi_clear_all();
@@ -209,6 +235,10 @@ static void save_value(s16 value) {
 		break;
 	case I_MIDI_SOFT_THRU:
 		set_sys_param(SYS_MIDI_SOFT_THRU, value);
+		break;
+	case I_MIDI_STRING_BEND_RANGE_OUT:
+		set_sys_param(SYS_MIDI_STRING_BEND_RANGE_OUT, value);
+		midi_precalc_bends();
 		break;
 	case I_CV_QUANT:
 		set_sys_param(SYS_CV_QUANT, value);
@@ -383,6 +413,13 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_CV_PPQN_IN:
 	case I_CV_PPQN_OUT:
 		sprintf(val_buf, "%d", ppqn_values[value]);
+		return val_buf;
+	// bend ranges
+	case I_MIDI_CHANNEL_BEND_RANGE_IN:
+	case I_MIDI_STRING_BEND_RANGE_IN:
+	case I_MIDI_STRING_BEND_RANGE_OUT:
+		sprintf(val_buf, "%d%ssemi", bend_ranges[value],
+		        (item == I_MIDI_STRING_BEND_RANGE_IN || item == I_MIDI_STRING_BEND_RANGE_OUT) && value >= 5 ? "" : " ");
 		return val_buf;
 	default:
 		sprintf(val_buf, "%d", value);

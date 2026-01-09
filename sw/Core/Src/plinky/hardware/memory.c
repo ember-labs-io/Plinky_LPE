@@ -240,6 +240,15 @@ bool set_sys_param(SysParam param, u16 value) {
 	case SYS_MIDI_SOFT_THRU:
 		saved_value = sys_params.midi_soft_thru;
 		break;
+	case SYS_MIDI_CHANNEL_BEND_RANGE_IN:
+		saved_value = sys_params.midi_channel_bend_range_in;
+		break;
+	case SYS_MIDI_STRING_BEND_RANGE_IN:
+		saved_value = sys_params.midi_string_bend_range_in;
+		break;
+	case SYS_MIDI_STRING_BEND_RANGE_OUT:
+		saved_value = sys_params.midi_string_bend_range_out;
+		break;
 	}
 	if (value == saved_value)
 		return false;
@@ -304,6 +313,15 @@ bool set_sys_param(SysParam param, u16 value) {
 		break;
 	case SYS_MIDI_SOFT_THRU:
 		sys_params.midi_soft_thru = value;
+		break;
+	case SYS_MIDI_CHANNEL_BEND_RANGE_IN:
+		sys_params.midi_channel_bend_range_in = value;
+		break;
+	case SYS_MIDI_STRING_BEND_RANGE_IN:
+		sys_params.midi_string_bend_range_in = value;
+		break;
+	case SYS_MIDI_STRING_BEND_RANGE_OUT:
+		sys_params.midi_string_bend_range_out = value;
 		break;
 	}
 	log_ram_edit(SEG_SYS_PARAMS);

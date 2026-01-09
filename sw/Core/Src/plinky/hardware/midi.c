@@ -20,12 +20,12 @@ extern UART_HandleTypeDef huart3;
 #define MIDI_BUFFER_SIZE 16
 #define THRU_BUFFER_SIZE 16
 
-#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (channel_pitchbend * channel_bend_sens >> 13))
+#define PITCH_OFFSET_FROM_NOTE(midi_note) ((((midi_note) - 24) << 9) + (channel_pitchbend * channel_bend_sens_in >> 13))
 
 #define PITCH_OFFSET_FROM_NOTE_MPE(string_id, midi_note)                                                               \
 	((((midi_note) - 24) << 9)                                                                                         \
-	 + ((midi_string[string_id].assigned_by_mpe ? midi_string[string_id].pitchbend * voice_bend_sens                   \
-	                                            : channel_pitchbend * channel_bend_sens)                               \
+	 + ((midi_string[string_id].assigned_by_mpe ? midi_string[string_id].pitchbend * string_bend_sens_in               \
+	                                            : channel_pitchbend * channel_bend_sens_in)                            \
 	    >> 13))
 
 #define MIXED_PRESSURE(full_pressure, midi_velocity)                                                                   \
@@ -74,8 +74,9 @@ static u8 midi_send_tail;
 static u8 mod_wheel[NUM_STRINGS];
 static u8 channel_pressure;
 static s16 channel_pitchbend;
-static u16 channel_bend_sens = 2 * PITCH_PER_SEMI; // default: 2 semis
-static u16 voice_bend_sens = 48 * PITCH_PER_SEMI;  // default: 48 semis
+static u16 channel_bend_sens_in;
+static u16 string_bend_sens_in;
+static u16 string_bend_sens_out; // not implemented yet
 static bool sustain_pressed[NUM_STRINGS] = {};
 static MidiString midi_string[NUM_STRINGS];
 
@@ -163,6 +164,12 @@ s32 midi_get_pitch(u8 string_id) {
 	return PITCH_OFFSET_FROM_NOTE_MPE(string_id, midi_string[string_id].note);
 }
 
+void midi_precalc_bends(void) {
+	channel_bend_sens_in = SEMIS_TO_PITCH(bend_ranges[sys_params.midi_channel_bend_range_in]);
+	string_bend_sens_in = SEMIS_TO_PITCH(bend_ranges[sys_params.midi_string_bend_range_in]);
+	string_bend_sens_out = SEMIS_TO_PITCH(bend_ranges[sys_params.midi_string_bend_range_out]);
+}
+
 // a midi note ends when it's ringing out and it's gone quiet, or overwritten by a different press
 void midi_try_end_note(u8 string_id) {
 	if (midi_string[string_id].state == MS_RINGING_OUT
@@ -174,6 +181,7 @@ void midi_try_end_note(u8 string_id) {
 
 void init_midi(void) {
 	midi_clear_all();
+	midi_precalc_bends();
 	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
 }
 
