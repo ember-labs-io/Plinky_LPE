@@ -69,16 +69,19 @@ static Voice voices[NUM_VOICES];
 static SynthString synth_string[NUM_STRINGS];
 
 static u8 synth_write_frame;
+static u8 write_frame_mask;
 static u8 synth_read_frame;
+static u8 read_frame_mask;
 
 static u8 phys_touch_mask = 0;
-static bool cv_trig_high = false;   // should cv trigger be high?
-static s32 cv_gate_value;           // cv gate value
-static bool got_high_pitch = false; // did we save a high pitch?
-static s32 high_string_pitch = 0;   // pitch on highest touched string
-static bool got_low_pitch = false;  // did we save a low pitch?
-static s32 low_string_pitch = 0;    // pitch on lowest touched string
-static u16 synth_max_pres = 0;      // highest pressure seen
+static bool cv_trig_high = false;    // should cv trigger be high?
+static s32 cv_gate_value;            // cv gate value
+static bool got_high_pitch = false;  // did we save a high pitch?
+static s32 high_string_pitch_4x = 0; // pitch on highest touched string
+static s16 high_string_note = 0;     // note on highest touched string
+static bool got_low_pitch = false;   // did we save a low pitch?
+static s32 low_string_pitch_4x = 0;  // pitch on lowest touched string
+static u16 synth_max_pres = 0;       // highest pressure seen
 
 const SynthString* get_synth_string(u8 string_id) {
 	return &synth_string[string_id];
@@ -94,7 +97,7 @@ static s32 pitch_at_step(s8 step, Scale scale) {
 		step += steps_in_scale;
 		oct--;
 	}
-	return oct * PITCH_PER_OCT + scale_table[scale][step + 1];
+	return OCTS_TO_PITCH(oct) + scale_table[scale][step + 1];
 }
 
 s16 step_at_string(u8 string_id, Scale scale) {
@@ -210,7 +213,7 @@ static s32 string_center_pitch(u8 string_id, Scale scale) {
 	if (pitch4 < pitch3)
 		pitch4 += PITCH_PER_OCT;
 	// return average plus octave offset
-	return ((pitch3 + pitch4) >> 1) + oct * PITCH_PER_OCT;
+	return ((pitch3 + pitch4) >> 1) + OCTS_TO_PITCH(oct);
 }
 
 u8 find_string_for_pitch(s32 pitch) {
@@ -679,10 +682,11 @@ static void generate_string_touch(u8 string_id) {
 
 	// any available pressure from touch/latch/sequencer overrides midi
 	if (pressure > 0)
-		s_string->using_midi = false;
+		s_string->using_midi &= ~write_frame_mask;
 	// retrieve touch from midi
-	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity))
-		s_string->using_midi = true;
+	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
+	                            &s_string->pitchbend_pitch))
+		s_string->using_midi |= write_frame_mask;
 
 	// === FINISHING UP === //
 
@@ -746,6 +750,9 @@ void generate_string_touches(void) {
 			synth_read_frame = synth_write_frame;
 			// we write to the frame that is currently being processed by the touchstrips
 			synth_write_frame = touch_frame;
+			// utility masks
+			read_frame_mask = 1 << synth_read_frame;
+			write_frame_mask = 1 << synth_write_frame;
 			arp_next_strings_frame_trig();
 		}
 	}
@@ -790,7 +797,7 @@ void generate_string_touches(void) {
 		if (!s_string->touched)
 			c_touch->pres = TOUCH_MIN_PRES;
 		// generate start velocity for non-midi touches
-		if (!s_string->using_midi && s_string->env_trigger)
+		if (!(s_string->using_midi & read_frame_mask) && s_string->env_trigger)
 			s_string->start_velocity = clampi((c_touch->pres << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
 	}
 }
@@ -955,8 +962,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 		synth_max_pres = pressure;
 
 	// turn off midi note if it has rung out
-	if (s_string->using_midi && !s_string->touched && !voice_audible)
-		s_string->using_midi = false;
+	if ((s_string->using_midi & read_frame_mask) && !s_string->touched && !voice_audible)
+		s_string->using_midi &= ~read_frame_mask;
 
 	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes
 	// against eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value
@@ -969,94 +976,122 @@ static void run_voice(u8 voice_id, u32* dst) {
 	// == GENERATE OSCILLATOR PITCHES == //
 
 	if (s_string->touched || voice_audible) {
-		s32 note_pitch = 0;   // pitch offset caused by the played note
-		s32 fine_pitch = 0;   // pitch offset caused by micro_tone / spread
-		s32 osc_pitch = 0;    // resulting pitch of current oscillator
-		s32 summed_pitch = 0; // summed pitch of four oscillators
+		// precalc some pitches
+		s32 oct_pitch_offset = OCTS_TO_PITCH(arp_oct_offset + param_index_poly(PP_OCT, voice_id));
+		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
+		s32 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
+		s32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
+		bool using_midi = !!(s_string->using_midi & read_frame_mask);
+
+		// we're filling these
+		s32 note_pitch = 0;
+		s32 pitchbend_pitch = 0;
+
+		// for averages
+		s32 note_pitch_4x = 0;
+		s32 pitchbend_pitch_4x = 0;
 
 		// these only get used by touch
-		Scale scale = NUM_SCALES;
+		Touch* s_touch_sort = &s_string->touch_sorted[2]; // we use pitches 2-5, discarding extreme values
+		Scale scale = S_MAJOR;
 		s16 string_step_offset = 0;
 
-		// saving string values that are the same for all oscillators
-
-		s32 base_pitch = 12 *
-		                 // pitch from arp and the octave parameter
-		                 (((arp_oct_offset + param_index_poly(PP_OCT, voice_id)) << 9)
-		                  // pitch from the pitch parameter
-		                  + (param_val_poly(PP_PITCH, voice_id) >> 7));
-		// pitch from interval parameter
-		s32 osc_interval_pitch = (param_val_poly(PP_INTERVAL, voice_id) * 12) >> 7;
-
-		// for midi
-		if (s_string->using_midi)
-			note_pitch = midi_get_pitch(voice_id);
-		// for touch
+		if (using_midi)
+			note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
 		else {
 			scale = param_index_poly(PP_SCALE, voice_id);
-			if (scale >= NUM_SCALES)
-				scale = 0;
 			string_step_offset = step_at_string(voice_id, scale);
 		}
 
-		// we discard the two highest and lowest positions and use elements 2 through 5 to generate our oscillator
-		// pitches
-		Touch* s_touch_sort = &s_string->touch_sorted[2];
-
 		// loop through oscillators
-		s32 microtone = param_val_poly(PP_MICROTONE, voice_id);
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
+			s32 pitch_param_fine_pitch = 0;
+			s32 osc_pitch = 0;
+
 			// for midi
-			if (s_string->using_midi)
+			if (using_midi)
 				// generate pitch spread
-				fine_pitch = (osc_id - 2) * 64 * microtone >> 16;
+				pitchbend_pitch = s_string->pitchbend_pitch + ((osc_id - 2) * micro_param >> 10);
 			// for touch
 			else {
 				u16 position = s_touch_sort++->pos; // touch position
 				u8 pad_y = 7 - (position >> 8);     // pad on string
-				// pitch at step + cv
-				note_pitch = pitch_at_step(string_step_offset + pad_y, scale);
+				s8 total_step_offset = string_step_offset + pad_y;
+				s32 pad_pitch = pitch_at_step(total_step_offset, scale);
+				if (abs(pitch_param_pitch) < PITCH_PER_SEMI >> 1)
+					pitch_param_fine_pitch = pitch_param_pitch;
+				// quantize the pitch offset from P_PITCH to scale to find the correct pad - UPDATE LOOP
+				else {
+					s32 goal_pitch = pad_pitch + pitch_param_pitch;
+					u32 best_distance = UINT32_MAX;
+					s16 step_offset_with_pitch_param = total_step_offset;
+					if (pitch_param_pitch > 0) {
+						while (true) {
+							step_offset_with_pitch_param++;
+							u32 distance = abs(goal_pitch - pitch_at_step(step_offset_with_pitch_param, scale));
+							if (distance >= best_distance)
+								break;
+							best_distance = distance;
+						}
+						step_offset_with_pitch_param--;
+					}
+					else {
+						while (true) {
+							step_offset_with_pitch_param--;
+							u32 distance = abs(goal_pitch - pitch_at_step(step_offset_with_pitch_param, scale));
+							if (distance >= best_distance)
+								break;
+							best_distance = distance;
+						}
+						step_offset_with_pitch_param++;
+					}
+					pad_pitch = pitch_at_step(step_offset_with_pitch_param, scale);
+					pitch_param_fine_pitch = goal_pitch - pad_pitch;
+				}
 
-				// detuning scaled by microtune param
-				s16 fine_pos = 127 - (position & 255); // offset from pad center
+				// the note we're playing
+				note_pitch = pad_pitch + oct_pitch_offset;
+
+				// oscillator 2 defines the note number
+				if (osc_id == 2)
+					s_string->note_number = PITCH_TO_NOTE_NR(note_pitch);
+
+				// detuning from pad touch: pitchbend
+				s16 pos_on_pad = 127 - (position & 255);
 				u16 pitch_to_next_pad =
-				    abs(pitch_at_step(string_step_offset + pad_y + (fine_pos > 0 ? 1 : -1), scale) - note_pitch);
-				s32 micro_tune = ((64 + microtone) * pitch_to_next_pad) >> 10;
-				fine_pitch = (fine_pos * micro_tune) >> 14;
+				    abs(pitch_at_step(string_step_offset + pad_y + (pos_on_pad > 0 ? 1 : -1), scale) - note_pitch);
+				pitchbend_pitch = (s64)pos_on_pad * micro_param * pitch_to_next_pad >> 24;
 			}
 
-			// save note number from osc 0
-			if (osc_id == 0)
-				s_string->note_number =
-				    clampi((base_pitch + note_pitch + (PITCH_PER_SEMI >> 1)) / PITCH_PER_SEMI + 24, 0, 127);
+			// save for averages
+			note_pitch_4x += note_pitch;
+			pitchbend_pitch_4x += pitchbend_pitch;
 
-			s32 used_interval_pitch = (osc_id & 1) ? osc_interval_pitch : 0;
+			// add detuning from pitch parameter - doesn't count as pitchbend
+			osc_pitch = note_pitch + pitchbend_pitch + pitch_param_fine_pitch;
 
-			// calculate resulting pitch
-			osc_pitch =
-			    // octave and pitch parameters
-			    base_pitch +
-			    // pitch from scale step / midi note
-			    note_pitch +
-			    // pitch from osc interval parameter
-			    used_interval_pitch +
-			    // pitch from micro_tone / pitch spread
-			    fine_pitch;
+			// add osc interval
+			osc_pitch += (osc_id & 1) == 1 ? osc_interval_pitch : 0;
 
-			// save values
-			summed_pitch += osc_pitch - used_interval_pitch;
+			// save to voice
 			voice->osc[osc_id].pitch = osc_pitch;
 			voice->osc[osc_id].goal_phase_diff =
 			    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
 		}
 
-		// these are saving respectively the lowest and highest string that are pressed
-		if (!got_low_pitch) {
-			low_string_pitch = summed_pitch;
-			got_low_pitch = true;
+		if (!using_midi)
+			s_string->pitchbend_pitch = pitchbend_pitch_4x >> 2;
+
+		// save the lowest and highest string that are touched
+		if (s_string->touched) {
+			if (!got_low_pitch) {
+				low_string_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
+				got_low_pitch = true;
+			}
+			high_string_note = s_string->note_number;
+			high_string_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
+			got_high_pitch = true;
 		}
-		high_string_pitch = summed_pitch;
-		got_high_pitch = true;
 	}
 
 	// == UPDATE ENVELOPE == //
@@ -1159,10 +1194,10 @@ void handle_synth_voices(u32* dst) {
 	// send cv values
 	send_cv_trigger(cv_trig_high);
 	if (got_high_pitch)
-		send_cv_pitch(true, high_string_pitch, true);
+		send_cv_pitch(true, high_string_pitch_4x, true);
 	send_cv_gate(mini(cv_gate_value, 65535));
 	if (got_low_pitch)
-		send_cv_pitch(false, low_string_pitch, true);
+		send_cv_pitch(false, low_string_pitch_4x, true);
 	send_cv_pressure(synth_max_pres * 8);
 
 	if (USING_SAMPLER) {
@@ -1218,7 +1253,7 @@ void handle_synth_voices(u32* dst) {
 
 u8 draw_high_note(void) {
 	if (synth_max_pres > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
-		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name((high_string_pitch + 1024) / 2048));
+		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name(high_string_note));
 	else
 		return 0;
 }

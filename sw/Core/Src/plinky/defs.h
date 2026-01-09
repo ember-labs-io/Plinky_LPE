@@ -903,11 +903,11 @@ typedef struct SynthString {
 	Touch cur_touch;                      // active touch for this frame
 	s8 note_number;
 	u8 start_velocity;
-	s16 pitchbend; // 512 per semi
+	s32 pitchbend_pitch;
 	LatchTouch latch_touch;
 	bool touched : 1;
 	bool env_trigger : 1;
-	bool using_midi : 1;
+	u8 using_midi;
 } SynthString;
 
 const static SynthString init_synth_string = {
