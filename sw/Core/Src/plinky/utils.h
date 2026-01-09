@@ -110,9 +110,12 @@ static inline void DebugLog(const char* fmt, ...) {
 #define unlikely(x) __builtin_expect((x), 0)
 #define SMUAD(o, a, b) asm("smuad %0, %1, %2" : "=r"(o) : "r"(a), "r"(b))
 #define USING_SAMPLER (cur_sample_info.samplelen != 0)
-#define PITCH_TO_SEMIS(pitch) ((pitch) >> 9)
+#define PITCH_TO_SEMIS(pitch) (((pitch) + 256) >> 9)
 #define SEMIS_TO_PITCH(semi) ((semi) << 9)
+#define OCTS_TO_PITCH(oct) (3 * (oct) << 11)
+#define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5)
 #define NOTE_NR_TO_PITCH(note) SEMIS_TO_PITCH(note - 24)
+#define PITCH_TO_NOTE_NR(pitch) (PITCH_TO_SEMIS(pitch) + 24)
 
 static u8 const zero[2048] = {0};
 
