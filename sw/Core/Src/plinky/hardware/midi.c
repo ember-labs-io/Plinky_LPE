@@ -47,6 +47,12 @@ typedef struct LastSentString {
 	u8 position_cc;
 } LastSentString;
 
+typedef struct MpeZone {
+	u8 num_chans;
+	u8 num_strings;
+	u8 first_chan;
+} MpeZone;
+
 #define MIDI_BUFFER_SIZE 16
 #define THRU_BUFFER_SIZE 16
 #define PARAM_BUFFER_SIZE 8
@@ -71,10 +77,7 @@ static u8 channel_pressure;
 static u14 channel_pitchbend;
 static s32 channel_pitchbend_pitch;
 static bool mod_wheel_14bit = false;
-
-// mpe
-static u8 manager_chan = 0;
-static u8 num_member_chans = 8;
+static MpeZone mpe_zone[2] = {};
 
 // NRPNs
 static u14 nrpn_id[NUM_STRINGS] = {{UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX},
@@ -535,7 +538,20 @@ static void cue_midi_out(void) {
 	} while (buffer_free && midi_send_head == initial_send_head && strings_checked < NUM_STRINGS);
 }
 
-static void try_apply_n_rpn(bool is_rpn, u8 nrpn_string, bool mpe) {
+static void set_mpe_channels(bool upper_zone, u8 num_chans) {
+	// set channels
+	mpe_zone[(u8)upper_zone].num_chans = num_chans;
+	mpe_zone[(u8)!upper_zone].num_chans = mini(mpe_zone[(u8)!upper_zone].num_chans, 15 - num_chans);
+	mpe_zone[1].first_chan = 15 - mpe_zone[1].num_chans;
+	// recalculate num_strings
+	bool one_chan_per_string = mpe_zone[0].num_chans + mpe_zone[1].num_chans <= 8;
+	mpe_zone[(u8)upper_zone].num_strings =
+	    one_chan_per_string ? mpe_zone[(u8)upper_zone].num_chans : (mpe_zone[(u8)upper_zone].num_chans + 1) >> 1;
+	mpe_zone[(u8)!upper_zone].num_strings =
+	    one_chan_per_string ? mpe_zone[(u8)!upper_zone].num_chans : (mpe_zone[(u8)!upper_zone].num_chans + 1) >> 1;
+}
+
+static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
 	typedef enum NRPN_Action {
 		NA_NONE,
 		NA_SET_PARAM,
@@ -543,16 +559,35 @@ static void try_apply_n_rpn(bool is_rpn, u8 nrpn_string, bool mpe) {
 	} NRPN_Action;
 
 	// value not fully received
-	if (!received_n_rpn_data[nrpn_string][0] || !received_n_rpn_data[nrpn_string][1])
+	if (!received_n_rpn_data[n_rpn_string][0] || !received_n_rpn_data[n_rpn_string][1])
 		return;
 
 	// rpn
-	if (is_rpn)
+	if (is_rpn) {
+		// mpe configuration message
+		if (rpn_id[n_rpn_string].value == 6) {
+			u8 num_chans = n_rpn_value->msb & 15;
+			// lower zone
+			if (n_rpn_string == 0) {
+				set_mpe_channels(false, num_chans);
+				// clear strings in mpe zone
+				for (u8 string_id = 0; string_id < mpe_zone[0].num_strings; string_id++)
+					reset_controls(string_id);
+			}
+			// upper zone
+			else if (n_rpn_string == 15) {
+				set_mpe_channels(true, num_chans);
+				// clear strings in mpe zone
+				for (u8 string_id = 8 - mpe_zone[1].num_strings; string_id < 8; string_id++)
+					reset_controls(string_id);
+			}
+		}
 		return;
+	}
 
 	// nrpn: work out the action to take
 	NRPN_Action nrpn_action = NA_NONE;
-	u8 id_msb = nrpn_id[nrpn_string].msb;
+	u8 id_msb = nrpn_id[n_rpn_string].msb;
 	u8 string_id;
 	bool poly;
 	// on a member channel
@@ -561,7 +596,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 nrpn_string, bool mpe) {
 		if (id_msb == 0) {
 			nrpn_action = NA_SET_PARAM;
 			poly = true;
-			string_id = nrpn_string;
+			string_id = n_rpn_string;
 		}
 		// msb invalid
 		else
@@ -597,7 +632,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 nrpn_string, bool mpe) {
 	}
 
 	// take action
-	u8 param_id = nrpn_id[nrpn_string].lsb;
+	u8 param_id = nrpn_id[n_rpn_string].lsb;
 
 	if (param_id >= NUM_PARAMS)
 		return;
@@ -606,10 +641,10 @@ static void try_apply_n_rpn(bool is_rpn, u8 nrpn_string, bool mpe) {
 	case NA_NONE:
 		break;
 	case NA_SET_PARAM:
-		set_param_from_nrpn(param_id, n_rpn_value[nrpn_string], poly, string_id);
+		set_param_from_nrpn(param_id, n_rpn_value[n_rpn_string], poly, string_id);
 		break;
 	case NA_SET_MOD:
-		set_mod_from_nrpn(param_id, n_rpn_value[nrpn_string], id_msb - 16);
+		set_mod_from_nrpn(param_id, n_rpn_value[n_rpn_string], id_msb - 16);
 		break;
 	}
 }
@@ -700,25 +735,32 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		return;
 	}
 
-	u8 in_channel = status & MIDI_CHANNEL_MASK;
-	bool using_mpe = sys_params.midi_in_pres_type == MP_MPE_PRESSURE;
-	bool is_manager_msg = using_mpe && in_channel == manager_chan;
-	bool is_member_msg = using_mpe && in_channel > manager_chan && in_channel <= manager_chan + num_member_chans;
+	u8 channel = status & MIDI_CHANNEL_MASK;
+
+	// mpe
+	bool is_manager_msg = false;
+	bool is_member_msg = false;
+	bool mpe_zone_upper;
+	bool using_mpe = false;
+	if (sys_params.midi_in_pres_type == MP_MPE_PRESSURE) {
+		if ((channel == 0 && mpe_zone[0].num_chans > 0) || (channel == 15 && mpe_zone[1].num_chans > 0))
+			is_manager_msg = true;
+		else if (channel > 0 && channel <= mpe_zone[0].num_chans) {
+			is_member_msg = true;
+			mpe_zone_upper = false;
+		}
+		else if (channel >= 15 - mpe_zone[1].num_chans && channel < 15) {
+			is_member_msg = true;
+			mpe_zone_upper = true;
+		}
+		using_mpe = is_manager_msg || is_member_msg;
+	}
 
 	// == unused channels: forward & exit == //
 
-	// mpe
-	if (using_mpe) {
-		if (!is_manager_msg && !is_member_msg) {
-			if (sys_params.midi_soft_thru)
-				forward_midi_msg(status, data1, data2);
-			return;
-		}
-	}
-	// default
-	else if (in_channel != sys_params.midi_in_chan) {
+	if (!using_mpe && channel != sys_params.midi_in_chan) {
 		// we forward voice messages not on either our in or out channels
-		if (sys_params.midi_soft_thru && in_channel != sys_params.midi_out_chan)
+		if (sys_params.midi_soft_thru && channel != sys_params.midi_out_chan)
 			forward_midi_msg(status, data1, data2);
 		return;
 	}
@@ -857,7 +899,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	// == mpe member channels == //
 
 	if (is_member_msg) {
-		u8 string_id = in_channel - 1; // only works in low zone!
+		MpeZone* zone = &mpe_zone[(u8)mpe_zone_upper];
+		u8 string_id = mpe_zone_upper ? ((channel - zone->first_chan) % zone->num_strings) + (8 - zone->num_strings)
+		                              : (channel - 1) % zone->num_strings;
+
 		MidiString* m_string = &midi_string[string_id];
 		switch (type) {
 		case MIDI_NOTE_OFF:
