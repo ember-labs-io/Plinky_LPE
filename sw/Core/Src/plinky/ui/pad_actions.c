@@ -365,7 +365,7 @@ void handle_pad_actions(u8 strip_id) {
 			break;
 		case UI_SETTINGS_MENU:
 			if (is_press_start)
-				select_settings_item(strip_id, pad_y);
+				press_settings_menu_pad(strip_id, pad_y);
 			break;
 		default:
 			break;

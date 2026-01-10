@@ -7,15 +7,19 @@
 #include "hardware/touchstrips.h"
 #include "synth/synth.h"
 
-#define NUM_ITEMS 64
+#define NUM_ITEMS 128
 
 typedef enum Section {
+	// default sections
 	S_SYSTEM,
 	S_MIDI_IN,
 	S_MIDI_OUT,
 	S_CV,
 	S_ACTIONS,
 	NUM_SYS_PARAM_SECTS,
+
+	// alternative sections
+	// S_SECTION_ALT = S_SECTION + 8,
 } Section;
 
 typedef enum Item {
@@ -114,17 +118,31 @@ const static char* item_name[NUM_ITEMS] = {
 };
 
 static Item cur_item = 0;
-static Section cur_section;
+static Section display_section; // only holds default sections
 static u8 cur_value = 0;
 static bool value_selected = false;
 static u8 fill_start = OLED_WIDTH;
 static bool perform_action = false;
 
+static Item alt_section_check(Item item) {
+	item &= 63;
+	switch ((Section)(item >> 3)) {
+	// if alt section active: item += 64
+	default:
+		break;
+	}
+	return item;
+}
+
 static void select_item(Item item, bool force) {
 	if (item == cur_item && !force)
 		return;
+
+	// save
 	cur_item = item;
-	cur_section = cur_item / 8;
+	display_section = (cur_item / 8) & 7;
+
+	// retrieve value
 	switch (cur_item) {
 	case I_ACCEL_SENS:
 		cur_value = sys_params.accel_sens;
@@ -272,9 +290,9 @@ void open_settings_menu(void) {
 	select_item(cur_item, true);
 }
 
-void select_settings_item(u8 x, u8 y) {
-	Item item = 8 * y + x;
-	if (item != cur_item && num_options[item])
+void press_settings_menu_pad(u8 x, u8 y) {
+	Item item = alt_section_check(y * 8 + x);
+	if (num_options[item])
 		select_item(item, false);
 }
 
@@ -324,7 +342,7 @@ void settings_menu_actions(void) {
 
 void settings_encoder_press(bool pressed, u16 duration) {
 	static bool enc_pressed = false;
-	if (cur_section == S_ACTIONS) {
+	if (display_section == S_ACTIONS) {
 		fill_start = pressed ? maxi(OLED_WIDTH * (LONG_PRESS_TIME - duration) / LONG_PRESS_TIME, 0) : OLED_WIDTH;
 		if (duration >= LONG_PRESS_TIME + POST_PRESS_DELAY)
 			perform_action = true;
@@ -354,22 +372,22 @@ void edit_settings_from_encoder(s8 enc_diff) {
 		return;
 	}
 	// edit item selection
-	u8 new_item = cur_item;
+	Item new_item = cur_item & 63;
 	if (enc_diff > 0)
 		while (new_item < MAX_ITEM - 1 && enc_diff != 0) {
 			new_item++;
-			while (!num_options[new_item])
+			while (!num_options[alt_section_check(new_item)])
 				new_item++;
 			enc_diff--;
 		}
 	else
 		while (new_item > 0 && enc_diff != 0) {
 			new_item--;
-			while (!num_options[new_item])
+			while (!num_options[alt_section_check(new_item)])
 				new_item--;
 			enc_diff++;
 		}
-	select_item(new_item, false);
+	select_item(alt_section_check(new_item), false);
 }
 
 static const char* get_param_str(Item item, u8 value, char* val_buf) {
@@ -446,10 +464,10 @@ void draw_settings_menu(void) {
 	vline(OLED_WIDTH - 1, 0, 9, 1);
 	hline(OLED_WIDTH / 2, 9, OLED_WIDTH, 1);
 	// section
-	draw_str(1, 0, F_16_BOLD, section_name[cur_section]);
+	draw_str(1, 0, F_16_BOLD, section_name[display_section]);
 	Font font = F_16;
 	// actions
-	if (cur_section == S_ACTIONS) {
+	if (display_section == S_ACTIONS) {
 		draw_str(1, 17, font, item_name[cur_item]);
 		draw_str(OLED_WIDTH - 32, 15, font, I_TOUCH);
 		if (fill_start < OLED_WIDTH)
@@ -470,12 +488,14 @@ void draw_settings_menu(void) {
 void settings_menu_leds(u8 pulse) {
 	memset(leds, 0, sizeof(leds));
 	for (u8 y = 0; y < NUM_SYS_PARAM_SECTS; y++) {
-		bool active_sect = y == cur_item / 8;
+		bool active_sect = y == display_section;
 		for (u8 x = 0; x < 8; x++) {
-			Item param_id = 8 * y + x;
-			if (param_id == cur_item)
+			Item item = alt_section_check((y << 3) + x);
+			// highlight selected item
+			if (item == cur_item)
 				leds[x][y] = 255;
-			else if (num_options[param_id])
+			// light up section items
+			else if (num_options[item])
 				leds[x][y] = led_add_gamma(active_sect ? 64 : 32);
 		}
 	}
