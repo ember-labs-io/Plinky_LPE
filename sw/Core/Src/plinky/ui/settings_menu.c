@@ -420,7 +420,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MIDI_SOFT_THRU:
 		return value ? "Consume" : "Off";
 	case I_CV_QUANT:
-		return cv_quant_name[value];
+		return value == CVQ_OFF ? "Off" : value == CVQ_CHROMATIC ? "Chrom" : "Scale";
 	// ppqns
 	case I_CV_PPQN_IN:
 	case I_CV_PPQN_OUT:

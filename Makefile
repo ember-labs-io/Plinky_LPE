@@ -27,6 +27,7 @@ MAP = $(BUILD_DIR)/plinkyblack.map
 # Source files
 SRCS = \
 	sw/Core/Src/plinky/plinky.c \
+	sw/Core/Src/plinky/data/logo.c \
 	sw/Core/Src/plinky/data/tables.c \
 	sw/Core/Src/plinky/hardware/accelerometer.c \
 	sw/Core/Src/plinky/hardware/adc_dac.c \

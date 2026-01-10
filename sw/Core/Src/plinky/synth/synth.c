@@ -1,7 +1,6 @@
 #include "synth.h"
 #include "arp.h"
 #include "audio_tools.h"
-#include "data/tables.h"
 #include "gfx/gfx.h"
 #include "hardware/adc_dac.h"
 #include "hardware/memory.h"

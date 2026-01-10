@@ -36,6 +36,9 @@ typedef char bool;
 
 // basic plinky info
 #include "defs.h"
+
+#include "data/tables.h"
+
 #include "plinky.h"
 
 // time
@@ -116,8 +119,6 @@ static inline void DebugLog(const char* fmt, ...) {
 #define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5)
 #define NOTE_NR_TO_PITCH(note) SEMIS_TO_PITCH(note - 24)
 #define PITCH_TO_NOTE_NR(pitch) (PITCH_TO_SEMIS(pitch) + 24)
-
-static u8 const zero[2048] = {0};
 
 static inline float deadzone(float f, float zone) {
 	if (f < zone && f > -zone)
