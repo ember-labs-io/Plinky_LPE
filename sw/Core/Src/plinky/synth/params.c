@@ -1,6 +1,5 @@
 #include "params.h"
 #include "audio.h"
-#include "data/tables.h"
 #include "gfx/gfx.h"
 #include "hardware/accelerometer.h"
 #include "hardware/adc_dac.h"
@@ -1097,7 +1096,7 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 		case P_SCALE:
 			return scale_name[index];
 		case P_ARP_ORDER:
-			return arm_mode_name[index];
+			return arp_mode_name[index];
 		case P_SEQ_ORDER:
 			return seq_mode_name[index];
 		case P_SEQ_CLK_DIV:
@@ -1463,7 +1462,7 @@ void draw_cur_param(void) {
 		width = str_width(font, val_buf);
 		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
 	}
-	draw_str(x, font_y_offset[font], font, val_buf);
+	draw_str(x, 0, font, val_buf);
 
 	// draw param name
 

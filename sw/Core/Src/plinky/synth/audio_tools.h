@@ -1,5 +1,4 @@
 #pragma once
-#include "data/tables.h"
 #include "utils.h"
 
 #define __STATIC_FORCEINLINE __attribute__((always_inline)) static inline

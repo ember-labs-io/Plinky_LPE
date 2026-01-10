@@ -1,5 +1,4 @@
 #pragma once
-#include "utils.h"
 
 // == DIMENSIONS == //
 
@@ -298,95 +297,6 @@ typedef enum Scale {
 	NUM_SCALES,
 } Scale;
 
-#define C (0 * PITCH_PER_SEMI)
-#define Cs (1 * PITCH_PER_SEMI)
-#define D (2 * PITCH_PER_SEMI)
-#define Ds (3 * PITCH_PER_SEMI)
-#define E (4 * PITCH_PER_SEMI)
-#define F (5 * PITCH_PER_SEMI)
-#define Fs (6 * PITCH_PER_SEMI)
-#define G (7 * PITCH_PER_SEMI)
-#define Gs (8 * PITCH_PER_SEMI)
-#define A (9 * PITCH_PER_SEMI)
-#define As (10 * PITCH_PER_SEMI)
-#define B (11 * PITCH_PER_SEMI)
-
-#define Es F
-#define Bs C
-
-#define Ab Gs
-#define Bb As
-#define Cb B
-#define Db Cs
-#define Eb Ds
-#define Fb E
-#define Gb Fs
-
-#define CENTS(c) (((c) * PITCH_PER_SEMI) / 100)
-
-#define MAX_SCALE_STEPS 12
-
-const static u16 scale_table[NUM_SCALES][16] = {
-    [S_CHROMATIC] = {12, C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B},
-    [S_MAJOR] = {7, C, D, E, F, G, A, B},
-    [S_MINOR] = {7, C, D, Eb, F, G, Ab, Bb},
-    [S_HARMMINOR] = {7, C, D, Ds, F, G, Gs, B},
-    [S_PENTA] = {5, C, D, E, G, A},
-    [S_PENTAMINOR] = {5, C, Ds, F, G, As},
-    [S_HIRAJOSHI] = {5, C, D, Ds, G, Gs},
-    [S_INSEN] = {5, C, Cs, F, G, As},
-    [S_IWATO] = {5, C, Cs, F, Fs, As},
-    [S_MINYO] = {5, C, D, F, G, A},
-
-    [S_FIFTHS] = {2, C, G},
-    [S_TRIADMAJOR] = {3, C, E, G},
-    [S_TRIADMINOR] = {3, C, Eb, G},
-
-    // these are dups of major/minor/rotations thereof, but lets throw them in anyway
-    [S_DORIAN] = {7, C, D, Ds, F, G, A, As},
-    [S_PHYRGIAN] = {7, C, Db, Eb, F, G, Ab, Bb},
-    [S_LYDIAN] = {7, C, D, E, Fs, G, A, B},
-    [S_MIXOLYDIAN] = {7, C, D, E, F, G, A, Bb},
-    [S_AEOLIAN] = {7, C, D, Eb, F, G, Ab, Bb},
-    [S_LOCRIAN] = {7, C, Db, Eb, F, Gb, Ab, Bb},
-
-    [S_BLUESMAJOR] = {6, C, D, Ds, E, G, A},
-    [S_BLUESMINOR] = {6, C, Ds, F, Fs, G, As},
-
-    [S_ROMANIAN] = {7, C, D, Ds, Fs, G, A, As},
-    [S_WHOLETONE] = {6, C, D, E, Fs, Gs, As},
-
-    // microtonal stuff
-    [S_HARMONICS] = {4, C, E - CENTS(14), G + CENTS(2), Bb - CENTS(31)},
-    [S_HEXANY] = {5, CENTS(0), CENTS(386), CENTS(498), CENTS(702),
-                  CENTS(814)}, // kinda C,E,F,G,G# but the E is quite flat
-
-    [S_JUST] = {7, CENTS(0), CENTS(204), CENTS(386), CENTS(498), CENTS(702), CENTS(884), CENTS(1088)},
-    [S_DIMINISHED] = {8, C, D, Ds, F, Fs, Gs, A, B},
-};
-
-#undef C
-#undef D
-#undef E
-#undef F
-#undef G
-#undef A
-#undef B
-#undef Cs
-#undef Ds
-#undef Es
-#undef Fs
-#undef Gs
-#undef As
-#undef Bs
-#undef Cb
-#undef Db
-#undef Eb
-#undef Fb
-#undef Gb
-#undef Ab
-#undef Bb
-
 // PARAMS
 
 typedef enum ModSource {
@@ -670,13 +580,6 @@ typedef enum Font {
 	NUM_FONTS,
 } Font;
 
-// offset to make fonts down-align to the same pixel (currently incomplete)
-const static u8 font_y_offset[NUM_FONTS] = {
-    [F_16] = 3,
-    [F_12] = 3,
-    [F_16_BOLD] = 3,
-};
-
 #define I_KNOB "\x80"
 #define I_SEND "\x81"
 #define I_TOUCH "\x82"
@@ -782,7 +685,7 @@ const static char* const mod_src_name[NUM_MOD_SOURCES] = {
     [SRC_LFO_Y] = I_Y "Mod Y >>",  [SRC_RND] = I_RANDOM "Rand >>",
 };
 
-const static char* const arm_mode_name[NUM_ARP_ORDERS] = {
+const static char* const arp_mode_name[NUM_ARP_ORDERS] = {
     [ARP_UP] = "Up",
     [ARP_DOWN] = "Down",
     [ARP_UPDOWN] = "Up/Down",
@@ -807,12 +710,6 @@ const static char* const seq_mode_name[NUM_SEQ_ORDERS] = {
     [SEQ_ORD_PINGPONG] = "Ping Pong",
     [SEQ_ORD_PINGPONG_REP] = "Ping Pong\nRepeat",
     [SEQ_ORD_SHUFFLE] = "Shuffle",
-};
-
-static const char* const cv_quant_name[NUM_CV_QUANT_TYPES] = {
-    [CVQ_OFF] = "Off",
-    [CVQ_CHROMATIC] = "Chrom",
-    [CVQ_SCALE] = "Scale",
 };
 
 static const char* const lfo_shape_name[NUM_LFO_SHAPES] = {

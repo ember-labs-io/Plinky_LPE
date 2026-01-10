@@ -1,7 +1,6 @@
 #include "sampler.h"
 #include "audio.h"
 #include "audio_tools.h"
-#include "data/tables.h"
 #include "gfx/gfx.h"
 #include "hardware/leds.h"
 #include "hardware/memory.h"

@@ -1,5 +1,4 @@
 #include "lfos.h"
-#include "data/tables.h"
 #include "gfx/gfx.h"
 #include "hardware/accelerometer.h"
 #include "hardware/adc_dac.h"
