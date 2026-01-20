@@ -4,6 +4,14 @@
 
 extern bool web_serial_connected; // tinyusb/src/usbmidi.c
 static bool web_serial_was_connected;
+static atomic_flag tud_task_running = ATOMIC_FLAG_INIT;
+
+void usb_request_tud_task(void) {
+	if (atomic_flag_test_and_set(&tud_task_running))
+		return;
+	tud_task();
+	atomic_flag_clear(&tud_task_running);
+}
 
 void init_usb(void) {
 	tusb_init();
@@ -16,9 +24,5 @@ void usb_frame(void) {
 	}
 
 	if (web_serial_connected)
-		// this throttles usb midi data as a side-effect
 		web_editor_frame();
-	else
-		// throttle usb midi data manually
-		tud_task();
 }
