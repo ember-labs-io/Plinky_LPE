@@ -59,13 +59,14 @@ typedef struct Voice {
 // we add 101 to go from the center pitch value (1 << 15) to a true B1
 // then we subtract 11 semitones to arrive at C1
 
-// offset from bottom of the sound engine (G-4) to the first valid note (C-1) is 29 semis
-//
-#define TUNING_OFFSET (SEMIS_TO_PITCH(29) + 101)
 #define MAX_PITCH SEMIS_TO_PITCH(NUM_NOTES - 1)
 #define BOTTOM_PAD_OCTS 2 // Octaves from C-1
 #define BOTTOM_PAD_SEMIS (12 * BOTTOM_PAD_OCTS)
 #define BOTTOM_PAD_PITCH SEMIS_TO_PITCH(BOTTOM_PAD_SEMIS)
+
+// pitch value offset for pitches A4 = 430Hz through 445Hz
+const static s16 ref_pitch_offset[16] = {-102, -82, -62, -41, -21, 0, 20, 40, 61, 81, 101, 121, 141, 161, 181, 201};
+static u32 tuning_offset;
 
 static Voice voices[NUM_VOICES];
 static SynthString synth_string[NUM_STRINGS];
@@ -332,6 +333,11 @@ void set_note_tuning(u8 note_number, u16 pitch) {
 		MIDI_TUNING_SET_ACTIVE(note_number);
 		midi_tuning_pitch[note_number] = pitch;
 	}
+}
+
+void update_reference_pitch(void) {
+	// offset from bottom of the sound engine (G-4) to the first valid note (C-1) is 29 semis
+	tuning_offset = SEMIS_TO_PITCH(29) + ref_pitch_offset[sys_params.reference_pitch];
 }
 
 // === UNORGANIZED SAMPLER CODE === //
@@ -624,6 +630,10 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 // === END OF UNORGANIZED SAMPLER CODE === //
 
 // === MAIN === //
+
+void init_synth(void) {
+	update_reference_pitch();
+}
 
 // this combines inputs from touchstrips, midi, latch, arp & sequencer and saves the resulting Touch in
 // string_touch[string_id]
@@ -1104,7 +1114,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 			// save to voice
 			voice->osc[osc_id].pitch = osc_pitch;
-			voice->osc[osc_id].goal_phase_diff = table_interp(pitches, osc_pitch + TUNING_OFFSET) * (65536.f * 128.f);
+			voice->osc[osc_id].goal_phase_diff = table_interp(pitches, osc_pitch + tuning_offset) * (65536.f * 128.f);
 		}
 
 		s32 final_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;

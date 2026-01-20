@@ -121,6 +121,7 @@ void plinky_init(void) {
 	leds_bootswish();
 	launch_calib(1);
 	init_encoder();
+	init_synth();
 }
 
 static void log_time(void) {

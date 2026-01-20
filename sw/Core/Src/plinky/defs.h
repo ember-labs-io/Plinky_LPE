@@ -257,6 +257,7 @@ typedef enum SysParam {
 	SYS_MIDI_OUT_FILTER,
 	SYS_MIDI_TRS_OUT_OFF,
 	SYS_MIDI_TUNING,
+	SYS_REFERENCE_PITCH,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -885,7 +886,7 @@ typedef struct SysParams {
 	bool midi_in_scale_quant : 1;
 	bool midi_trs_out_off : 1;
 	bool midi_tuning : 1;
-	u8 paddy : 4;
+	u8 reference_pitch : 4;
 	// 13 bytes
 	u8 pad[16 - 14];
 	// 15 bytes

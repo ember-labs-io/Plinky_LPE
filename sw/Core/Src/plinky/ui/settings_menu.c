@@ -20,6 +20,7 @@ typedef enum Item {
 	// system
 	I_ACCEL_SENS = S_SYSTEM * 8,
 	I_ENC_DIR,
+	I_REFERENCE_PITCH,
 	I_MIDI_TUNING,
 	I_LOCAL_CTRL_OFF,
 	// midi in
@@ -65,6 +66,7 @@ typedef enum Item {
 const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_ACCEL_SENS] = SYS_ACCEL_SENS,
     [I_ENC_DIR] = SYS_REVERSE_ENCODER,
+    [I_REFERENCE_PITCH] = SYS_REFERENCE_PITCH,
     [I_LOCAL_CTRL_OFF] = SYS_LOCAL_CTRL_OFF,
     [I_MIDI_TUNING] = SYS_MIDI_TUNING,
     [I_MPE_IN] = SYS_MPE_IN,
@@ -99,6 +101,7 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 const static char* item_name[NUM_MENU_ITEMS] = {
     [I_ACCEL_SENS] = "Acc Sens",
     [I_ENC_DIR] = "Enc dir",
+    [I_REFERENCE_PITCH] = "Ref A4 =",
     [I_LOCAL_CTRL_OFF] = "Local Ctrl",
     [I_MIDI_TUNING] = "Midi Tuning",
     [I_MPE_IN] = "MPE",
@@ -177,6 +180,10 @@ static void save_value(s16 value) {
 
 	// actions on value save
 	switch (cur_item) {
+	case I_REFERENCE_PITCH:
+		set_sys_param(param, value);
+		update_reference_pitch();
+		break;
 	case I_LOCAL_CTRL_OFF:
 		if (set_sys_param(param, value) && value)
 			clear_latch();
@@ -335,6 +342,9 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return val_buf;
 	case I_ENC_DIR:
 		return value ? "Rvrse" : "Normal";
+	case I_REFERENCE_PITCH:
+		sprintf(val_buf, "%dHz", 430 + value);
+		return val_buf;
 	// shown as a percentage
 	case I_MIDI_IN_VEL_BALANCE:
 	case I_MIDI_OUT_VEL_BALANCE:
