@@ -192,11 +192,13 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	// exit if serial buffer full
 	if (num_bytes > MIDI_SEND_BUFFER_FREE)
 		return false;
-	// set midi channel
+	// header packet
+	midi_code_index_number_t cin = status < MIDI_SYSTEM_EXCLUSIVE ? status >> 4 : MIDI_CIN_1BYTE_DATA;
+	// add midi channel
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
 		status += midi_out_channel;
-	// prepare usb packet
-	u8 buf[4] = {status >> 4, status, data1, data2};
+	// usb midi packet
+	u8 buf[4] = {cin, status, data1, data2};
 
 #ifndef DEBUG_LOG
 
