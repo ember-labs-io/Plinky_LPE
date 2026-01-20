@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

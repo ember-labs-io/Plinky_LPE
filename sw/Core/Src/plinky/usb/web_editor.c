@@ -1,6 +1,7 @@
 #include "web_editor.h"
 #include "hardware/memory.h"
 #include "tusb.h"
+#include "usb.h"
 
 typedef struct WebUSBHeader {
 	u8 magic[4];
@@ -98,7 +99,7 @@ void web_editor_frame(void) {
 	// run 1ms of web editor processing
 	u32 start_time = micros();
 	while (micros() - start_time < 1000) {
-		tud_task();
+		usb_request_tud_task();
 
 		// first block: handle bytes in the current state
 
