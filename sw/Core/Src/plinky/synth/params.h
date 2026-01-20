@@ -20,6 +20,7 @@ s32 param_val_poly(Param param_id, u8 string_id);
 s8 param_index(Param param_id);
 s8 param_index_poly(Param param_id, u8 string_id);
 s8 param_index_unmod(Param param_id);
+u8 param_cc_value(Param param_id);
 
 // param saving
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);

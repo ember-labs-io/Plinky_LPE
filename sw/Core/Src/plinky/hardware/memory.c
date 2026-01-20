@@ -234,6 +234,9 @@ bool set_sys_param(SysParam param, u16 value) {
 	case SYS_MIDI_OUT_LFOS:
 		saved_value = sys_params.midi_out_lfos;
 		break;
+	case SYS_MIDI_OUT_PARAMS:
+		saved_value = sys_params.midi_out_params;
+		break;
 	}
 	if (value == saved_value)
 		return false;
@@ -292,6 +295,9 @@ bool set_sys_param(SysParam param, u16 value) {
 		break;
 	case SYS_MIDI_OUT_LFOS:
 		sys_params.midi_out_lfos = value;
+		break;
+	case SYS_MIDI_OUT_PARAMS:
+		sys_params.midi_out_params = value;
 		break;
 	}
 	log_ram_edit(SEG_SYS_PARAMS);
