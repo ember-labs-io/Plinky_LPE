@@ -10,6 +10,7 @@ void midi_panic(void);
 void init_midi(void);
 void midi_tick(void);
 void set_mpe_channels(u8 zone, u8 num_chans);
+void midi_push_preset(void);
 bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
                         s32* pitchbend_pitch);
 

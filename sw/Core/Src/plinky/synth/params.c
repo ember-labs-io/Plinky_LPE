@@ -576,11 +576,14 @@ u8 param_cc_value(Param param_id) {
 	return clampi(value >> 3, 0, 127);
 }
 
-u14 param_nrpn_value(Param param_id, ModSource mod_src) {
+bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
+	if (range_type[param_id] == R_UNUSED || param_id == P_VOLUME)
+		return false;
 	s16 value = PARAM_VAL_RAW(param_id, mod_src) << 4;
 	if (mod_src != SRC_BASE || PARAM_SIGNED(param_id))
 		value = (value + (1 << 14)) >> 1;
-	return (u14){clampi(value, 0, UINT14_MAX)};
+	nrpn_value->value = clampi(value, 0, UINT14_MAX);
+	return true;
 }
 
 u14 param_nrpn_poly_value(Param param_id, u8 string_id) {

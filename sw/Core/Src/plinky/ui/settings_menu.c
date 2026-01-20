@@ -6,6 +6,7 @@
 #include "hardware/midi.h"
 #include "hardware/touchstrips.h"
 #include "synth/synth.h"
+#include "ui/oled_viz.h"
 
 typedef enum Section {
 	S_SYSTEM,
@@ -49,6 +50,7 @@ typedef enum Item {
 	I_REBOOT = S_ACTIONS * 8,
 	I_TOUCH_CALIB,
 	I_CV_CALIB,
+	I_PUSH_PRESET,
 	I_OG_PRESETS,
 	I_MIDI_PANIC,
 
@@ -126,6 +128,7 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_REBOOT] = "Reboot",
     [I_TOUCH_CALIB] = "Touch Calib",
     [I_CV_CALIB] = "CV Calib",
+    [I_PUSH_PRESET] = "Push Preset",
     [I_OG_PRESETS] = "OG Presets",
     [I_MIDI_PANIC] = "Midi Panic",
     [I_MPE_IN_CHANS] = "Chans",
@@ -256,6 +259,10 @@ void settings_menu_actions(void) {
 	case I_CV_CALIB:
 		cv_calib();
 		break;
+	case I_PUSH_PRESET:
+		midi_push_preset();
+		flash_message(F_16_BOLD, "preset", "pushed");
+		break;
 	case I_OG_PRESETS:
 		revert_presets();
 		break;
@@ -265,6 +272,7 @@ void settings_menu_actions(void) {
 	default:
 		break;
 	}
+	fill_start = OLED_WIDTH;
 	perform_action = false;
 	ui_mode = UI_DEFAULT;
 }
