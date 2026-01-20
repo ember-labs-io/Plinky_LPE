@@ -69,6 +69,8 @@ static MidiString midi_string[NUM_STRINGS] = {};
 static u8 clocks_to_send = 0;
 static MidiMessageType send_transport = 0;
 static u8 last_channel_pressure = 0;
+static u32 send_param_val[3] = {};
+static Param last_sent_param = 0;
 
 // == UTILS == //
 
@@ -82,6 +84,7 @@ void midi_clear_all(void) {
 	sustain_pressed = false;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		memcpy(&midi_string[string_id], &midi_init_string, sizeof(MidiString));
+	memset(send_param_val, 0, sizeof(send_param_val));
 }
 
 bool midi_string_used(u8 string_id) {
@@ -510,6 +513,37 @@ static void cue_midi_out(void) {
 		clocks_to_send--;
 	}
 
+	// send one param value
+	if (sys_params.midi_out_params) {
+		Param send_param = NUM_PARAMS;
+		Param start_param = last_sent_param + 1;
+		u8 bank = start_param / 32;
+		u8 position = start_param & 31;
+		// look for set bits to the left of last_sent_param
+		u32 bank_bits = send_param_val[bank] & ~((1 << position) - 1);
+		if (bank_bits) {
+			position = __builtin_ctz(bank_bits);
+			send_param = bank * 32 + position;
+		}
+		// look for set bits in the other two banks
+		else if (send_param_val[(bank + 1) % 3]) {
+			bank = (bank + 1) % 3;
+			position = __builtin_ctz(send_param_val[bank]);
+			send_param = bank * 32 + position;
+		}
+		else if (send_param_val[(bank + 2) % 3]) {
+			bank = (bank + 2) % 3;
+			position = __builtin_ctz(send_param_val[bank]);
+			send_param = bank * 32 + position;
+		}
+		if (send_param != NUM_PARAMS) {
+			if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
+				return;
+			send_param_val[bank] &= ~(1 << position);
+			last_sent_param = send_param;
+		}
+	}
+
 	// send string data, breaks if:
 	// - midi out buffer full
 	// - any midi was sent for a string (gives space to send realtime data next tick)
@@ -623,6 +657,12 @@ void midi_set_goal_note(u8 string_id, u8 midi_note) {
 
 void midi_set_start_velocity(u8 string_id, s16 pressure) {
 	midi_string[string_id].velocity = clampi((pressure << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
+}
+
+void midi_send_param(Param param_id) {
+	u8 bank = param_id / 32;
+	u8 position = param_id & 31;
+	send_param_val[bank] |= 1 << position;
 }
 
 // == AUX == //
