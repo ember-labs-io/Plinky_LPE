@@ -85,6 +85,7 @@ static bool mod_wheel_14bit = false;
 static MpeZone mpe_zone[2] = {};
 static bool receiving_sysex = false;
 static u32 sysex_start_time = 0;
+static bool pushing_preset = false;
 
 // NRPNs
 static u14 nrpn_id[NUM_STRINGS] = {{UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX},
@@ -503,7 +504,7 @@ static void cue_midi_out(void) {
 #endif
 
 	// exit if the uart is not ready
-	if (huart3.TxXferCount)
+	if (huart3.TxXferCount || pushing_preset)
 		return;
 
 	// send thru
@@ -573,8 +574,10 @@ static void cue_midi_out(void) {
 			else {
 				// send param and modulation values
 				for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
+					u14 nrpn_value;
+					get_param_nrpn_value(send_param, mod_src, &nrpn_value);
 					u8 nrpn_msb = mod_src == 0 ? 0 : mod_src + 16;
-					if (!send_nrpn(nrpn_msb, send_param, param_nrpn_value(send_param, mod_src)))
+					if (!send_nrpn(nrpn_msb, send_param, nrpn_value))
 						return;
 					sending_param_progress++;
 				}
@@ -1213,6 +1216,80 @@ void set_mpe_channels(u8 zone, u8 num_chans) {
 	// save to sys_params
 	set_sys_param(SYS_MPE_ZONE, zone);
 	set_sys_param(SYS_MPE_CHANS, num_chans);
+}
+
+static void midi_push_cc(u8 data1, u8 data2) {
+	// wait for DMA to be ready
+	if (!sys_params.midi_trs_out_off)
+		while (huart3.TxXferCount)
+			;
+
+	// fill buffer
+	u8 buffer[4];
+	buffer[0] = MIDI_CIN_CONTROL_CHANGE;
+	buffer[1] =
+	    MIDI_CONTROL_CHANGE | (sys_params.mpe_out ? sys_params.mpe_zone == 0 ? 0 : 15 : sys_params.midi_out_chan);
+	buffer[2] = data1;
+	buffer[3] = data2;
+
+	// send buffer
+	if (!sys_params.midi_trs_out_off)
+		HAL_UART_Transmit_DMA(&huart3, &buffer[1], 3);
+	// when mounted, keep trying to send until success
+	while (tud_ready() && !tud_midi_packet_write(buffer))
+		;
+}
+
+void midi_push_preset(void) {
+	pushing_preset = true;
+	// send params set to "off" or ccs => send ccs
+	if (sys_params.midi_send_param_ccs < 2) {
+		// loop through parameters
+		for (Param param_id = 0; param_id < NUM_PARAMS; param_id++) {
+			u8 param_cc = midi_cc_table_rvs[param_id];
+			// no cc for this param
+			if (param_cc == 255)
+				continue;
+			// push value
+			midi_push_cc(param_cc, param_cc_value(param_id));
+		}
+	}
+	// send params set to send nrpns
+	else {
+		// loop through mod sources
+		for (ModSource mod_src = SRC_BASE; mod_src <= SRC_RND; mod_src++) {
+			// send nrpn msb (selects main parameter or mod source)
+			midi_push_cc(CC_NRPN_MSB, mod_src == SRC_BASE ? 0 : mod_src + 16);
+
+			// loop through parameters
+			for (Param param_id = 0; param_id < NUM_PARAMS; param_id++) {
+				u14 nrpn_value;
+				if (!get_param_nrpn_value(param_id, mod_src, &nrpn_value))
+					continue;
+				// send nrpn lsb (selects parameter id)
+				midi_push_cc(CC_NRPN_LSB, param_id);
+				// send value
+				midi_push_cc(CC_DATA_MSB, nrpn_value.msb);
+				midi_push_cc(CC_DATA_LSB, nrpn_value.lsb);
+
+				// send multi-timbral parameters
+				if (PARAM_IS_POLY(param_id)) {
+					// loop through strings (string 0 is identical to the global param value)
+					for (u8 string_id = 1; string_id < NUM_STRINGS; string_id++) {
+						nrpn_value = param_nrpn_poly_value(param_id, string_id);
+						// send nrpn msb (selects string_id)
+						midi_push_cc(CC_NRPN_MSB, string_id + 8);
+						// send nrpn lsb (selects parameter id)
+						midi_push_cc(CC_NRPN_LSB, param_id);
+						// send value
+						midi_push_cc(CC_DATA_MSB, nrpn_value.msb);
+						midi_push_cc(CC_DATA_LSB, nrpn_value.lsb);
+					}
+				}
+			}
+		}
+	}
+	pushing_preset = false;
 }
 
 bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
