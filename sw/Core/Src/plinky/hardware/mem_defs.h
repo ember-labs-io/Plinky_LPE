@@ -127,6 +127,10 @@ static u16 get_midi_tuning(void) {
 	return sys_params.midi_tuning;
 }
 
+static u16 get_reference_pitch(void) {
+	return sys_params.reference_pitch;
+}
+
 typedef u16 (*SysParamGetter)(void);
 
 const SysParamGetter sys_param_getters[] = {
@@ -161,6 +165,7 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_MIDI_OUT_FILTER] = get_midi_out_filter,
     [SYS_MIDI_TRS_OUT_OFF] = get_midi_trs_out_off,
     [SYS_MIDI_TUNING] = get_midi_tuning,
+    [SYS_REFERENCE_PITCH] = get_reference_pitch,
 };
 
 // sys param setters
@@ -294,6 +299,10 @@ static void set_midi_tuning(u16 value) {
 	sys_params.midi_tuning = value;
 }
 
+static void set_reference_pitch(u16 value) {
+	sys_params.reference_pitch = value;
+}
+
 typedef void (*SysParamSetter)(u16);
 
 const SysParamSetter sys_param_setters[] = {
@@ -328,6 +337,7 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_MIDI_OUT_FILTER] = set_midi_out_filter,
     [SYS_MIDI_TRS_OUT_OFF] = set_midi_trs_out_off,
     [SYS_MIDI_TUNING] = set_midi_tuning,
+    [SYS_REFERENCE_PITCH] = set_reference_pitch,
 };
 
 const u8 sys_param_ranges[] = {
@@ -362,4 +372,5 @@ const u8 sys_param_ranges[] = {
     [SYS_MIDI_OUT_FILTER] = 24,
     [SYS_MIDI_TRS_OUT_OFF] = 2,
     [SYS_MIDI_TUNING] = 2,
+    [SYS_REFERENCE_PITCH] = 16,
 };

@@ -16,6 +16,7 @@ void clear_latch(void);
 void clear_synth_string(u8 string_id);
 void clear_synth_strings(void);
 void set_note_tuning(u8 note_number, u16 pitch);
+void update_reference_pitch(void);
 
 // spi
 s16* grain_buf_ptr(void);
@@ -23,6 +24,7 @@ u32 grain_address(u8 grain_id);
 s16 grain_buf_end_get(u8 grain_id);
 
 // main
+void init_synth(void);
 void generate_string_touches(void);
 void handle_synth_voices(u32* dst);
 
