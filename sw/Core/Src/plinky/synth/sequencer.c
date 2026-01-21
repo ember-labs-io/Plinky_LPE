@@ -250,17 +250,9 @@ void seq_tick(void) {
 		if (pulse_32nd && (counter_32nds % step_32nds == 0))
 			seq_step();
 	}
-	// following cv gate - should this move to CV?
-	else if (seq_flags.playing && cv_gate_present()) {
-		// hysteresis
-		static bool prev_gate = true;
-		float thresh = prev_gate ? 0.01f : 0.02f;
-		bool new_gate = adc_get_calib(ADC_GATE) > thresh;
-		// trigger a step on rising edge
-		if (new_gate && !prev_gate)
-			seq_step();
-		prev_gate = new_gate;
-	}
+	// following cv gate
+	else if (seq_flags.playing && new_seq_cv_gate())
+		seq_step();
 }
 
 static void rec_substep(PatternStringStep* string_step, u8 substep, u8 seq_pres, u8 seq_pos) {

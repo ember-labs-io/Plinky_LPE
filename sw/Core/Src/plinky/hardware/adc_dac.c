@@ -81,7 +81,11 @@ u16 adc_get_raw(ADC_DAC_Index index) {
 	return raw_value / ADC_SAMPLES;
 }
 
-float adc_get_calib(ADC_DAC_Index index) { // only one use in arp.h
+static bool cv_gate_present(void) {
+	return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_8) == GPIO_PIN_RESET;
+}
+
+static float adc_get_calib(ADC_DAC_Index index) {
 	return (adc_get_raw(index) - adc_dac_calib[index].bias) * adc_dac_calib[index].scale;
 }
 
@@ -162,6 +166,20 @@ static void adc_dac_monitor(void) {
 }
 
 // == CV == //
+
+// can only be called from the sequencer
+bool new_seq_cv_gate(void) {
+	if (!cv_gate_present())
+		return false;
+
+	// apply hysteresis
+	static bool prev_gate = true;
+	float thresh = prev_gate ? 0.01f : 0.02f;
+	bool cur_gate = adc_get_calib(ADC_GATE) > thresh;
+	bool new_gate = cur_gate && !prev_gate;
+	prev_gate = cur_gate;
+	return new_gate;
+}
 
 void send_cv_pitch(bool pitch_hi, u32 pitch_4x) {
 	// shift three octaves so 0V = C2, apply calibration

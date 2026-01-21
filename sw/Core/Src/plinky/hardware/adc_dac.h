@@ -8,13 +8,13 @@ ADC_DAC_Calib* adc_dac_calib_ptr(void);
 void init_adc_dac(void);
 
 u16 adc_get_raw(ADC_DAC_Index index);
-float adc_get_calib(ADC_DAC_Index index);
 float adc_get_smooth(ADCSmoothIndex index);
 
 void adc_dac_tick(void);
 
 // cv
 
+bool new_seq_cv_gate(void);
 void send_cv_pitch(bool pitch_hi, u32 pitch_4x);
 void cv_calib(void);
 
@@ -45,10 +45,6 @@ static inline void send_cv_pressure(u16 data) {
 // #define SENSE2_GPIO_Port GPIOE
 //
 // rj: this is ignoring MX_GPIO_Init() in main.c, could be cleaner after low level hardware setup cleanup
-
-static inline bool cv_gate_present(void) {
-	return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_8) == GPIO_PIN_RESET;
-}
 
 static inline bool cv_pitch_present(void) {
 	return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_15) == GPIO_PIN_RESET;
