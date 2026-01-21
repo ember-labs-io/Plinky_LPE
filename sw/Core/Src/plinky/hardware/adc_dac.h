@@ -26,8 +26,8 @@ static inline void send_cv_trigger(bool high) {
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, high ? 255 : 0);
 }
 
-static inline void send_cv_gate(u16 data) {
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, data >> 8);
+static inline void send_cv_gate(bool high) {
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, high ? 255 : 0);
 }
 
 static inline void send_cv_pressure(u16 data) {

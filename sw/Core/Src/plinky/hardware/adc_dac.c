@@ -152,7 +152,7 @@ static void adc_dac_monitor(void) {
 		send_cv_clock(saw < (16384 + 32768));          // 75% pulsewidth square
 		send_cv_trigger(saw < 16384);                  // 25% pulsewidth square
 		send_cv_pitch(true, (saw * 2) & 65535, false); // double speed saw
-		send_cv_gate((saw * 2) & 65535);               // double speed saw
+		send_cv_gate(saw < 32768);                     // 50% pulsewidth square
 		send_cv_pitch(false, saw, false);              // single speed saw
 		send_cv_pressure(saw);                         // single speed saw
 	} while (encoder_pressed || enc_press_count <= 2);
