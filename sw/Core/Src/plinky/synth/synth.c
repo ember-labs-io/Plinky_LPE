@@ -78,7 +78,7 @@ static u8 read_frame_mask;
 
 static u8 phys_touch_mask = 0;
 static bool cv_trig_high = false;    // should cv trigger be high?
-static s32 cv_gate_value;            // cv gate value
+static s32 cv_gate_high;             // should cv gate be high?
 static bool got_high_pitch = false;  // did we save a high pitch?
 static u32 high_string_pitch_4x = 0; // pitch on highest touched string
 static s16 high_string_note = 0;     // note on highest touched string
@@ -1022,13 +1022,9 @@ static void run_voice(u8 voice_id, u32* dst) {
 	if ((s_string->using_midi & read_frame_mask) && !s_string->touched && !voice_audible)
 		s_string->using_midi &= ~read_frame_mask;
 
-	// rj: cv_gate_value is in practice another expression of the maximum pressure over all strings, which goes
-	// against eurorack conventions (gates are generally high/low, 5V/0V) and I'm also not sure what the added value
-	// of this is, since we already have an expression of the max pressure on the pressure CV out - should we make
-	// gate out binary?
-
 	// generate cv gate
-	cv_gate_value = maxi(cv_gate_value, (s32)(pressure * 65536.f / TOUCH_FULL_PRES));
+	if (s_string->touched)
+		cv_gate_high = true;
 
 	// == GENERATE OSCILLATOR PITCHES == //
 
@@ -1224,7 +1220,7 @@ void handle_synth_voices(u32* dst) {
 	// clear cv values
 	cv_trig_high = false;
 	got_high_pitch = false;
-	cv_gate_value = 0;
+	cv_gate_high = false;
 	got_low_pitch = false;
 	synth_max_pres = 0;
 
@@ -1236,7 +1232,7 @@ void handle_synth_voices(u32* dst) {
 	send_cv_trigger(cv_trig_high);
 	if (got_high_pitch)
 		send_cv_pitch(true, high_string_pitch_4x + BOTTOM_PAD_PITCH, true);
-	send_cv_gate(mini(cv_gate_value, 65535));
+	send_cv_gate(cv_gate_high);
 	if (got_low_pitch)
 		send_cv_pitch(false, low_string_pitch_4x + BOTTOM_PAD_PITCH, true);
 	send_cv_pressure(synth_max_pres * 8);
