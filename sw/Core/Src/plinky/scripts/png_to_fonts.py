@@ -267,7 +267,8 @@ if __name__ == "__main__":
 
     # Auto-generate filename
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    png_path = os.path.join(script_dir, f"font_{FONT_NAMES[font_index]}.png")
+    data_dir = os.path.join(script_dir, "..", "data")
+    png_path = os.path.join(data_dir, f"font_{FONT_NAMES[font_index]}.png")
 
     if not os.path.exists(png_path):
         print(f"Error: {png_path} not found")
@@ -275,7 +276,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Update fonts.h
-    fonts_h_path = os.path.join(script_dir, "fonts.h")
+    fonts_h_path = os.path.join(data_dir, "fonts.h")
 
     # Import font from PNG (needs fonts_h_path for sizing)
     new_font_data = import_font_from_png(png_path, font_index, fonts_h_path)

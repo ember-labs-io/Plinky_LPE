@@ -107,7 +107,8 @@ if __name__ == "__main__":
 
     # Get script directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    icons_h_path = os.path.join(script_dir, "icons.h")
+    data_dir = os.path.join(script_dir, "..", "data")
+    icons_h_path = os.path.join(data_dir, "icons.h")
 
     print(f"Parsing {icons_h_path}...")
     icons = parse_icons_h(icons_h_path)
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     print("Creating sprite sheet...")
     sheet = create_icon_sheet(icons)
 
-    output_file = os.path.join(script_dir, "icons_sheet.png")
+    output_file = os.path.join(data_dir, "icons_sheet.png")
     sheet.save(output_file)
     print(f"Saved sprite sheet to {output_file}")
 

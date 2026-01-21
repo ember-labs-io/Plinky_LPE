@@ -143,13 +143,14 @@ if __name__ == "__main__":
         sys.exit(1)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    fonts_h_path = os.path.join(script_dir, "fonts.h")
+    data_dir = os.path.join(script_dir, "..", "data")
+    fonts_h_path = os.path.join(data_dir, "fonts.h")
 
     print(f"Parsing {fonts_h_path}...")
     font_data = parse_fonts_h(fonts_h_path)
     print(f"Loaded {len(font_data)} u32 values")
 
-    output_file = os.path.join(script_dir, f"font_{FONT_NAMES[font_index]}.png")
+    output_file = os.path.join(data_dir, f"font_{FONT_NAMES[font_index]}.png")
     export_font_to_png(font_data, font_index, output_file)
 
     print("Done!")

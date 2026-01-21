@@ -6,7 +6,7 @@ from collections import defaultdict
 import os
 
 MAP_FILE = 'sw/build/RELEASE/plinkyblack.map'
-OUTPUT_FILE = 'sw/Core/Src/plinky/analytics/RAM_ANALYSIS.md'
+OUTPUT_FILE = 'sw/Core/Src/plinky/scripts/ram_analysis.md'
 
 def get_ram_section_sizes():
     """Get the sizes of all RAM sections from the map file."""
