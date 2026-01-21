@@ -82,10 +82,11 @@ if __name__ == "__main__":
     import sys
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(script_dir, "..", "data")
 
     # Default input/output paths
-    png_path = os.path.join(script_dir, "icons_sheet.png")
-    output_path = os.path.join(script_dir, "icons.h")
+    png_path = os.path.join(data_dir, "icons_sheet.png")
+    output_path = os.path.join(data_dir, "icons.h")
 
     # Allow custom paths from command line
     if len(sys.argv) >= 2:
