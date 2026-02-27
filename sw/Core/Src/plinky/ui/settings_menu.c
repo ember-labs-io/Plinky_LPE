@@ -44,6 +44,7 @@ typedef enum Item {
 	I_MIDI_OUT_FILTER,
 	// cv
 	I_CV_QUANT = S_CV * 8,
+	I_CV_GATE_IN_IS_PRESSURE,
 	I_CV_PPQN_IN,
 	I_CV_PPQN_OUT,
 	// actions
@@ -88,6 +89,7 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_MIDI_OUT_FILTER] = SYS_MIDI_OUT_FILTER,
     [I_MIDI_TRS_OUT_OFF] = SYS_MIDI_TRS_OUT_OFF,
     [I_CV_QUANT] = SYS_CV_QUANT,
+    [I_CV_GATE_IN_IS_PRESSURE] = SYS_CV_GATE_IN_IS_PRESSURE,
     [I_CV_PPQN_IN] = SYS_CV_PPQN_IN,
     [I_CV_PPQN_OUT] = SYS_CV_PPQN_OUT,
     [I_MPE_IN_CHANS] = SYS_MPE_CHANS,
@@ -123,6 +125,7 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_MIDI_OUT_FILTER] = "Filter",
     [I_MIDI_TRS_OUT_OFF] = "TRS out",
     [I_CV_QUANT] = "Quant",
+    [I_CV_GATE_IN_IS_PRESSURE] = "Gate In",
     [I_CV_PPQN_IN] = "PPQN in",
     [I_CV_PPQN_OUT] = "PPQN out",
     [I_REBOOT] = "Reboot",
@@ -406,6 +409,8 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return value ? "Consume" : "Off";
 	case I_CV_QUANT:
 		return value == CVQ_OFF ? "Off" : value == CVQ_CHROMATIC ? "Chrom" : "Scale";
+	case I_CV_GATE_IN_IS_PRESSURE:
+		return value ? "Pres" : "Gate";
 	// ppqns
 	case I_CV_PPQN_IN:
 	case I_CV_PPQN_OUT:
