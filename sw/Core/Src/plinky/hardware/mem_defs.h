@@ -131,6 +131,10 @@ static u16 get_reference_pitch(void) {
 	return sys_params.reference_pitch;
 }
 
+static u16 get_cv_gate_in_is_pressure(void) {
+	return sys_params.cv_gate_in_is_pressure;
+}
+
 typedef u16 (*SysParamGetter)(void);
 
 const SysParamGetter sys_param_getters[] = {
@@ -166,6 +170,7 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_MIDI_TRS_OUT_OFF] = get_midi_trs_out_off,
     [SYS_MIDI_TUNING] = get_midi_tuning,
     [SYS_REFERENCE_PITCH] = get_reference_pitch,
+    [SYS_CV_GATE_IN_IS_PRESSURE] = get_cv_gate_in_is_pressure,
 };
 
 // sys param setters
@@ -303,6 +308,10 @@ static void set_reference_pitch(u16 value) {
 	sys_params.reference_pitch = value;
 }
 
+static void set_cv_gate_in_is_pressure(u16 value) {
+	sys_params.cv_gate_in_is_pressure = value;
+}
+
 typedef void (*SysParamSetter)(u16);
 
 const SysParamSetter sys_param_setters[] = {
@@ -338,6 +347,7 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_MIDI_TRS_OUT_OFF] = set_midi_trs_out_off,
     [SYS_MIDI_TUNING] = set_midi_tuning,
     [SYS_REFERENCE_PITCH] = set_reference_pitch,
+    [SYS_CV_GATE_IN_IS_PRESSURE] = set_cv_gate_in_is_pressure,
 };
 
 const u8 sys_param_ranges[] = {
@@ -373,4 +383,5 @@ const u8 sys_param_ranges[] = {
     [SYS_MIDI_TRS_OUT_OFF] = 2,
     [SYS_MIDI_TUNING] = 2,
     [SYS_REFERENCE_PITCH] = 16,
+    [SYS_CV_GATE_IN_IS_PRESSURE] = 2,
 };
