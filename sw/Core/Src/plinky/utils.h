@@ -130,6 +130,7 @@ static inline void DebugLog(const char* fmt, ...) {
 #define PITCH_TO_NOTE_NR(pitch) PITCH_TO_SEMIS(pitch)
 #define SEMIS_TO_PITCH(semi) ((semi) << 9)
 #define NOTE_NR_TO_PITCH(note_nr) SEMIS_TO_PITCH(note_nr)
+#define ROUND_PITCH_TO_SEMIS(pitch) (((pitch) + 256) & ~511)
 #define OCTS_TO_PITCH(oct) (3 * (oct) << 11)
 #define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5) // scales +/- 65536 to +/- 1 octave
 

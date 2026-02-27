@@ -4,6 +4,7 @@
 #include "leds.h"
 #include "memory.h"
 #include "synth/params.h"
+#include "synth/synth.h"
 #include "touchstrips.h"
 
 // these are defined in main.c
@@ -19,6 +20,20 @@ extern TIM_HandleTypeDef htim3;
 #define ADC_SAMPLES 8
 
 #define NUM_CV_INS 6
+
+#define CV_GATE_THRESH 6000
+#define CV_PRES_THRESH 24000
+#define CV_THRESH_HYST 600
+
+typedef struct CvTouch {
+	bool touched;
+	u8 string_id;
+	u8 start_velocity;
+	u8 note_number;
+	s32 pitchbend_pitch;
+	u16 position;
+	u16 pressure;
+} CvTouch;
 
 ADC_DAC_Calib adc_dac_calib[NUM_ADC_DAC_ITEMS] = {
     // cv inputs
@@ -45,6 +60,8 @@ ADC_DAC_Calib* adc_dac_calib_ptr(void) {
 static u16 adc_buffer[ADC_CHANS * ADC_SAMPLES];
 
 static ValueSmoother adc_smoother[ADC_CHANS];
+
+static CvTouch cv_touch = {};
 
 void init_adc_dac(void) {
 	// adc init
@@ -118,7 +135,55 @@ void adc_dac_tick(void) {
 	adc_smooth_value(adc_smoother + ADC_S_PITCH, cv_pitch_present() ? adc_get_calib(ADC_PITCH) : 0.f);
 	// why do we do another mapping here, instead of incorporating this in cv calib?
 	adc_smooth_value(adc_smoother + ADC_S_GATE,
-	                 cv_gate_present() ? clampf(adc_get_calib(ADC_GATE) * 1.15f - 0.05f, 0.f, 1.f) : 1.f);
+	                 cv_gate_present() ? clampf(adc_get_calib(ADC_GATE) * 1.15f - 0.05f, 0.f, 1.f) : 0.f);
+
+	// cv touch
+	u16 gate_thresh =
+	    (sys_params.cv_gate_in_is_pressure ? CV_PRES_THRESH : CV_GATE_THRESH) + (cv_touch.touched ? CV_THRESH_HYST : 0);
+	bool gate_high = adc_get_raw(ADC_GATE) < gate_thresh;
+	bool new_touch = false;
+
+	// 1V/octave, add three octaves to map 0V to C2
+	u16 cv_pitch = clampi((adc_get_smooth(ADC_S_PITCH) + 3.f) * PITCH_PER_OCT, 0, MAX_PITCH);
+
+	static u8 prev_map_string = 255;
+	// new touch
+	if (!cv_touch.touched && gate_high) {
+		u8 map_string = find_string_for_pitch(cv_pitch, sys_params.cv_quant == CVQ_SCALE);
+		// found a string to map to => valid new touch
+		if (map_string != 255 && map_string == prev_map_string) {
+			cv_touch.string_id = map_string;
+			cv_touch.touched = true;
+			cv_touch.start_velocity =
+			    maxi((sys_params.cv_gate_in_is_pressure ? adc_get_smooth(ADC_S_GATE) : 1) * 255, 1);
+			new_touch = true;
+		}
+		prev_map_string = map_string;
+	}
+	// not a new touch
+	else {
+		prev_map_string = 255;
+
+		// touch release
+		if (cv_touch.touched && !gate_high)
+			cv_touch.touched = false;
+	}
+
+	// save touch data
+	if (cv_touch.touched) {
+		// quantize pitch
+		if (sys_params.cv_quant == CVQ_CHROMATIC)
+			cv_pitch = ROUND_PITCH_TO_SEMIS(cv_pitch);
+		else if (sys_params.cv_quant == CVQ_SCALE)
+			cv_pitch = quant_pitch_to_scale(cv_pitch, param_index_poly(PP_SCALE, cv_touch.string_id));
+		// recalculate note number and string position
+		if (new_touch || !sys_params.mpe_out) {
+			cv_touch.note_number = PITCH_TO_NOTE_NR(cv_pitch);
+			cv_touch.position = string_position_from_pitch(cv_touch.string_id, cv_pitch);
+		}
+		cv_touch.pitchbend_pitch = cv_pitch - NOTE_NR_TO_PITCH(cv_touch.note_number);
+		cv_touch.pressure = (sys_params.cv_gate_in_is_pressure ? adc_get_smooth(ADC_S_GATE) : 1) * TOUCH_FULL_PRES;
+	}
 }
 
 static void send_pitch_cv_raw(s32 lo_value, s32 hi_value) {
@@ -179,6 +244,22 @@ bool new_seq_cv_gate(void) {
 	bool new_gate = cur_gate && !prev_gate;
 	prev_gate = cur_gate;
 	return new_gate;
+}
+
+bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
+                      s32* pitchbend_pitch) {
+	// not pressed => exit
+	if (!cv_touch.touched || cv_touch.string_id != string_id)
+		return false;
+
+	*pressure = cv_touch.pressure;
+	// for cv, position is only used to light up the led at the correct pad
+	*position = cv_touch.position;
+	*note_number = cv_touch.note_number;
+	*start_velocity = cv_touch.start_velocity;
+	*pitchbend_pitch = cv_touch.pitchbend_pitch;
+
+	return true;
 }
 
 void send_cv_pitch(bool pitch_hi, u32 pitch_4x) {

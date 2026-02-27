@@ -59,7 +59,6 @@ typedef struct Voice {
 // we add 101 to go from the center pitch value (1 << 15) to a true B1
 // then we subtract 11 semitones to arrive at C1
 
-#define MAX_PITCH SEMIS_TO_PITCH(NUM_NOTES - 1)
 #define BOTTOM_PAD_OCTS 2 // Octaves from C-1
 #define BOTTOM_PAD_SEMIS (12 * BOTTOM_PAD_OCTS)
 #define BOTTOM_PAD_PITCH SEMIS_TO_PITCH(BOTTOM_PAD_SEMIS)
@@ -110,8 +109,6 @@ static u16 pitch_at_step_with_midi_tuning(u8 step, Scale scale, u8 steps_in_scal
 static u16 pitch_at_step(u8 step, Scale scale, u8 steps_in_scale) {
 	return OCTS_TO_PITCH(step / steps_in_scale) + scale_table[scale][step % steps_in_scale];
 }
-
-#define ROUND_PITCH_TO_SEMIS(pitch) (((pitch) + 256) & ~511)
 
 u16 quant_pitch_to_scale(u16 pitch, Scale scale) {
 	u8 scale_steps = steps_in_scale[scale];
@@ -635,7 +632,7 @@ void init_synth(void) {
 	update_reference_pitch();
 }
 
-// this combines inputs from touchstrips, midi, latch, arp & sequencer and saves the resulting Touch in
+// this combines inputs from touchstrips, midi, cv, latch, arp & sequencer and saves the resulting Touch in
 // string_touch[string_id]
 static void generate_string_touch(u8 string_id) {
 	static bool suppress_latch = false;
@@ -737,13 +734,17 @@ static void generate_string_touch(u8 string_id) {
 	if (pressure <= 0)
 		seq_try_get_touch(string_id, &pressure, &position);
 
-	// any available pressure from touch/latch/sequencer overrides midi
+	// any available pressure from touch/latch/sequencer overrides midi/cv
 	if (pressure > 0)
-		s_string->using_midi &= ~write_frame_mask;
+		s_string->ext_touch &= ~write_frame_mask;
+	// retrieve touch from cv
+	else if (cv_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
+	                          &s_string->pitchbend_pitch))
+		s_string->ext_touch |= write_frame_mask;
 	// retrieve touch from midi
 	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
 	                            &s_string->pitchbend_pitch))
-		s_string->using_midi |= write_frame_mask;
+		s_string->ext_touch |= write_frame_mask;
 
 	// === FINISHING UP === //
 
@@ -853,8 +854,8 @@ void generate_string_touches(void) {
 		// clear pressure if not touched
 		if (!s_string->touched)
 			c_touch->pres = TOUCH_MIN_PRES;
-		// generate start velocity for non-midi touches
-		if (!(s_string->using_midi & read_frame_mask) && s_string->env_trigger)
+		// generate start velocity for physical touches
+		if (!(s_string->ext_touch & read_frame_mask) && s_string->env_trigger)
 			s_string->start_velocity = clampi((c_touch->pres << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
 	}
 }
@@ -1018,9 +1019,9 @@ static void run_voice(u8 voice_id, u32* dst) {
 	if (pressure > synth_max_pres)
 		synth_max_pres = pressure;
 
-	// turn off midi note if it has rung out
-	if ((s_string->using_midi & read_frame_mask) && !s_string->touched && !voice_audible)
-		s_string->using_midi &= ~read_frame_mask;
+	// turn off external touch if it has rung out
+	if ((s_string->ext_touch & read_frame_mask) && !s_string->touched && !voice_audible)
+		s_string->ext_touch &= ~read_frame_mask;
 
 	// generate cv gate
 	if (s_string->touched)
@@ -1032,7 +1033,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// precalc some parameters
 		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
 		s32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
-		bool using_midi = !!(s_string->using_midi & read_frame_mask);
+		bool ext_touch = !!(s_string->ext_touch & read_frame_mask);
 
 		// we're filling these
 		u16 note_pitch = 0;
@@ -1050,7 +1051,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		s32 octaves_pitch = 0;
 		s16 pitch_param_pitch = 0;
 
-		if (using_midi) {
+		if (ext_touch) {
 			u8 note_number = s_string->note_number;
 			note_pitch =
 			    USING_MIDI_TUNING(note_number) ? midi_tuning_pitch[note_number] : NOTE_NR_TO_PITCH(note_number);
@@ -1068,11 +1069,11 @@ static void run_voice(u8 voice_id, u32* dst) {
 			s16 pitch_param_fine_pitch = 0;
 			u16 osc_pitch = 0;
 
-			// for midi
-			if (using_midi)
+			// external touch
+			if (ext_touch)
 				// generate pitch spread
 				pitchbend_pitch = s_string->pitchbend_pitch + ((osc_id - 2) * micro_param >> 10);
-			// for touch
+			// physical touch
 			else {
 				u16 position = s_touch_sort++->pos;
 				// steps from string + steps from pad
@@ -1115,7 +1116,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 		s32 final_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
 
-		if (!using_midi)
+		if (!ext_touch)
 			s_string->pitchbend_pitch = (final_pitch_4x >> 2) - SEMIS_TO_PITCH(s_string->note_number);
 
 		// save the lowest and highest string that are touched
