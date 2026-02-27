@@ -79,10 +79,8 @@ static u8 phys_touch_mask = 0;
 static bool cv_trig_out_high = false; // should cv trigger be high?
 static bool cv_gate_out_high = false; // should cv gate be high?
 static u16 synth_max_pres = 0;        // highest pressure seen
-static bool got_low_pitch = false;    // did we save a low pitch?
-static u32 low_string_pitch_4x = 0;   // pitch on lowest touched string
-static bool got_high_pitch = false;   // did we save a high pitch?
-static u32 high_string_pitch_4x = 0;  // pitch on highest touched string
+static u8 low_string_id = 255;        // lowest touched string
+static u8 high_string_id = 255;       // highest touched string
 static u8 high_string_note = 0;       // note on highest touched string
 
 // Midi Tuning Standard
@@ -1038,10 +1036,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// we're filling these
 		u16 note_pitch = 0;
 		s32 pitchbend_pitch = 0;
-
-		// for averages
-		u32 note_pitch_4x = 0;
-		s32 pitchbend_pitch_4x = 0;
+		s32 pitch_4x = 0;
 
 		// these only get used by touch
 		Touch* s_touch_sort = &s_string->touch_sorted[2]; // we use pitches 2-5, discarding extreme values
@@ -1099,9 +1094,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 					s_string->note_number = PITCH_TO_NOTE_NR(note_pitch);
 			}
 
-			// save for averages
-			note_pitch_4x += note_pitch;
-			pitchbend_pitch_4x += pitchbend_pitch;
+			// save for average
+			pitch_4x += note_pitch + pitchbend_pitch;
 
 			// add detuning from pitch parameter - doesn't count as pitchbend
 			osc_pitch = clampi(note_pitch + pitchbend_pitch + pitch_param_fine_pitch, 0, MAX_PITCH);
@@ -1114,20 +1108,15 @@ static void run_voice(u8 voice_id, u32* dst) {
 			voice->osc[osc_id].goal_phase_diff = table_interp(pitches, osc_pitch + tuning_offset) * (65536.f * 128.f);
 		}
 
-		s32 final_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
-
 		if (!ext_touch)
-			s_string->pitchbend_pitch = (final_pitch_4x >> 2) - SEMIS_TO_PITCH(s_string->note_number);
+			s_string->pitchbend_pitch = (pitch_4x >> 2) - SEMIS_TO_PITCH(s_string->note_number);
 
 		// save the lowest and highest string that are touched
 		if (s_string->touched) {
-			if (!got_low_pitch) {
-				low_string_pitch_4x = final_pitch_4x;
-				got_low_pitch = true;
-			}
+			if (low_string_id == 255)
+				low_string_id = voice_id;
+			high_string_id = voice_id;
 			high_string_note = s_string->note_number;
-			high_string_pitch_4x = final_pitch_4x;
-			got_high_pitch = true;
 		}
 	}
 
@@ -1222,8 +1211,8 @@ void handle_synth_voices(u32* dst) {
 	cv_trig_out_high = false;
 	cv_gate_out_high = false;
 	synth_max_pres = 0;
-	got_low_pitch = false;
-	got_high_pitch = false;
+	low_string_id = 255;
+	high_string_id = 255;
 
 	// run all voices
 	for (u8 voice_id = 0; voice_id < NUM_VOICES; ++voice_id)
@@ -1233,10 +1222,29 @@ void handle_synth_voices(u32* dst) {
 	send_cv_trigger(cv_trig_out_high);
 	send_cv_gate(cv_gate_out_high);
 	send_cv_pressure(mini(synth_max_pres, 2048) << 5);
-	if (got_low_pitch)
-		send_cv_pitch(false, low_string_pitch_4x);
-	if (got_high_pitch)
-		send_cv_pitch(true, high_string_pitch_4x);
+
+	if (low_string_id != 255) {
+		Osc* osc = voices[low_string_id].osc;
+		send_cv_pitch(
+		    false,
+		    USING_SAMPLER
+		        // just use the saved pitch value for samples, no fine tuning
+		        ? osc->pitch << 2
+		        // calculate exact pitch from phase_diff for synth, which includes microtone and portamento fine tuning
+		        : log2f((float)osc->phase_diff * SAMPLE_RATE / (BASE_FREQUENCY * ((u64)1 << 32)))
+		              * (PITCH_PER_OCT << 2));
+	}
+	if (high_string_id != 255) {
+		Osc* osc = voices[high_string_id].osc;
+		send_cv_pitch(
+		    true,
+		    USING_SAMPLER
+		        // just use the saved pitch value for samples, no fine tuning
+		        ? osc->pitch << 2
+		        // calculate exact pitch from phase_diff for synth, which includes microtone and portamento fine tuning
+		        : log2f((float)osc->phase_diff * SAMPLE_RATE / (BASE_FREQUENCY * ((u64)1 << 32)))
+		              * (PITCH_PER_OCT << 2));
+	}
 
 	if (USING_SAMPLER) {
 		// decide on a priority for 8 voices
