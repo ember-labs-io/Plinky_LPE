@@ -31,6 +31,7 @@
 // SYNTH
 
 #define NUM_NOTES 99 // C-1 - D7
+#define MAX_PITCH SEMIS_TO_PITCH(NUM_NOTES - 1)
 
 #define PITCH_PER_SEMI 512
 #define PITCH_PER_OCT 6144
@@ -795,6 +796,7 @@ typedef struct LatchTouch {
 typedef struct SynthString {
 	Touch touch_frames[NUM_TOUCH_FRAMES]; // last eight frames of touches
 	Touch touch_sorted[NUM_TOUCH_FRAMES]; // sorted copy of touch
+	u8 ext_touch;                         // bitmask for last eight frames of touches
 	Touch cur_touch;                      // active touch for this frame
 	u8 note_number;
 	u8 start_velocity;
@@ -802,7 +804,6 @@ typedef struct SynthString {
 	LatchTouch latch_touch;
 	bool touched : 1;
 	bool env_trigger : 1;
-	u8 using_midi;
 } SynthString;
 
 const static SynthString init_synth_string = {

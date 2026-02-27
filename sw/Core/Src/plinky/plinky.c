@@ -185,6 +185,9 @@ void plinky_codec_tick(u32* audio_out, u32* audio_in) {
 	// midi
 	midi_tick();
 
+	// adc / dac
+	adc_dac_tick();
+
 	// clock
 	clock_tick();
 

@@ -2,7 +2,6 @@
 #include "audio.h"
 #include "gfx/gfx.h"
 #include "hardware/accelerometer.h"
-#include "hardware/adc_dac.h"
 #include "hardware/encoder.h"
 #include "hardware/leds.h"
 #include "hardware/memory.h"
@@ -443,8 +442,6 @@ void params_tick(void) {
 		sample_hold_global += 4813;
 
 	accel_tick();
-
-	adc_dac_tick();
 
 	lfos_tick();
 
