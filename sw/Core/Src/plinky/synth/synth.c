@@ -76,6 +76,7 @@ static u8 synth_read_frame;
 static u8 read_frame_mask;
 
 static u8 phys_touch_mask = 0;
+static u8 no_arp_touch_mask = 0;
 static bool cv_trig_out_high = false; // should cv trigger be high?
 static bool cv_gate_out_high = false; // should cv gate be high?
 static u16 synth_max_pres = 0;        // highest pressure seen
@@ -769,7 +770,6 @@ static void generate_string_touch(u8 string_id) {
 
 // manage generating the string_touch array
 void generate_string_touches(void) {
-	static u8 no_arp_touch_mask = 0;
 	static u8 no_arp_touch_mask_1back = 0;
 	static bool do_second_half = false;
 	static u8 phys_string_touch_1back = 0;
@@ -1222,6 +1222,10 @@ void handle_synth_voices(u32* dst) {
 	send_cv_trigger(cv_trig_out_high);
 	send_cv_gate(cv_gate_out_high);
 	send_cv_pressure(mini(synth_max_pres, 2048) << 5);
+
+	// drone the lowest string of the arp
+	if (low_string_id == high_string_id && no_arp_touch_mask)
+		low_string_id = __builtin_ctz(no_arp_touch_mask);
 
 	if (low_string_id != 255) {
 		Osc* osc = voices[low_string_id].osc;
