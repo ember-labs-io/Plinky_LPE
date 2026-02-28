@@ -263,7 +263,7 @@ bool arp_tick(u8 no_arp_touch_mask, u8* touch_mask) {
 	}
 
 	// step
-	do_conditional_step(&c_step, arp_order == ARP_CHORD);
+	do_conditional_step(&c_step, false, arp_order == ARP_CHORD);
 	// move to the next position, this also fills arp_touch_mask
 	if (c_step.advance_step)
 		advance_step(no_arp_touch_mask);

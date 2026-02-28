@@ -6,7 +6,7 @@
 // a conditional step can either advance or not advance in the sequence, and can either play or not play, based on the
 // chance and euclid len parameters
 
-static void do_conditional_step(ConditionalStep* c_step, bool chord_mode) {
+static void do_conditional_step(ConditionalStep* c_step, bool for_seq, bool chord_mode) {
 	u8 steps = abs(c_step->euclid_len);
 	// step-length of 1 does not exist
 	if (steps)
@@ -40,8 +40,8 @@ static void do_conditional_step(ConditionalStep* c_step, bool chord_mode) {
 	// hold mode: don't advance on non-triggered steps
 	else {
 		c_step->advance_step = cond_trig;
-		// non-advanced steps play if gate length is 100%
-		if ((param_val(P_GATE_LENGTH) >> 8) == 256)
+		// non-advanced sequencer steps play if gate length is 100%
+		if (for_seq && (param_val(P_GATE_LENGTH) >> 8) == 256)
 			c_step->play_step = true;
 		else
 			c_step->play_step = cond_trig;

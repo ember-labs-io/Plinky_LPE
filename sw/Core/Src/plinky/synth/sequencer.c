@@ -152,7 +152,7 @@ static void seq_step(void) {
 	// perform a conditional step
 	c_step.euclid_len = param_index(P_SEQ_EUC_LEN);
 	c_step.density = param_val(P_SEQ_CHANCE);
-	do_conditional_step(&c_step, false);
+	do_conditional_step(&c_step, true, false);
 
 	// the first pulse doesn't advance a step
 	if (!c_step.advance_step || seq_flags.is_first_pulse) {
