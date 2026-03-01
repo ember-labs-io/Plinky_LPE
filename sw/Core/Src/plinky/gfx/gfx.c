@@ -40,7 +40,7 @@ void vline(int x1, int y1, int y2, int c) {
 	int y1b = y1 >> 3;
 	int n = (y2 >> 3) - y1b;
 	u8* dst = oled_buffer() + (x1) + (y1b << 7);
-	u8 b1 = 0xff << (y1 & 7), b2 = ~(0xff << (y2 & 7));
+	u8 b1 = 0xff << (y1 & 7), b2 = (y2 & 7) ? ~(0xff << (y2 & 7)) : 0xff;
 	if (c) {
 		u8 mask = (c == 1) ? 255 : (x1 & 1) ? 0x55 : 0xaa;
 		if (n == 0) {
