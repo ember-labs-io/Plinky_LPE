@@ -79,7 +79,7 @@ static u8 phys_touch_mask = 0;
 static u8 no_arp_touch_mask = 0;
 static bool cv_trig_out_high = false; // should cv trigger be high?
 static bool cv_gate_out_high = false; // should cv gate be high?
-static u16 synth_max_pres = 0;        // highest pressure seen
+static u16 max_env_lvl = 0;           // highest pressure envelope seen
 static u8 low_string_id = 255;        // lowest touched string
 static u8 high_string_id = 255;       // highest touched string
 static u8 high_string_note = 0;       // note on highest touched string
@@ -1013,10 +1013,6 @@ static void run_voice(u8 voice_id, u32* dst) {
 	float env_lvl = voice->env1_lvl;
 	bool voice_audible = env_lvl > 0.001f;
 
-	// track max pressure
-	if (pressure > synth_max_pres)
-		synth_max_pres = pressure;
-
 	// turn off external touch if it has rung out
 	if ((s_string->ext_touch & read_frame_mask) && !s_string->touched && !voice_audible)
 		s_string->ext_touch &= ~read_frame_mask;
@@ -1183,6 +1179,11 @@ static void run_voice(u8 voice_id, u32* dst) {
 		voice->env1_decaying = true;
 	}
 
+	// track max pressure
+	u16 env_16 = maxi(env_lvl * 2048, 0);
+	if (env_16 > max_env_lvl)
+		max_env_lvl = env_16;
+
 	// == NOISE, DRIVE, LPG == //
 
 	// pre-calc noise, drive, resonance
@@ -1210,7 +1211,7 @@ void handle_synth_voices(u32* dst) {
 	// clear cv values
 	cv_trig_out_high = false;
 	cv_gate_out_high = false;
-	synth_max_pres = 0;
+	max_env_lvl = 0;
 	low_string_id = 255;
 	high_string_id = 255;
 
@@ -1221,7 +1222,7 @@ void handle_synth_voices(u32* dst) {
 	// send cv out
 	send_cv_trigger(cv_trig_out_high);
 	send_cv_gate(cv_gate_out_high);
-	send_cv_pressure(mini(synth_max_pres, 2048) << 5);
+	send_cv_pressure(max_env_lvl << 5);
 
 	// drone the lowest string of the arp
 	if (low_string_id == high_string_id && no_arp_touch_mask)
@@ -1302,15 +1303,15 @@ void handle_synth_voices(u32* dst) {
 // === VISUALS === //
 
 u8 draw_high_note(void) {
-	if (synth_max_pres > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
+	if (max_env_lvl > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
 		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name(high_string_note));
 	else
 		return 0;
 }
 
 void draw_max_pres(void) {
-	vline(126, 32 - (synth_max_pres >> 6), 32, 1);
-	vline(127, 32 - (synth_max_pres >> 6), 32, 1);
+	vline(126, 32 - (max_env_lvl >> 6), 32, 1);
+	vline(127, 32 - (max_env_lvl >> 6), 32, 1);
 }
 
 void draw_voices(bool show_latch) {
