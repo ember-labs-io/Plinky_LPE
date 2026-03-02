@@ -2,6 +2,10 @@
 
 u8 gfx_text_color = 1;
 
+static const u8 font_heights[NUM_FONTS] = {
+    [F_8] = 8, [F_12] = 12, [F_16] = 16, [F_16_BOLD] = 16, [F_20_BOLD] = 20,
+};
+
 void init_gfx(void) {
 	oled_init();
 	draw_logo();
@@ -211,13 +215,13 @@ void draw_load_bar(u16 position, u16 range) {
 // STRINGS
 
 static int char_width(Font f, char c) {
-	int xsize = ((int)(f) & 15) * 2 + 4;
-	int ysize = xsize * 2;
+	int ysize = font_heights[f];
+	int xsize = ysize / 2;
 	if (c & 0x80)
 		return 20;
 	if (c <= 32 || c > '~')
 		return xsize / 2; // space
-	int fo = font_offsets[f & 15][(f & BOLD) >= BOLD];
+	int fo = font_offsets[f];
 	const u8* data = (((const u8*)font_data) + fo);
 	u8 datap = (ysize + 7) / 8;
 	u32 mask = (2 << (ysize - 1)) - 1;
@@ -257,7 +261,7 @@ int str_width(Font f, const char* buf) {
 }
 
 int font_height(Font f) {
-	return ((int)(f) & 15) * 4 + 8;
+	return font_heights[f];
 }
 
 int str_height(Font f, const char* buf) {
@@ -277,13 +281,13 @@ static int draw_char(int x, int y, Font f, char c, char text_color) {
 		draw_char(x - 1, y + 1, f, c, 0);
 		text_color = 1;
 	}
-	int xsize = ((int)(f) & 15) * 2 + 4;
-	int ysize = xsize * 2;
+	int ysize = font_heights[f];
+	int xsize = ysize / 2;
 	if (c & 0x80)
 		return draw_icon(x, mini(y, 18), c ^ 0x80, text_color);
 	if (c <= 32 || c > '~')
 		return xsize / 2; // space
-	int fo = font_offsets[f & 15][(f & BOLD) >= BOLD];
+	int fo = font_offsets[f];
 	const u8* data = (((const u8*)font_data) + fo);
 	u8 datap = (ysize + 7) / 8;
 	u32 mask = (2 << (ysize - 1)) - 1;
@@ -394,13 +398,13 @@ int drawstr_noright(int x, int y, Font f, const char* buf) {
 		return 0;
 
 	int ox = x;
-	int ysize = ((int)(f) & 15) * 2 + 4;
+	int ysize = font_heights[f];
 	if (x >= 128 || y <= -ysize || y >= 32)
 		return 0;
 	for (; *buf;) {
 		if (*buf == '\n') {
 			x = ox;
-			y += ysize * 2 - 2;
+			y += ysize - 2;
 		}
 		else
 			x += draw_char(x, y, f, *buf, gfx_text_color);

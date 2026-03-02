@@ -394,7 +394,7 @@ void sampler_playing_tick(void) {
 
 static void draw_sample_erasing(u8 erase_pos) {
 	oled_clear();
-	draw_str(0, 0, F_32, "erasing...");
+	draw_str_ctr(6, F_20_BOLD, "erasing");
 	inverted_rectangle(0, 0, erase_pos * 2, 32);
 	oled_flip();
 	return;

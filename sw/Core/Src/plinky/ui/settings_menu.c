@@ -230,7 +230,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 
 void draw_settings_menu(void) {
 	// "settings"
-	draw_str(79, 1, F_8_BOLD, "SETTINGS");
+	draw_str(79, 1, F_8, "SETTINGS");
 	vline(OLED_WIDTH / 2, 0, 9, 1);
 	vline(OLED_WIDTH - 1, 0, 9, 1);
 	hline(OLED_WIDTH / 2, 9, OLED_WIDTH, 1);

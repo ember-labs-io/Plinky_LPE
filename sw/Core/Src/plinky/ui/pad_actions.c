@@ -430,7 +430,7 @@ bool oled_function_visuals(void) {
 	switch (ui_mode) {
 	case UI_SAMPLE_EDIT:
 		if (function_pressed == FN_RECORD && sampler_mode == SM_PREVIEW && function_press_ms >= PRESS_DELAY) {
-			draw_str(0, 0, F_32, "record?");
+			draw_str_ctr(6, F_20_BOLD, "record?");
 			draw_load_bar(function_press_ms - PRESS_DELAY, LONG_PRESS_TIME);
 			return true;
 		}
@@ -438,16 +438,18 @@ bool oled_function_visuals(void) {
 	default:
 		switch (function_pressed) {
 		case FN_CLEAR:
-			if (ui_mode != UI_LOAD) {
-				draw_str(0, 0, F_32_BOLD, I_CROSS "clear");
-				return true;
-			}
-			break;
+			if (ui_mode == UI_LOAD)
+				return false;
+
+			draw_str_ctr(6, F_20_BOLD, "clear");
+			draw_str(22, 8, F_20_BOLD, I_CROSS);
+			return true;
 		case FN_RECORD:
-			draw_str(0, 4, F_20_BOLD, seq_recording() ? I_RECORD "record >off" : I_RECORD "record >on");
+			draw_str_ctr(6, F_20_BOLD, seq_recording() ? "record: off" : "record: on");
 			return true;
 		case FN_PLAY:
-			draw_str(0, 0, F_32_BOLD, I_PLAY "play");
+			draw_str_ctr(6, F_20_BOLD, "play");
+			draw_str(30, 8, F_20_BOLD, I_PLAY);
 			return true;
 		default:
 			break;

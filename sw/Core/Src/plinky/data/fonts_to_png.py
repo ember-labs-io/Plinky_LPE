@@ -9,24 +9,24 @@ import re
 from PIL import Image
 
 # Font boundaries (indices in u32 array where each font starts)
-FONT_BOUNDARIES = [0, 96, 192, 480, 768, 1152, 1536, 2256, 2976, 3840, 4704, 6048, 7392, 8928, 10464]
+FONT_BOUNDARIES = [0, 96, 384, 768, 1152, 1872]
 
 # Font names indexed by actual Font enum value
 FONT_NAMES = {
     0: "F_8",
     1: "F_12",
     2: "F_16",
-    3: "F_20",
-    4: "F_24",
-    5: "F_28",
-    6: "F_32",
-    16: "F_8_BOLD",
-    17: "F_12_BOLD",
-    18: "F_16_BOLD",
-    19: "F_20_BOLD",
-    20: "F_24_BOLD",
-    21: "F_28_BOLD",
-    22: "F_32_BOLD"
+    3: "F_16_BOLD",
+    4: "F_20_BOLD",
+}
+
+# Font dimensions: (xsize, ysize, datap)
+FONT_DIMENSIONS = {
+    0: (4, 8, 1),      # F_8
+    1: (6, 12, 2),     # F_12
+    2: (8, 16, 2),     # F_16
+    3: (8, 16, 2),     # F_16_BOLD
+    4: (10, 20, 3),    # F_20_BOLD
 }
 
 def parse_fonts_h(filename):
@@ -49,11 +49,8 @@ def parse_fonts_h(filename):
     return values
 
 def get_font_dimensions(font_index):
-    """Calculate font dimensions from font index"""
-    xsize = (font_index & 15) * 2 + 4
-    ysize = xsize * 2
-    datap = (ysize + 7) // 8  # Bytes per column
-    return xsize, ysize, datap
+    """Get font dimensions from lookup table"""
+    return FONT_DIMENSIONS[font_index]
 
 def extract_character(font_data, char_offset, xsize, ysize, datap):
     """Extract a single character's pixel data"""
@@ -82,12 +79,7 @@ def extract_character(font_data, char_offset, xsize, ysize, datap):
 
 def font_index_to_offset(font_index):
     """Convert font index to offset in font_data"""
-    # font_index & 15 gives size, >= 16 means bold
-    size_idx = font_index & 15
-    is_bold = (font_index & 16) != 0
-
-    boundary_idx = size_idx * 2 + (1 if is_bold else 0)
-    return FONT_BOUNDARIES[boundary_idx]
+    return FONT_BOUNDARIES[font_index]
 
 def export_font_to_png(font_data_u32, font_index, output_path):
     """Export a font to PNG"""

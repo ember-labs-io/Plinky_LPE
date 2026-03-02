@@ -1089,9 +1089,9 @@ void draw_cur_param(void) {
 	u8 text_y;
 	u8 icon_y = sect_str[0] == I_NOTES[0] ? 1 : 0;
 	char icon_str[2] = {sect_str[0], '\0'};
-	draw_str(0, icon_y, F_12_BOLD, icon_str);
-	draw_str(text_x, 3, F_12_BOLD, sect_str + 1);
-	u8 sect_end_x = text_x + str_width(F_12_BOLD, sect_str + 1);
+	draw_str(0, icon_y, F_12, icon_str);
+	draw_str(text_x, 3, F_12, sect_str + 1);
+	u8 sect_end_x = text_x + str_width(F_12, sect_str + 1);
 
 	// modulated value
 	if (src_snap != SRC_BASE || has_modulation(draw_param)) {
@@ -1110,7 +1110,7 @@ void draw_cur_param(void) {
 			break;
 		default:
 			const char* mod_val_str = get_param_str(draw_param, SRC_BASE, raw_mod, val_buf);
-			font = F_12_BOLD;
+			font = F_12;
 			width = str_width(font, mod_val_str);
 			x = text_right_x - width;
 			draw_str(x, 21, font, mod_val_str);
@@ -1126,15 +1126,15 @@ void draw_cur_param(void) {
 	if (src_snap == SRC_BASE) {
 		switch (draw_param) {
 		case P_SCALE:
-			font = F_12_BOLD;
+			font = F_12;
 			x_center = 82;
 			break;
 		case P_ARP_ORDER:
-			font = F_12_BOLD;
+			font = F_12;
 			x_center = 81;
 			break;
 		case P_SEQ_ORDER:
-			font = F_12_BOLD;
+			font = F_12;
 			x_center = 80;
 			break;
 		default:
@@ -1147,7 +1147,7 @@ void draw_cur_param(void) {
 				font = F_16_BOLD;
 			break;
 		case R_LFOSHP:
-			font = F_12_BOLD;
+			font = F_12;
 			x_center = 85;
 			break;
 		default:
@@ -1181,17 +1181,17 @@ void draw_cur_param(void) {
 	if (base_raw < 0) {
 		switch (draw_param) {
 		case P_SHAPE:
-			draw_str(0, 18, F_12_BOLD, I_SHAPE);
-			draw_str(text_x - 1, 20, F_12_BOLD, "PulseWidth");
+			draw_str(0, 18, F_12, I_SHAPE);
+			draw_str(text_x - 1, 20, F_12, "PulseWidth");
 			return;
 		case P_SWING:
-			draw_str(0, 18, F_12_BOLD, I_TILT);
-			draw_str(text_x, 18, F_12_BOLD, "Swing 16th");
+			draw_str(0, 18, F_12, I_TILT);
+			draw_str(text_x, 18, F_12, "Swing 16th");
 			return;
 		case P_ARP_CHANCE:
 		case P_SEQ_CHANCE:
-			draw_str(0, 18, F_12_BOLD, I_PERCENT);
-			draw_str(text_x, 20, F_12_BOLD, "Chance (W)");
+			draw_str(0, 18, F_12, I_PERCENT);
+			draw_str(text_x, 20, F_12, "Chance (W)");
 			return;
 		default:
 			break;
@@ -1199,8 +1199,8 @@ void draw_cur_param(void) {
 		switch (range_type[draw_param]) {
 		case R_DLYCLK:
 		case R_DUACLK:
-			draw_str(0, 18, F_12_BOLD, I_TIME);
-			draw_str(text_x, 20, F_12_BOLD, "Rate");
+			draw_str(0, 18, F_12, I_TIME);
+			draw_str(text_x, 20, F_12, "Rate");
 			return;
 		default:
 			break;
@@ -1211,13 +1211,13 @@ void draw_cur_param(void) {
 	u8 range = param_range(draw_param);
 	s8 index = raw_to_index(base_raw, range);
 	if (draw_param == P_SEQ_CLK_DIV && index == range - 1) {
-		draw_str(0, 18, F_12_BOLD, I_JACK);
-		draw_str(text_x, 18, F_12_BOLD, "Trigger");
+		draw_str(0, 18, F_12, I_JACK);
+		draw_str(text_x, 18, F_12, "Trigger");
 		return;
 	}
 	if (draw_param == P_SHAPE && base_raw == 0) {
-		draw_str(0, 18, F_12_BOLD, I_SHAPE);
-		draw_str(text_x, 20, F_12_BOLD, "SuperSaw");
+		draw_str(0, 18, F_12, I_SHAPE);
+		draw_str(text_x, 20, F_12, "SuperSaw");
 		return;
 	}
 
@@ -1235,7 +1235,7 @@ void draw_cur_param(void) {
 		break;
 	}
 	icon_str[0] = p_name[0];
-	draw_str(0, icon_y, F_12_BOLD, icon_str);
+	draw_str(0, icon_y, F_12, icon_str);
 
 	switch (draw_param) {
 	// make sure param name descenders don't bump into voice bars
@@ -1257,7 +1257,7 @@ void draw_cur_param(void) {
 		text_y = 20;
 		break;
 	}
-	draw_str(text_x, text_y, F_12_BOLD, p_name + 1);
+	draw_str(text_x, text_y, F_12, p_name + 1);
 	return;
 }
 
