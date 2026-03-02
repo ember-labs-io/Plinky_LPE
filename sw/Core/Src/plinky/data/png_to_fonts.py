@@ -14,21 +14,9 @@ FONT_NAMES = {
     0: "F_8",
     1: "F_12",
     2: "F_16",
-    3: "F_20",
-    4: "F_24",
-    5: "F_28",
-    6: "F_32",
-    16: "F_8_BOLD",
-    17: "F_12_BOLD",
-    18: "F_16_BOLD",
-    19: "F_20_BOLD",
-    20: "F_24_BOLD",
-    21: "F_28_BOLD",
-    22: "F_32_BOLD"
+    3: "F_16_BOLD",
+    4: "F_20_BOLD",
 }
-
-# Font names (ordered by size index) - for font_offsets array
-FONT_NAMES_BY_SIZE = ["F_8", "F_12", "F_16", "F_20", "F_24", "F_28", "F_32"]
 
 def parse_fonts_h(filename):
     """Parse fonts.h and extract font_offsets and font_data arrays"""
@@ -41,19 +29,14 @@ def parse_fonts_h(filename):
 
     # Find the font_offsets array
     font_offsets = None
-    offsets_match = re.search(r'const\s+static\s+u16\s+font_offsets\[\d+\]\[\d+\]\s*=\s*\{(.*?)\};', content_no_comments, re.DOTALL)
+    offsets_match = re.search(r'const\s+static\s+u16\s+font_offsets\[NUM_FONTS\]\s*=\s*\{(.*?)\};', content_no_comments, re.DOTALL)
     if offsets_match:
-        # Parse font_offsets
+        # Parse flat font_offsets array
         offsets_str = offsets_match.group(1)
-        font_offsets = []
-        for pair_match in re.finditer(r'\{([^}]+)\}', offsets_str):
-            pair_str = pair_match.group(1)
-            pair = [int(v.strip(), 0) for v in pair_str.split(',') if v.strip()]
-            if len(pair) == 2:
-                font_offsets.append(pair)
+        font_offsets = [int(v.strip(), 0) for v in offsets_str.split(',') if v.strip()]
 
-    if not font_offsets or len(font_offsets) != 7:
-        raise ValueError("Could not find valid font_offsets array in fonts.h")
+    if not font_offsets or len(font_offsets) != 5:
+        raise ValueError("Could not find valid font_offsets array in fonts.h (expected 5 entries)")
 
     # Find the font_data array
     data_match = re.search(r'const\s+static\s+u32\s+font_data\[\d*\]\s*=\s*\{([^}]+)\}', content_no_comments, re.DOTALL)
@@ -65,48 +48,29 @@ def parse_fonts_h(filename):
 
     return font_offsets, values
 
-def build_font_boundaries(font_offsets):
-    """Convert font_offsets (byte offsets) to u32 indices"""
-    boundaries = []
-
-    for size_idx in range(7):
-        regular_offset_bytes = font_offsets[size_idx][0]
-        bold_offset_bytes = font_offsets[size_idx][1]
-
-        boundaries.append(regular_offset_bytes // 4)
-        boundaries.append(bold_offset_bytes // 4)
-
-    return sorted(set(boundaries))
-
 def get_font_boundaries_for_index(font_offsets, font_index):
     """Get start and end u32 index for a specific font"""
-    all_boundaries = build_font_boundaries(font_offsets)
+    start_idx = font_offsets[font_index] // 4
 
-    # Convert Font enum value to size_idx and is_bold
-    # Font enum: 0-6 are regular, 16-22 are bold
-    size_idx = font_index & 15  # Mask off BOLD bit
-    is_bold = (font_index & 16) != 0
-
-    offset_bytes = font_offsets[size_idx][1 if is_bold else 0]
-    start_idx = offset_bytes // 4
-
-    # Find the next boundary after this one
-    all_boundaries_sorted = sorted(all_boundaries)
-    pos = all_boundaries_sorted.index(start_idx)
-
-    if pos + 1 < len(all_boundaries_sorted):
-        end_idx = all_boundaries_sorted[pos + 1]
+    if font_index + 1 < len(font_offsets):
+        end_idx = font_offsets[font_index + 1] // 4
     else:
         end_idx = None  # Last font, use total length
 
     return start_idx, end_idx
 
+# Font dimensions lookup
+FONT_DIMENSIONS = {
+    0: (4, 8, 1),      # F_8
+    1: (6, 12, 2),     # F_12
+    2: (8, 16, 2),     # F_16
+    3: (8, 16, 2),     # F_16_BOLD
+    4: (10, 20, 3),    # F_20_BOLD
+}
+
 def get_font_dimensions(font_index):
-    """Calculate font dimensions from font index"""
-    xsize = (font_index & 15) * 2 + 4
-    ysize = xsize * 2
-    datap = (ysize + 7) // 8  # Bytes per column
-    return xsize, ysize, datap
+    """Get font dimensions from lookup table"""
+    return FONT_DIMENSIONS[font_index]
 
 def extract_character_from_png(img, char_idx, xsize, ysize):
     """Extract a single character from the PNG"""
@@ -189,16 +153,9 @@ def build_label_map(font_offsets):
     """Build a map of u32 index -> label for font boundaries"""
     label_map = {}
 
-    for size_idx in range(7):
-        regular_offset_bytes = font_offsets[size_idx][0]
-        bold_offset_bytes = font_offsets[size_idx][1]
-
-        # Convert byte offsets to u32 indices
-        regular_idx = regular_offset_bytes // 4
-        bold_idx = bold_offset_bytes // 4
-
-        label_map[regular_idx] = FONT_NAMES_BY_SIZE[size_idx]
-        label_map[bold_idx] = FONT_NAMES_BY_SIZE[size_idx] + "_BOLD"
+    for font_index in range(len(font_offsets)):
+        u32_idx = font_offsets[font_index] // 4
+        label_map[u32_idx] = FONT_NAMES[font_index]
 
     return label_map
 

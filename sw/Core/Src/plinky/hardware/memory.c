@@ -367,7 +367,7 @@ void check_bootloader_flash(void) {
 	}
 	DebugLog("FLASHING BOOTLOADER! DO NOT RESET\r\n");
 	oled_clear();
-	draw_str(0, 0, F_12_BOLD, "FLASHING\nBOOTLOADER");
+	draw_str(0, 0, F_12, "FLASHING\nBOOTLOADER");
 	char verbuf[5] = {};
 	memcpy(verbuf, (void*)(delay_ram_buf + 65536 - 4), 4);
 	draw_str(0, 24, F_8, verbuf);
@@ -405,7 +405,7 @@ void check_bootloader_flash(void) {
 	HAL_FLASH_Lock();
 	DebugLog("BOOTLOADER has been flashed!\r\n");
 	oled_clear();
-	draw_str(0, 0, F_12_BOLD, "BOOTLOADER\nFLASHED OK!");
+	draw_str(0, 0, F_12, "BOOTLOADER\nFLASHED OK!");
 	draw_str(0, 24, F_8, verbuf);
 	oled_flip();
 	HAL_Delay(3000);
@@ -1049,7 +1049,7 @@ void draw_preset_name(u8 xtab) {
 	memcpy(preset_name, cur_preset.name, 8);
 	preset_name[8] = 0;
 	xtab += 2;
-	draw_str(xtab, 0, F_8_BOLD, preset_name);
+	draw_str(xtab, 0, F_8, preset_name);
 	// category
 	if (cur_preset.category > 0 && cur_preset.category < NUM_PST_CATS)
 		draw_str(xtab, 8, F_8, preset_category_name[cur_preset.category]);

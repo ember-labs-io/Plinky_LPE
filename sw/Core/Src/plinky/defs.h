@@ -664,28 +664,18 @@ typedef enum MidiMessageType {
 // == GRAPHICS == //
 
 typedef enum Font {
-	BOLD = 16,
 	F_8 = 0,
 	F_12,
 	F_16,
-	F_20,
-	F_24,
-	F_28,
-	F_32,
-	F_8_BOLD = BOLD,
-	F_12_BOLD,
 	F_16_BOLD,
 	F_20_BOLD,
-	F_24_BOLD,
-	F_28_BOLD,
-	F_32_BOLD,
 	NUM_FONTS,
 } Font;
 
 // offset to make fonts down-align to the same pixel (currently incomplete)
 const static u8 font_y_offset[NUM_FONTS] = {
     [F_16] = 3,
-    [F_12_BOLD] = 3,
+    [F_12] = 3,
     [F_16_BOLD] = 3,
 };
 
