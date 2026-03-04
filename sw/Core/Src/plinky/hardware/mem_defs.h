@@ -111,7 +111,7 @@ static u16 get_midi_in_scale_quant(void) {
 }
 
 static u16 get_midi_in_filter(void) {
-	return sys_params.midi_rcv_param_ccs | (sys_params.midi_rcv_transport << 1) | (sys_params.midi_rcv_clock << 2);
+	return sys_params.midi_rcv_param_ccs + sys_params.midi_rcv_transport * 3 + sys_params.midi_rcv_clock * 6;
 }
 
 static u16 get_midi_out_filter(void) {
@@ -284,9 +284,9 @@ static void set_midi_in_scale_quant(u16 value) {
 }
 
 static void set_midi_in_filter(u16 value) {
-	sys_params.midi_rcv_param_ccs = value & 1;
-	sys_params.midi_rcv_transport = (value >> 1) & 1;
-	sys_params.midi_rcv_clock = (value >> 2) & 1;
+	sys_params.midi_rcv_param_ccs = value % 3;
+	sys_params.midi_rcv_transport = (value / 3) % 2;
+	sys_params.midi_rcv_clock = (value / 6) % 2;
 }
 
 static void set_midi_out_filter(u16 value) {
@@ -378,7 +378,7 @@ const u8 sys_param_ranges[] = {
     [SYS_MPE_ZONE] = 2,
     [SYS_MPE_CHANS] = 15,
     [SYS_MIDI_IN_SCALE_QUANT] = 2,
-    [SYS_MIDI_IN_FILTER] = 8,
+    [SYS_MIDI_IN_FILTER] = 12,
     [SYS_MIDI_OUT_FILTER] = 24,
     [SYS_MIDI_TRS_OUT_OFF] = 2,
     [SYS_MIDI_TUNING] = 2,

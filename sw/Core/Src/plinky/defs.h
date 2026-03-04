@@ -879,22 +879,23 @@ typedef struct SysParams {
 	// 11 bytes
 	bool midi_rcv_clock : 1;
 	bool midi_rcv_transport : 1;
-	bool midi_rcv_param_ccs : 1;
+	bool midi_rcv_param_ccs : 2;
 	bool midi_send_clock : 1;
 	bool midi_send_transport : 1;
 	bool midi_send_param_ccs : 2; // 0 = off, 1 = CCs, 2 = 14bit CCs
-	bool midi_send_lfo_cc : 1;
 	// 12 bytes
+	bool midi_send_lfo_cc : 1;
 	u8 mpe_zone : 1; // 0 = lower, 1 = upper
 	bool midi_in_scale_quant : 1;
 	bool midi_trs_out_off : 1;
 	bool midi_tuning : 1;
-	u8 reference_pitch : 4;
+	u8 pad1 : 3;
 	// 13 bytes
 	u8 cv_gate_in_is_pressure : 1;
-	u8 paddy : 7;
+	u8 reference_pitch : 4;
+	u8 pad2 : 3;
 	// 14 bytes
-	u8 pad[16 - 15];
+	u8 pad3;
 	// 15 bytes
 	u8 version;
 	// 16 bytes

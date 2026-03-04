@@ -418,7 +418,6 @@ void init_memory(void) {
 		sys_params.reverse_encoder = false;
 		sys_params.preset_aligned = false;
 		sys_params.pattern_aligned = false;
-		memset(sys_params.pad, 0, sizeof(sys_params.pad));
 		sys_params.version = REV_SYS_PARAMS_VERSION;
 		// fall through for further updating
 	case REV_SYS_PARAMS_VERSION:
