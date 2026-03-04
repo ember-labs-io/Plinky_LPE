@@ -293,6 +293,10 @@ void settings_encoder_press(bool pressed, u16 duration) {
 }
 
 void edit_settings_from_encoder(s8 enc_diff) {
+	// having an action selected reverts to editing item selection
+	if (value_selected && (cur_item & 63) >= S_ACTIONS * 8)
+		value_selected = false;
+
 	// edit value
 	if (value_selected) {
 		s16 new_value = cur_value;
@@ -466,7 +470,7 @@ void draw_settings_menu(void) {
 			x += 4;
 			draw_str(x, 18, F_8, "C");
 			draw_str(x, 25, F_8, "4");
- 		}
+		}
 	}
 	else if (cur_item == I_MIDI_OUT_FILTER) {
 		u8 x = arrow_offset - 64;
