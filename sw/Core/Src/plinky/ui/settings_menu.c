@@ -456,6 +456,17 @@ void draw_settings_menu(void) {
 		draw_str(x, 17, font, sys_params.midi_rcv_clock ? I_TEMPO : I_CROSS);
 		draw_str(x + 16, 17, font, sys_params.midi_rcv_transport ? I_PLAY : I_CROSS);
 		draw_str(x + 32, 17, font, sys_params.midi_rcv_param_ccs ? I_KNOB : I_CROSS);
+		if (sys_params.midi_rcv_param_ccs == 2) {
+			x += 35;
+			fill_rectangle(x, 17, x + 9, 32);
+			inverted_rectangle(x, 17, x + 9, 32);
+			x++;
+			draw_str(x, 18, F_8, "C");
+			draw_str(x, 25, F_8, "1");
+			x += 4;
+			draw_str(x, 18, F_8, "C");
+			draw_str(x, 25, F_8, "4");
+ 		}
 	}
 	else if (cur_item == I_MIDI_OUT_FILTER) {
 		u8 x = arrow_offset - 64;

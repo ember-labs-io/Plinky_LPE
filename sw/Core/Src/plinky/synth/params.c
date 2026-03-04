@@ -164,21 +164,14 @@ void set_mod_from_nrpn(Param param_id, u14 value, ModSource mod_src) {
 }
 
 void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
+	static u14 cc14_values[NUM_14BIT_CCS][NUM_STRINGS] = {};
+
 	// global ccs live on string 0
 	if (!mpe)
 		string_id = 0;
 
-	// CCs 0 through 31 are treated as regular 7 bit CCs by default
-	// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
-	// treated as 14 bit CCs
-	static u14 cc14_values[NUM_14BIT_CCS][NUM_STRINGS] = {};
-	static bool seen_14bit = false;
-
-	if (!seen_14bit && data1 >= NUM_14BIT_CCS && data1 < 2 * NUM_14BIT_CCS)
-		seen_14bit = true;
-
 	// define param id
-	bool is_14bit = seen_14bit && data1 < 2 * NUM_14BIT_CCS;
+	bool is_14bit = sys_params.midi_rcv_param_ccs == 2 && data1 < 2 * NUM_14BIT_CCS;
 	Param param_id = midi_cc_table[is_14bit ? data1 % NUM_14BIT_CCS : data1];
 	if (param_id >= NUM_PARAMS)
 		return;
@@ -200,12 +193,8 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 		raw = CC14_TO_RAW(cc14->value, param_id);
 	}
 	// 7 bit CCs
-	else {
-		// save in cc14 array in case the second byte comes in later
-		if (data1 < NUM_14BIT_CCS)
-			cc14_values[data1][string_id].msb = data2;
+	else
 		raw = CC_TO_RAW(data2, param_id);
-	}
 
 	// save
 	if (mpe)
