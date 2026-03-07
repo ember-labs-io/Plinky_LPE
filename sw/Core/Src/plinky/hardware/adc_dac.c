@@ -175,7 +175,7 @@ void adc_dac_tick(void) {
 		if (sys_params.cv_quant == CVQ_CHROMATIC)
 			cv_pitch = ROUND_PITCH_TO_SEMIS(cv_pitch);
 		else if (sys_params.cv_quant == CVQ_SCALE)
-			cv_pitch = quant_pitch_to_scale(cv_pitch, param_index_poly(PP_SCALE, cv_touch.string_id));
+			cv_pitch = quant_pitch_to_scale(cv_pitch, cv_touch.string_id);
 		// recalculate note number and string position
 		if (new_touch || !sys_params.mpe_out) {
 			cv_touch.note_number = PITCH_TO_NOTE_NR(cv_pitch);

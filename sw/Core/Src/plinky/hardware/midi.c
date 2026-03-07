@@ -904,7 +904,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 
 			// quantize pitch and note number
 			if (sys_params.midi_in_scale_quant) {
-				midi_pitch = quant_pitch_to_scale(midi_pitch, param_index_poly(PP_SCALE, string_id));
+				midi_pitch = quant_pitch_to_scale(midi_pitch, string_id);
 				data1 = PITCH_TO_NOTE_NR(midi_pitch);
 			}
 
