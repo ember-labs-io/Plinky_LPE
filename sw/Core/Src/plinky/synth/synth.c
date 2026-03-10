@@ -301,20 +301,12 @@ static u16 string_center_pitch(u8 string_id) {
 	return OCTS_TO_PITCH(oct) + ((pitch3 + pitch4) >> 1);
 }
 
-u8 find_string_for_pitch(u16 pitch, bool quantize) {
+u8 find_string_for_pitch(u16 pitch) {
 	// find desired string: center pitch closest to pitch
 	u8 desired_string = 0;
 	u16 prev_pitch_dist = UINT16_MAX;
-	Scale prev_scale = NUM_SCALES;
-	u16 quantized_pitch = pitch;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
-		// requantize pitch if scale changes
-		Scale scale = string_scale(string_id);
-		if (quantize && prev_scale != scale) {
-			quantized_pitch = quant_pitch_to_scale(pitch, string_id);
-			prev_scale = scale;
-		}
-		u16 pitch_dist = abs(string_center_pitch(string_id) - quantized_pitch);
+		u16 pitch_dist = abs(string_center_pitch(string_id) - pitch);
 		if (pitch_dist >= prev_pitch_dist)
 			break;
 		prev_pitch_dist = pitch_dist;
