@@ -971,6 +971,9 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 			break;
 		}
 		switch (range_type[param_id]) {
+		case R_ROOT:
+			sprintf(val_buf, "%s", note_name((index), false));
+			return val_buf;
 		// clock sync
 		case R_DLYCLK:
 		case R_SEQCLK:
@@ -1186,6 +1189,7 @@ void draw_cur_param(void) {
 		case P_SCALE:
 		case P_MICROTONE:
 		case P_COLUMN:
+		case P_ROOT:
 			sect_str = I_TOUCH "Pads";
 			break;
 		case P_TEMPO:

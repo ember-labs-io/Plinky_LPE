@@ -352,7 +352,7 @@ void sampler_oled_visuals(void) {
 			draw_str(-128 + 16, 32 - 12, F_12, (s->loop & 2) ? "all" : "slc");
 			draw_icon(128 - 16, 32 - 14, ((s->loop & 1) ? I_FEEDBACK[0] : I_RIGHT[0]) - 0x80, gfx_text_color);
 			if (s->pitched)
-				draw_str(0, 32 - 12, F_12, note_name(s->notes[cur_slice_id & 7]));
+				draw_str(0, 32 - 12, F_12, note_name(s->notes[cur_slice_id & 7], true));
 			else
 				draw_str(0, 32 - 12, F_12, "tape");
 		}

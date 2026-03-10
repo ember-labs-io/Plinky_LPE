@@ -20,6 +20,7 @@ typedef enum RangeType {
 	R_DEGREE, // degree
 	R_SCALE,  // scale
 	R_COLUMN, // column
+	R_ROOT,   // root note
 	R_DLYCLK, // delay clock
 	R_SEQCLK, // sequencer clock
 	R_DUACLK, // dual clock, synced & free (arp, lfos)
@@ -44,6 +45,7 @@ const static u16 param_info[NUM_RANGE_TYPES] = {
     [R_DEGREE] = SIGNED + 25,
     [R_SCALE] = UNSIGNED + NUM_SCALES,
     [R_COLUMN] = UNSIGNED + 13,
+    [R_ROOT] = UNSIGNED + 12,
     [R_DLYCLK] = SIGNED + 13, // max 1 bar synced
     [R_SEQCLK] = UNSIGNED + NUM_SYNC_DIVS + 1,
     [R_DUACLK] = SIGNED + NUM_SYNC_DIVS,
@@ -63,7 +65,7 @@ const static u16 param_info[NUM_RANGE_TYPES] = {
 const static RangeType range_type[NUM_PARAMS] = {
    [P_SHAPE] = R_SVALUE,       [P_DISTORTION] = R_UVALUE,   [P_PITCH] = R_SVALUE,         [P_OCT] = R_OCTAVE,         [P_GLIDE] = R_UVALUE,         [P_INTERVAL] = R_SVALUE,      // Sound 1
    [P_NOISE] = R_UVALUE,       [P_RESO] = R_UVALUE,         [P_DEGREE] = R_DEGREE,        [P_SCALE] = R_SCALE,        [P_MICROTONE] = R_UVALUE,     [P_COLUMN] = R_COLUMN,        // Sound 2
-   [P_ENV_LVL1] = R_UVALUE,    [P_ATTACK1] = R_UVALUE,      [P_DECAY1] = R_UVALUE,        [P_SUSTAIN1] = R_UVALUE,    [P_RELEASE1] = R_UVALUE,      [P_ENV1_UNUSED] = R_UNUSED,   // Envelope 1
+   [P_ENV_LVL1] = R_UVALUE,    [P_ATTACK1] = R_UVALUE,      [P_DECAY1] = R_UVALUE,        [P_SUSTAIN1] = R_UVALUE,    [P_RELEASE1] = R_UVALUE,      [P_ROOT] = R_ROOT,            // Envelope 1
    [P_ENV_LVL2] = R_UVALUE,    [P_ATTACK2] = R_UVALUE,      [P_DECAY2] = R_UVALUE,        [P_SUSTAIN2] = R_UVALUE,    [P_RELEASE2] = R_UVALUE,      [P_ENV2_UNUSED] = R_UNUSED,   // Envelope 2
    [P_DLY_SEND] = R_UVALUE,    [P_DLY_TIME] = R_DLYCLK,     [P_PING_PONG] = R_UVALUE,     [P_DLY_WOBBLE] = R_UVALUE,  [P_DLY_FEEDBACK] = R_UVALUE,  [P_TEMPO] = R_SVALUE,         // Delay
    [P_RVB_SEND] = R_UVALUE,    [P_RVB_TIME] = R_UVALUE,     [P_SHIMMER] = R_UVALUE,       [P_RVB_WOBBLE] = R_UVALUE,  [P_RVB_UNUSED] = R_UNUSED,    [P_SWING] = R_SVALUE,         // Reverb
@@ -86,7 +88,7 @@ const static Preset init_params = {
     .params = {
         [P_SHAPE] = {0},            [P_DISTORTION] = {RAW_HALF},                                [P_PITCH] = {0},                                    [P_OCT] = {0},                  [P_GLIDE] = {0},                            [P_INTERVAL] = {0},                 // Sound 1
         [P_NOISE] = {0},            [P_RESO] = {0},                                             [P_DEGREE] = {0},                                   [P_SCALE] = {0},                [P_MICROTONE] = {RAW_EIGHTH},               [P_COLUMN] = {INDEX_TO_RAW(7, 13)}, // Sound 2
-        [P_ENV_LVL1] = {RAW_HALF},  [P_ATTACK1] = {RAW_EIGHTH},                                 [P_DECAY1] = {RAW_QUART},                           [P_SUSTAIN1] = {RAW_SIZE},      [P_RELEASE1] = {RAW_EIGHTH},                [P_ENV1_UNUSED] = {},               // Envelope 1
+        [P_ENV_LVL1] = {RAW_HALF},  [P_ATTACK1] = {RAW_EIGHTH},                                 [P_DECAY1] = {RAW_QUART},                           [P_SUSTAIN1] = {RAW_SIZE},      [P_RELEASE1] = {RAW_EIGHTH},                [P_ROOT] = {0},                     // Envelope 1
         [P_ENV_LVL2] = {RAW_HALF},  [P_ATTACK2] = {RAW_EIGHTH},                                 [P_DECAY2] = {RAW_QUART},                           [P_SUSTAIN2] = {RAW_SIZE},      [P_RELEASE2] = {RAW_EIGHTH},                [P_ENV2_UNUSED] = {},               // Envelope 2
         [P_DLY_SEND] = {0},         [P_DLY_TIME] = {INDEX_TO_RAW(3, NUM_SYNC_DIVS)},            [P_PING_PONG] = {RAW_SIZE},                         [P_DLY_WOBBLE] = {RAW_QUART},   [P_DLY_FEEDBACK] = {RAW_HALF},              [P_TEMPO] = {0},                    // Delay
         [P_RVB_SEND] = {RAW_QUART}, [P_RVB_TIME] = {RAW_HALF},                                  [P_SHIMMER] = {RAW_QUART},                          [P_RVB_WOBBLE] = {RAW_QUART},   [P_RVB_UNUSED] = {},                        [P_SWING] = {0},                    // Reverb

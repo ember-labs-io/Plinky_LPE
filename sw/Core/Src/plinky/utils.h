@@ -209,7 +209,7 @@ static inline const char* bin16_str(u16 val) {
 	return buf;
 }
 
-static inline const char* note_name(u8 note_number) {
+static inline const char* note_name(u8 note_number, bool with_oct) {
 	static char buf[5];
 	// note_number 0 = C-1, which is 12 semitones below C0
 	s8 semis = note_number - 12;
@@ -221,7 +221,13 @@ static inline const char* note_name(u8 note_number) {
 	}
 	buf[0] = "CCDDEFFGGAAB"[semis];
 	buf[1] = " # #  # # # "[semis];
-	if (octave < 0) {
+	if (!with_oct) {
+		if (buf[1] == ' ')
+			buf[1] = '\0';
+		else
+			buf[2] = '\0';
+	}
+	else if (octave < 0) {
 		buf[2] = '-';
 		buf[3] = '0' - octave;
 		buf[4] = '\0';
