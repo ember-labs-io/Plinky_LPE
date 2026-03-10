@@ -88,6 +88,7 @@ static u8 high_string_note = 0;       // note on highest touched string
 static u8 string_oct_valid = 0;
 static u8 string_scale_valid = 0;
 static u8 string_start_step_valid = 0;
+static u8 string_root_pitch_valid = 0;
 
 // Midi Tuning Standard
 static u16 midi_tuning_pitch[NUM_NOTES] = {};
@@ -124,6 +125,16 @@ static Scale string_scale(u8 string_id) {
 		string_scale_valid |= mask;
 	}
 	return scale[string_id];
+}
+
+static u16 string_root_pitch(u8 string_id) {
+	static u16 root_pitch[NUM_STRINGS] = {};
+	u8 mask = 1 << string_id;
+	if (!(string_root_pitch_valid & mask)) {
+		root_pitch[string_id] = SEMIS_TO_PITCH(param_index_poly(PP_ROOT, string_id));
+		string_root_pitch_valid |= mask;
+	}
+	return root_pitch[string_id];
 }
 
 // absolute number of steps at the bottom-pad of string_id - includes PP_OCT, does not include PP_DEGREE
@@ -246,6 +257,10 @@ u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 	Scale scale = string_scale(string_id);
 	u8 scale_steps = steps_in_scale[scale];
 
+	// adjust for root note
+	u16 root_pitch_offset = -string_root_pitch(string_id) + PITCH_PER_OCT;
+	pitch += root_pitch_offset;
+
 	// estimate closest by linear mapping
 	u8 step = pitch * scale_steps / PITCH_PER_OCT;
 	u16 best_distance = abs(pitch - pitch_at_step(step, scale, scale_steps));
@@ -256,7 +271,7 @@ u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 		while (true) {
 			step++;
 			u16 step_pitch = pitch_at_step(step, scale, scale_steps);
-			if (step_pitch > MAX_PITCH)
+			if (step_pitch > MAX_PITCH + root_pitch_offset)
 				break;
 			u16 distance = abs(pitch - step_pitch);
 			if (distance >= best_distance)
@@ -270,7 +285,7 @@ u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 		while (true) {
 			step--;
 			s32 step_pitch = pitch_at_step(step, scale, scale_steps);
-			if (step_pitch < 0)
+			if (step_pitch < root_pitch_offset)
 				break;
 			u16 distance = abs(pitch - step_pitch);
 			if (distance >= best_distance)
@@ -280,7 +295,8 @@ u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 		step++;
 	}
 
-	return pitch_at_step(step, scale, scale_steps);
+	// adjust back for root note
+	return pitch_at_step(step, scale, scale_steps) - root_pitch_offset;
 }
 
 static u16 string_center_pitch(u8 string_id) {
@@ -298,7 +314,7 @@ static u16 string_center_pitch(u8 string_id) {
 	if (pitch4 < pitch3)
 		pitch4 += PITCH_PER_OCT;
 	// return average
-	return OCTS_TO_PITCH(oct) + ((pitch3 + pitch4) >> 1);
+	return OCTS_TO_PITCH(oct) + string_root_pitch(string_id) + ((pitch3 + pitch4) >> 1);
 }
 
 u8 find_string_for_pitch(u16 pitch) {
@@ -350,9 +366,10 @@ u16 string_position_from_pitch(u8 string_id, u16 pitch) {
 	s16 start_step = string_start_step(string_id);
 	u16 octs_pitch = OCTS_TO_PITCH(start_step / scale_steps);
 	u8 step_in_oct = start_step % scale_steps;
+	u16 root_pitch_offset = string_root_pitch(string_id);
 
 	u8 pad = 0;
-	while (pad < (PADS_PER_STRIP - 1) && octs_pitch + scale_table[scale][step_in_oct] < pitch) {
+	while (pad < (PADS_PER_STRIP - 1) && octs_pitch + root_pitch_offset + scale_table[scale][step_in_oct] < pitch) {
 		pad++;
 		step_in_oct++;
 
@@ -1097,12 +1114,13 @@ static void run_voice(u8 voice_id, u32* dst) {
 		bool ext_touch = !!(s_string->ext_touch & read_frame_mask);
 
 		// we're filling these
-		u16 note_pitch = 0;
+		s32 note_pitch = 0;
 		s32 pitchbend_pitch = 0;
 		s32 pitch_4x = 0;
 
 		// these only get used by touch
 		Touch* s_touch_sort = &s_string->touch_sorted[2]; // we use pitches 2-5, discarding extreme values
+		u16 root_pitch;
 		Scale scale = S_MAJOR;
 		u8 scale_steps = 0;
 		s16 string_step_offset = 0;
@@ -1115,6 +1133,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 			    USING_MIDI_TUNING(note_number) ? midi_tuning_pitch[note_number] : NOTE_NR_TO_PITCH(note_number);
 		}
 		else {
+			root_pitch = string_root_pitch(voice_id);
 			scale = string_scale(voice_id);
 			scale_steps = steps_in_scale[scale];
 			string_step_offset = string_start_step(voice_id) + param_index_poly(PP_DEGREE, voice_id);
@@ -1124,7 +1143,6 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 		// loop through oscillators
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
-			s16 pitch_param_fine_pitch = 0;
 			u16 osc_pitch = 0;
 
 			// external touch
@@ -1140,28 +1158,22 @@ static void run_voice(u8 voice_id, u32* dst) {
 				// detuning from pad touch: pitchbend
 				s8 pos_on_pad = 127 - (position & 255);
 				u16 pad_pitch = pitch_at_step_with_midi_tuning(pad_step, scale, scale_steps);
-				s16 pitch_to_next_pad =
-				    pitch_at_step_with_midi_tuning(pad_step + (pos_on_pad > 0 ? 1 : -1), scale, scale_steps)
-				    - pad_pitch;
+				u16 next_pad_pitch =
+				    pitch_at_step_with_midi_tuning(pad_step + (pos_on_pad > 0 ? 1 : -1), scale, scale_steps);
+				s16 pitch_to_next_pad = next_pad_pitch - pad_pitch;
 				pitchbend_pitch = (s64)abs(pos_on_pad) * micro_param * pitch_to_next_pad >> 24;
 
-				// apply pitch parameter offset
-				u16 total_pitch = clampi(arp_oct_pitch + pad_pitch + pitch_param_pitch, 0, MAX_PITCH);
-				// round to a semitone
-				note_pitch = ROUND_PITCH_TO_SEMIS(total_pitch);
-				// remember the remaining pitch
-				pitch_param_fine_pitch = total_pitch - note_pitch;
+				// non-detuned pitch
+				note_pitch = root_pitch + pad_pitch + arp_oct_pitch;
 
 				// oscillator 2 defines the note number
 				if (osc_id == 2 && (!sys_params.mpe_out || s_string->env_trigger))
-					s_string->note_number = PITCH_TO_NOTE_NR(note_pitch);
+					s_string->note_number = PITCH_TO_NOTE_NR(clampi(note_pitch, 0, MAX_PITCH));
 			}
 
-			// save for average
-			pitch_4x += note_pitch + pitchbend_pitch;
-
-			// add detuning from pitch parameter - doesn't count as pitchbend
-			osc_pitch = clampi(note_pitch + pitchbend_pitch + pitch_param_fine_pitch, 0, MAX_PITCH);
+			// add detuning pitches
+			osc_pitch = clampi(note_pitch + pitchbend_pitch + pitch_param_pitch, 0, MAX_PITCH);
+			pitch_4x += osc_pitch;
 
 			// add osc interval (if within valid pitch range)
 			osc_pitch += (osc_id & 1) == 1 && osc_pitch + osc_interval_pitch <= MAX_PITCH ? osc_interval_pitch : 0;
@@ -1278,6 +1290,7 @@ void handle_synth_voices(u32* dst) {
 	string_oct_valid = 0;
 	string_scale_valid = 0;
 	string_start_step_valid = 0;
+	string_root_pitch_valid = 0;
 
 	// clear cv values
 	cv_trig_out_high = false;
@@ -1376,7 +1389,7 @@ void handle_synth_voices(u32* dst) {
 u8 draw_high_note(void) {
 	gfx_text_color = 3;
 	if (max_env_lvl > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
-		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name(high_string_note));
+		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name(high_string_note, true));
 	else
 		return 0;
 }
