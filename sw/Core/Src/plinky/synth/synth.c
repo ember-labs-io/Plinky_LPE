@@ -355,14 +355,23 @@ u8 find_string_for_pitch(u16 pitch, bool quantize) {
 u16 string_position_from_pitch(u8 string_id, u16 pitch) {
 	Scale scale = string_scale(string_id);
 	u8 scale_steps = steps_in_scale[scale];
-	s16 string_step_offset = string_start_step(string_id);
-	u16 position = 7 << 8;
-	for (u8 pad = 7; pad > 0; pad--) {
-		if (pitch < pitch_at_step(string_step_offset + pad, scale, scale_steps))
-			break;
-		position = (7 - pad) << 8;
+	s16 start_step = string_start_step(string_id);
+	u16 octs_pitch = OCTS_TO_PITCH(start_step / scale_steps);
+	u8 step_in_oct = start_step % scale_steps;
+
+	u8 pad = 0;
+	while (pad < (PADS_PER_STRIP - 1) && octs_pitch + scale_table[scale][step_in_oct] < pitch) {
+		pad++;
+		step_in_oct++;
+
+		// rollover
+		if (step_in_oct == scale_steps) {
+			step_in_oct = 0;
+			octs_pitch += PITCH_PER_OCT;
+		}
 	}
-	return position;
+
+	return (7 - pad) << 8;
 }
 
 void clear_latch(void) {
