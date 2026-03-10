@@ -896,7 +896,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			// no existing string found => find new string
 			s32 midi_pitch = NOTE_NR_TO_PITCH(data1);
 			if (string_id == 255)
-				string_id = find_string_for_pitch(midi_pitch, sys_params.midi_in_scale_quant);
+				string_id = find_string_for_pitch(midi_pitch);
 
 			// no space to register a new midi press => exit
 			if (string_id == 255)
