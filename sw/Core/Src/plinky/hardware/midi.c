@@ -326,17 +326,17 @@ void init_midi(void) {
 // cue all midi data for one string, returns whether there is still space in the midi buffer
 static bool cue_midi_string_out(void) {
 	typedef enum MidiOutState {
-		MSG_NOTE,
-		MSG_PITCHBEND,
-		MSG_POLY_PRESSURE,
 		MSG_CHAN_PRESSURE,
+		MSG_POLY_PRESSURE,
+		MSG_PITCHBEND,
+		MSG_NOTE,
 		MSG_Z_CONTROL,
 		MSG_Y_CONTROL,
 		MSG_LFOS,
 	} MidiOutState;
 
 	static u8 string_id = 0;
-	static MidiOutState msg_state = MSG_NOTE;
+	static MidiOutState msg_state = 0;
 
 	const Touch* touch = get_touch(string_id, 0);
 	const SynthString* s_string = get_synth_string(string_id);
@@ -348,69 +348,6 @@ static bool cue_midi_string_out(void) {
 	midi_out_channel = using_mpe ? string_id + 1 : sys_params.midi_out_chan;
 
 	switch (msg_state) {
-	case MSG_NOTE: {
-		u8 last_note = m_last->note_number;
-		s8 string_note = s_string->note_number;
-		// string is touching a note we can send over midi
-		if (s_string->touched && string_note >= 0) {
-			// we last sent a note off => send a note on
-			if (last_note == 255) {
-				if (!send_midi_msg(MIDI_NOTE_ON, string_note, string_vel))
-					return false;
-				m_last->note_number = string_note;
-			}
-			// we last sent a different note => send both a note off and note on
-			else if (last_note != string_note) {
-				if (!send_double_midi_msg(MIDI_NOTE_OFF, last_note, 0, MIDI_NOTE_ON, string_note, string_vel))
-					return false;
-				m_last->note_number = string_note;
-			}
-		}
-		// string is not touched but we last sent a valid note => send note off
-		else if (last_note != 255) {
-			if (!send_midi_msg(MIDI_NOTE_OFF, last_note, 0))
-				return false;
-			m_last->note_number = 255;
-		}
-		msg_state++;
-		// fall thru
-	}
-	case MSG_PITCHBEND: {
-		if (using_mpe) {
-			u14 s_pitchbend = {
-			    clampi(((s_string->pitchbend_pitch << 13) / max_string_bend_pitch_out) + UINT14_HALF, 0, UINT14_MAX)};
-			// require a difference of 5, unless this is an extreme value
-			u8 min_diff = (s_pitchbend.value == -UINT14_HALF || s_pitchbend.value == 8191) ? 1 : 5;
-			// send if changed
-			if (abs(s_pitchbend.value - m_last->pitchbend.value) >= min_diff) {
-				if (!send_midi_msg(MIDI_PITCH_BEND, s_pitchbend.lsb, s_pitchbend.msb))
-					return false;
-				m_last->pitchbend = s_pitchbend;
-			}
-		}
-		msg_state++;
-		// fall thru
-	}
-	// this handles MIDI_POLY_KEY_PRESSURE for default midi and MIDI_CHANNEL_PRESSURE for mpe
-	case MSG_POLY_PRESSURE: {
-		static u8 poly_pres = 0;
-		static u8 min_diff = 5;
-		// only update for mpe and poly aftertouch
-		if (using_mpe || sys_params.midi_out_pres_type == MP_POLY_AFTERTOUCH) {
-			poly_pres = midi_out_pressure(string_pres, string_vel);
-			// require a difference of 5, unless this is an extreme value
-			min_diff = (poly_pres == 0 || poly_pres == 127) ? 1 : 5;
-		}
-		// send if changed
-		if (abs(poly_pres - m_last->pressure) >= min_diff) {
-			if (using_mpe ? !send_midi_msg(MIDI_CHANNEL_PRESSURE, poly_pres, 0)
-			              : !send_midi_msg(MIDI_POLY_KEY_PRESSURE, m_last->note_number, poly_pres))
-				return false;
-			m_last->pressure = poly_pres;
-		}
-		msg_state++;
-		// fall thru
-	}
 	case MSG_CHAN_PRESSURE: {
 		static u16 max_string_pressure = 0;
 		static u8 max_velocity = 0;
@@ -438,6 +375,69 @@ static bool cue_midi_string_out(void) {
 			// restart tracking
 			max_string_pressure = 0;
 			max_velocity = 0;
+		}
+		msg_state++;
+		// fall thru
+	}
+	// this handles MIDI_POLY_KEY_PRESSURE for default midi and MIDI_CHANNEL_PRESSURE for mpe
+	case MSG_POLY_PRESSURE: {
+		static u8 poly_pres = 0;
+		static u8 min_diff = 5;
+		// only update for mpe and poly aftertouch
+		if (using_mpe || sys_params.midi_out_pres_type == MP_POLY_AFTERTOUCH) {
+			poly_pres = midi_out_pressure(string_pres, string_vel);
+			// require a difference of 5, unless this is an extreme value
+			min_diff = (poly_pres == 0 || poly_pres == 127) ? 1 : 5;
+		}
+		// send if changed
+		if (abs(poly_pres - m_last->pressure) >= min_diff) {
+			if (using_mpe ? !send_midi_msg(MIDI_CHANNEL_PRESSURE, poly_pres, 0)
+			              : !send_midi_msg(MIDI_POLY_KEY_PRESSURE, m_last->note_number, poly_pres))
+				return false;
+			m_last->pressure = poly_pres;
+		}
+		msg_state++;
+		// fall thru
+	}
+	case MSG_PITCHBEND: {
+		if (using_mpe) {
+			u14 s_pitchbend = {
+			    clampi(((s_string->pitchbend_pitch << 13) / max_string_bend_pitch_out) + UINT14_HALF, 0, UINT14_MAX)};
+			// require a difference of 5, unless this is an extreme value
+			u8 min_diff = (s_pitchbend.value == -UINT14_HALF || s_pitchbend.value == 8191) ? 1 : 5;
+			// send if changed
+			if (abs(s_pitchbend.value - m_last->pitchbend.value) >= min_diff) {
+				if (!send_midi_msg(MIDI_PITCH_BEND, s_pitchbend.lsb, s_pitchbend.msb))
+					return false;
+				m_last->pitchbend = s_pitchbend;
+			}
+		}
+		msg_state++;
+		// fall thru
+	}
+	case MSG_NOTE: {
+		u8 last_note = m_last->note_number;
+		s8 string_note = s_string->note_number;
+		// string is touching a note we can send over midi
+		if (s_string->touched && string_note >= 0) {
+			// we last sent a note off => send a note on
+			if (last_note == 255) {
+				if (!send_midi_msg(MIDI_NOTE_ON, string_note, string_vel))
+					return false;
+				m_last->note_number = string_note;
+			}
+			// the string has an envelope retrigger or we last sent a different note => send both a note off and note on
+			else if (s_string->env_trigger || last_note != string_note) {
+				if (!send_double_midi_msg(MIDI_NOTE_OFF, last_note, 0, MIDI_NOTE_ON, string_note, string_vel))
+					return false;
+				m_last->note_number = string_note;
+			}
+		}
+		// string is not touched but we last sent a valid note => send note off
+		else if (last_note != 255) {
+			if (!send_midi_msg(MIDI_NOTE_OFF, last_note, 0))
+				return false;
+			m_last->note_number = 255;
 		}
 		msg_state++;
 		// fall thru
@@ -492,7 +492,7 @@ static bool cue_midi_string_out(void) {
 
 		// done, set up for next string
 		string_id = (string_id + 1) & 7;
-		msg_state = MSG_NOTE;
+		msg_state = 0;
 		break;
 	}
 	}
