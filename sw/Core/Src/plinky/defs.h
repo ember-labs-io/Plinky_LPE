@@ -848,7 +848,7 @@ typedef struct SysParams {
 	u8 volume_lsb;
 	// 4 bytes
 	u8 volume_msb : 3; // add 3 bits to make editing in 0-1024 range possible
-	u8 cv_quant : 2;
+	CVQuantType cv_quant : 2;
 	bool reverse_encoder : 1;
 	bool preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
 	bool pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
