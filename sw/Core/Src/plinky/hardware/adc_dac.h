@@ -15,23 +15,28 @@ void adc_dac_tick(void);
 
 // cv
 
-void send_cv_pitch(bool pitch_hi, s32 data, bool apply_calib);
+void send_cv_pitch(bool pitch_hi, u32 pitch_4x);
 void cv_calib(void);
 
+// pwm cv outs take range 0-256 and generate 6.6V at 256
+
+// 256 * 5 / 6.6 = 194, rounded up so that the measured voltage ends up at 5.00V
+#define CV_OUT_5V 195
+
 static inline void send_cv_clock(bool high) {
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, high ? 255 : 0);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, high ? CV_OUT_5V : 0);
 }
 
 static inline void send_cv_trigger(bool high) {
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, high ? 255 : 0);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, high ? CV_OUT_5V : 0);
 }
 
 static inline void send_cv_gate(bool high) {
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, high ? 255 : 0);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, high ? CV_OUT_5V : 0);
 }
 
 static inline void send_cv_pressure(u16 data) {
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, data >> 8);
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, (data * CV_OUT_5V) >> 16);
 }
 
 // #define SENSE1_Pin GPIO_PIN_8

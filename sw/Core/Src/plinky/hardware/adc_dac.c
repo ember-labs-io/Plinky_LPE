@@ -22,28 +22,27 @@ extern TIM_HandleTypeDef htim3;
 
 ADC_DAC_Calib adc_dac_calib[NUM_ADC_DAC_ITEMS] = {
     // cv inputs
-    {52100.f, 1.f / -9334.833333f}, // pitch
-    {31716.f, 0.2f / -6548.1f},     // gate
-    {31665.f, 0.2f / -6548.1f},     // X
-    {31666.f, 0.2f / -6548.1f},     // Y
-    {31041.f, 0.2f / -6548.1f},     // A
-    {31712.f, 0.2f / -6548.1f},     // B
+    {52100.f, 1.f / -9334.833333f}, // pitch (roughly -2.7V to +5.3V)
+    {31716.f, 0.2f / -6548.1f},     // gate (roughly +/- 6V)
+    {31665.f, 0.2f / -6548.1f},     // X (+/- 5V)
+    {31666.f, 0.2f / -6548.1f},     // Y (+/- 5V)
+    {31041.f, 0.2f / -6548.1f},     // A (+/- 5V)
+    {31712.f, 0.2f / -6548.1f},     // B (+/- 5V)
 
     // potentiometers seem to skew towards 0 slightly
     {32000.f, 1.05f / -32768.f}, // B knob
     {32000.f, 1.05f / -32768.f}, // A knob
 
     // cv outputs, volt/octave: 2048 per semitone
-    {42490.f, (26620 - 42490) * (1.f / (2048.f * 12.f * 2.f))}, // pitch lo
-    {42511.f, (26634 - 42511) * (1.f / (2048.f * 12.f * 2.f))}, // pitch hi
+    {42490.f, (26620 - 42490) * (1.f / (2048.f * 12.f * 2.f))}, // pitch lo (-3V to 5.5V)
+    {42511.f, (26634 - 42511) * (1.f / (2048.f * 12.f * 2.f))}, // pitch hi (-3V to 5.5V)
 };
 
 ADC_DAC_Calib* adc_dac_calib_ptr(void) {
 	return adc_dac_calib;
 }
 
-// only global for calib and testjig - preferred local
-u16 adc_buffer[ADC_CHANS * ADC_SAMPLES];
+static u16 adc_buffer[ADC_CHANS * ADC_SAMPLES];
 
 static ValueSmoother adc_smoother[ADC_CHANS];
 
@@ -118,6 +117,11 @@ void adc_dac_tick(void) {
 	                 cv_gate_present() ? clampf(adc_get_calib(ADC_GATE) * 1.15f - 0.05f, 0.f, 1.f) : 1.f);
 }
 
+static void send_pitch_cv_raw(s32 lo_value, s32 hi_value) {
+	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_L, clampi(lo_value, 0, 65535));
+	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_L, clampi(hi_value, 0, 65535));
+}
+
 static void adc_dac_monitor(void) {
 	// light up all leds
 	for (u8 strip = 0; strip < 9; ++strip)
@@ -149,40 +153,37 @@ static void adc_dac_monitor(void) {
 
 		// send test signals over cv
 		saw += 256;
-		send_cv_clock(saw < (16384 + 32768));          // 75% pulsewidth square
-		send_cv_trigger(saw < 16384);                  // 25% pulsewidth square
-		send_cv_pitch(true, (saw * 2) & 65535, false); // double speed saw
-		send_cv_gate(saw < 32768);                     // 50% pulsewidth square
-		send_cv_pitch(false, saw, false);              // single speed saw
-		send_cv_pressure(saw);                         // single speed saw
+		send_cv_clock(saw < (16384 + 32768));      // 75% pulsewidth square
+		send_cv_trigger(saw < 16384);              // 25% pulsewidth square
+		send_cv_gate(saw < 32768);                 // 50% pulsewidth square
+		send_pitch_cv_raw(saw, (saw * 2) & 65535); // single & double speed saw
+		send_cv_pressure(saw);                     // single speed saw
 	} while (encoder_pressed || enc_press_count <= 2);
 }
 
 // == CV == //
 
-void send_cv_pitch(bool pitch_hi, s32 pitch_4x, bool apply_calib) {
-	if (apply_calib) {
-		ADC_DAC_Calib* calib = &adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO];
-		u32 octave = abs((512 * 12 * 4) * calib->scale);
-		// apply calibration
-		pitch_4x = (pitch_4x * calib->scale) + calib->bias;
-		// output at the correct pitch, keep octave within bounds
-		while (pitch_4x > UINT16_MAX)
-			pitch_4x -= octave;
-		while (pitch_4x < 0)
-			pitch_4x += octave;
-	}
-	else
-		pitch_4x = clampi(pitch_4x, 0, 65535);
-	HAL_DAC_SetValue(&hdac1, pitch_hi ? DAC_CHANNEL_2 : DAC_CHANNEL_1, DAC_ALIGN_12B_L, pitch_4x);
+void send_cv_pitch(bool pitch_hi, u32 pitch_4x) {
+	// shift three octaves so 0V = C2, apply calibration
+	ADC_DAC_Calib* calib = &adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO];
+	s32 cv_pitch_4x = ((s32)pitch_4x - (PITCH_PER_OCT << 2) * 3) * calib->scale + calib->bias;
+
+	// shift octave to keep pitch within bounds
+	u16 octave_size = abs((PITCH_PER_OCT << 2) * calib->scale);
+	while (cv_pitch_4x > UINT16_MAX)
+		cv_pitch_4x -= octave_size;
+	while (cv_pitch_4x < 0)
+		cv_pitch_4x += octave_size;
+
+	HAL_DAC_SetValue(&hdac1, pitch_hi ? DAC_CHANNEL_2 : DAC_CHANNEL_1, DAC_ALIGN_12B_L, cv_pitch_4x);
 }
 
 void cv_calib(void) {
 	calib_mode = CALIB_CV;
 	const char* top_line = "Unplug all inputs. Use left 4 columns to adjust pitch cv outputs. Plug pitch lo output to "
 	                       "pitch input when done.";
-	const char* const bottom_lines[5] = {"touch column 1-4", "pitch lo = 0V/C0", "pitch lo = 2V/C2", "pitch hi = 0V/C0",
-	                                     "pitch hi = 2V/C2"};
+	const char* const bottom_lines[5] = {"touch column 1-4", "pitch lo = 0V/C1", "pitch lo = 2V/C3", "pitch hi = 0V/C1",
+	                                     "pitch hi = 2V/C3"};
 	// text scrolling
 	s16 top_line_pos = 128;
 	s16 top_line_width = str_width(F_16, top_line);
@@ -211,8 +212,7 @@ void cv_calib(void) {
 	ValueSmoother cv_smoother;
 	set_smoother(&cv_smoother, 0);
 	// send neutral cv out
-	send_cv_pitch(false, (s32)cv_out[cur_lo_column], false);
-	send_cv_pitch(true, (s32)cv_out[cur_hi_column], false);
+	send_pitch_cv_raw((s32)cv_out[cur_lo_column], (s32)cv_out[cur_hi_column]);
 
 	// adapt pitch hi/lo output voltage with touch columns
 	do {
@@ -264,8 +264,7 @@ void cv_calib(void) {
 		}
 
 		// monitor updated cv values
-		send_cv_pitch(false, (s32)cv_out[cur_lo_column], false);
-		send_cv_pitch(true, (s32)cv_out[cur_hi_column], false);
+		send_pitch_cv_raw((s32)cv_out[cur_lo_column], (s32)cv_out[cur_hi_column]);
 
 		// while calibrating pitch out, track average neutral values on the cv inputs
 		for (u8 i = 0; i < NUM_CV_INS; ++i) {
@@ -317,8 +316,7 @@ void cv_calib(void) {
 	u32 totals[2] = {0};
 	do {
 		for (u8 i = 0; i < 2; ++i) {
-			send_cv_pitch(false, (s32)cv_out[i], false);
-			send_cv_pitch(true, (s32)cv_out[i + 2], false);
+			send_pitch_cv_raw((s32)cv_out[i], (s32)cv_out[i + 2]);
 			HAL_Delay(50);
 			u32 total = 0;
 			for (u8 j = 0; j < ADC_SAMPLES; ++j)
@@ -337,8 +335,8 @@ void cv_calib(void) {
 
 	for (u8 i = 0; i < 2; i++) {
 		// in reality, pitch in calib works from both pitch lo and pitch hi outputs
-		send_cv_pitch(false, (s32)cv_out[i], false);
-		send_cv_pitch(true, (s32)cv_out[i + 2], false);
+		send_pitch_cv_raw((s32)cv_out[i], (s32)cv_out[i + 2]);
+
 		HAL_Delay(50);
 		u32 tot = 0;
 		// take 256 measurements

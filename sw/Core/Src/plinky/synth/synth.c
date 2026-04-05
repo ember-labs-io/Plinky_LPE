@@ -77,14 +77,14 @@ static u8 synth_read_frame;
 static u8 read_frame_mask;
 
 static u8 phys_touch_mask = 0;
-static bool cv_trig_high = false;    // should cv trigger be high?
-static s32 cv_gate_high;             // should cv gate be high?
-static bool got_high_pitch = false;  // did we save a high pitch?
-static u32 high_string_pitch_4x = 0; // pitch on highest touched string
-static s16 high_string_note = 0;     // note on highest touched string
-static bool got_low_pitch = false;   // did we save a low pitch?
-static u32 low_string_pitch_4x = 0;  // pitch on lowest touched string
-static u16 synth_max_pres = 0;       // highest pressure seen
+static bool cv_trig_out_high = false; // should cv trigger be high?
+static bool cv_gate_out_high = false; // should cv gate be high?
+static u16 synth_max_pres = 0;        // highest pressure seen
+static bool got_low_pitch = false;    // did we save a low pitch?
+static u32 low_string_pitch_4x = 0;   // pitch on lowest touched string
+static bool got_high_pitch = false;   // did we save a high pitch?
+static u32 high_string_pitch_4x = 0;  // pitch on highest touched string
+static u8 high_string_note = 0;       // note on highest touched string
 
 // Midi Tuning Standard
 static u16 midi_tuning_pitch[NUM_NOTES] = {};
@@ -1024,7 +1024,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 	// generate cv gate
 	if (s_string->touched)
-		cv_gate_high = true;
+		cv_gate_out_high = true;
 
 	// == GENERATE OSCILLATOR PITCHES == //
 
@@ -1157,7 +1157,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		env_lvl *= sustain;
 		voice->env1_decaying = false;
 		voice->env1_peak = env_goal;
-		cv_trig_high = true; // send cv trigger
+		cv_trig_out_high = true; // send cv trigger
 	}
 
 	if (env_goal <= 0.f) // no pressure => release phase (aka not decaying)
@@ -1218,24 +1218,24 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 void handle_synth_voices(u32* dst) {
 	// clear cv values
-	cv_trig_high = false;
-	got_high_pitch = false;
-	cv_gate_high = false;
-	got_low_pitch = false;
+	cv_trig_out_high = false;
+	cv_gate_out_high = false;
 	synth_max_pres = 0;
+	got_low_pitch = false;
+	got_high_pitch = false;
 
 	// run all voices
 	for (u8 voice_id = 0; voice_id < NUM_VOICES; ++voice_id)
 		run_voice(voice_id, dst);
 
-	// send cv values
-	send_cv_trigger(cv_trig_high);
-	if (got_high_pitch)
-		send_cv_pitch(true, high_string_pitch_4x + BOTTOM_PAD_PITCH, true);
-	send_cv_gate(cv_gate_high);
+	// send cv out
+	send_cv_trigger(cv_trig_out_high);
+	send_cv_gate(cv_gate_out_high);
+	send_cv_pressure(mini(synth_max_pres, 2048) << 5);
 	if (got_low_pitch)
-		send_cv_pitch(false, low_string_pitch_4x + BOTTOM_PAD_PITCH, true);
-	send_cv_pressure(synth_max_pres * 8);
+		send_cv_pitch(false, low_string_pitch_4x);
+	if (got_high_pitch)
+		send_cv_pitch(true, high_string_pitch_4x);
 
 	if (USING_SAMPLER) {
 		// decide on a priority for 8 voices
