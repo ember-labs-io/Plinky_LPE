@@ -102,5 +102,37 @@ const static Preset init_params = {
         [P_Y_SCALE] = {RAW_HALF},   [P_Y_OFFSET] = {0},                                         [P_Y_DEPTH] = {0},                                  [P_Y_RATE] = {-355},            [P_Y_SHAPE] = {0},                          [P_Y_SYM] = {0},                    // LFO Y
         [P_SYN_LVL] = {RAW_HALF},   [P_SYN_WET_DRY] = {RAW_HALF},                               [P_HPF] = {0},                                      [P_MIX_UNUSED1] = {},           [P_MIX_UNUSED4] = {},                       [P_VOLUME] = {0},                   // Mixer 1
         [P_IN_LVL] = {RAW_HALF},    [P_IN_WET_DRY] = {RAW_HALF},                                [P_SYS_UNUSED1] = {},                               [P_MIX_UNUSED2] = {},           [P_MIX_UNUSED3] = {},                       [P_MIX_WIDTH] = {RAW_SIZE * 7 / 8}, // Mixer 2
+    },
+    .poly_params = {
+        [PP_SHAPE]       = {0, 0, 0, 0, 0, 0, 0},
+        [PP_DISTORTION]  = {RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF},
+        [PP_PITCH]       = {0, 0, 0, 0, 0, 0, 0},
+        [PP_OCT]         = {0, 0, 0, 0, 0, 0, 0},
+        [PP_GLIDE]       = {0, 0, 0, 0, 0, 0, 0},
+        [PP_INTERVAL]    = {0, 0, 0, 0, 0, 0, 0},
+        [PP_NOISE]       = {0, 0, 0, 0, 0, 0, 0},
+        [PP_RESO]        = {0, 0, 0, 0, 0, 0, 0},
+        [PP_DEGREE]      = {0, 0, 0, 0, 0, 0, 0},
+        [PP_SCALE]       = {0, 0, 0, 0, 0, 0, 0},
+        [PP_MICROTONE]   = {RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH},
+        [PP_COLUMN]      = {INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13)},
+        [PP_ENV_LVL1]    = {RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF},
+        [PP_ATTACK1]     = {RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH},
+        [PP_DECAY1]      = {RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART},
+        [PP_SUSTAIN1]    = {RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE},
+        [PP_RELEASE1]    = {RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH},
+        [PP_ROOT]        = {0, 0, 0, 0, 0, 0, 0},
+        [PP_ENV_LVL2]    = {RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF},
+        [PP_ATTACK2]     = {RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH},
+        [PP_DECAY2]      = {RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART, RAW_QUART},
+        [PP_SUSTAIN2]    = {RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE, RAW_SIZE},
+        [PP_RELEASE2]    = {RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH, RAW_EIGHTH},
+        [PP_SCRUB]       = {0, 0, 0, 0, 0, 0, 0},
+        [PP_GR_SIZE]     = {RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF},
+        [PP_PLAY_SPD]    = {RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF},
+        [PP_SMP_STRETCH] = {RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF, RAW_HALF},
+        [PP_SCRUB_JIT]   = {0, 0, 0, 0, 0, 0, 0},
+        [PP_GR_SIZE_JIT] = {0, 0, 0, 0, 0, 0, 0},
+        [PP_PLAY_SPD_JIT] = {0, 0, 0, 0, 0, 0, 0},
     }
 };
