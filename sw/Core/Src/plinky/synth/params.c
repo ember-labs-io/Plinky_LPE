@@ -42,8 +42,6 @@ typedef struct Envelope {
 
 #define EDITING_PARAM (selected_param < NUM_PARAMS)
 
-static s16 poly_params[NUM_POLY_PARAMS][NUM_STRINGS - 1] = {};
-
 // editing params
 static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
@@ -112,7 +110,7 @@ static void select_param(Param param_id) {
 }
 
 static void align_poly_param(PolyParam pp_id) {
-	s16* poly_param = poly_params[pp_id];
+	s16* poly_param = cur_preset.poly_params[pp_id];
 	poly_param[6] = poly_param[5] = poly_param[4] = poly_param[3] = poly_param[2] = poly_param[1] = poly_param[0] =
 	    cur_preset.params[param_from_poly_param[pp_id]][SRC_BASE];
 }
@@ -136,11 +134,6 @@ bool latch_active(void) {
 
 s16 value_to_index(Param param_id, s32 value) {
 	return VALUE_TO_INDEX(value, PARAM_RANGE(param_id));
-}
-
-void align_poly_params(void) {
-	for (PolyParam pp_id = 0; pp_id < NUM_POLY_PARAMS; pp_id++)
-		align_poly_param(pp_id);
 }
 
 void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id) {
@@ -494,7 +487,7 @@ s32 param_val_poly(PolyParam pp_id, u8 string_id) {
 	s16* param = cur_preset.params[param_id];
 
 	// add 16 precision bits to the raw value
-	s32 mod_val = (string_id > 0 ? poly_params[pp_id][string_id - 1] : param[SRC_BASE]) << 16;
+	s32 mod_val = (string_id > 0 ? cur_preset.poly_params[pp_id][string_id - 1] : param[SRC_BASE]) << 16;
 
 	// apply envelope 2 modulation
 	mod_val += envelope2[string_id].level16 * param[SRC_ENV2];
@@ -573,7 +566,7 @@ bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
 }
 
 u14 param_nrpn_poly_value(Param param_id, u8 string_id) {
-	s16 value = poly_params[poly_param_from_param[param_id]][string_id - 1];
+	s16 value = cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1];
 	if (PARAM_SIGNED(param_id))
 		value = (value + (1 << 14)) >> 1;
 	return (u14){clampi(value, 0, UINT14_MAX)};
@@ -608,13 +601,18 @@ void save_poly_param_raw(Param param_id, u8 string_id, s16 data) {
 			return;
 		// save
 		cur_preset.params[param_id][SRC_BASE] = data;
-		// send to midi
-		if (sys_params.midi_send_param_ccs)
-			midi_send_param(param_id);
-		log_ram_edit(SEG_PRESET);
 	}
-	else
-		poly_params[poly_param_from_param[param_id]][string_id - 1] = data;
+	else {
+		// don't save if no change
+		if (data == cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1])
+			return;
+		// save
+		cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1] = data;
+	}
+	// send to midi
+	if (sys_params.midi_send_param_ccs)
+		midi_send_param(param_id);
+	log_ram_edit(SEG_PRESET);
 }
 
 void save_param_index(Param param_id, s8 index) {

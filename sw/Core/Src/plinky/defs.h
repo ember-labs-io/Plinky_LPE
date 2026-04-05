@@ -904,7 +904,7 @@ typedef struct SysParams {
 } SysParams;
 
 typedef struct Preset {
-	s16 params[96][8];
+	s16 params[NUM_PARAMS][NUM_MOD_SOURCES];
 	u8 pad;
 	u8 seq_start;
 	u8 seq_len;
@@ -912,6 +912,8 @@ typedef struct Preset {
 	u8 version;
 	u8 category;
 	u8 name[8];
+	s16 poly_params[NUM_POLY_PARAMS][NUM_STRINGS - 1];
+	u8 padding[12];
 } Preset;
 static_assert((sizeof(Preset) & 15) == 0, "?");
 
