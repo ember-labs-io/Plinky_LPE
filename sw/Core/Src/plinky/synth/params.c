@@ -1315,7 +1315,19 @@ void draw_cur_param(void) {
 		width = str_width(font, val_buf);
 		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
 	}
-	draw_str(x, 0, font, val_buf);
+	u8 y;
+	switch (font) {
+	case F_12:
+		y = 3;
+		break;
+	case F_16_BOLD:
+		y = 1;
+		break;
+	default:
+		y = 0;
+		break;
+	}
+	draw_str(x, y, font, val_buf);
 
 	// draw param name
 
