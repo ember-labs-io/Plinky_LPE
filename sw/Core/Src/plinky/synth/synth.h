@@ -15,6 +15,7 @@ void clear_latch(void);
 void clear_synth_string(u8 string_id);
 void clear_synth_strings(void);
 void set_note_tuning(u8 note_number, u16 pitch);
+void clear_midi_tuning(void);
 void update_reference_pitch(void);
 
 // spi
