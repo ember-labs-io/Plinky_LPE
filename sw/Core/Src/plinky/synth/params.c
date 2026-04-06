@@ -1627,7 +1627,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 			k = pulse;
 		// light up mod sources that modulate current param
 		else
-			k = (y && PARAM_VAL_RAW(param_snap, y)) ? 255 : 0;
+			k = (y && PARAM_VAL_RAW(param_snap, y) && param_snap != P_VOLUME) ? 255 : 0;
 	}
 	return k;
 }
