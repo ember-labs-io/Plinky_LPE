@@ -35,6 +35,8 @@ extern SampleInfo cur_sample_info;
 
 // utils
 u32 get_sample_address(void);
+u16 get_sys_param(SysParam param);
+u8 sys_param_range(SysParam param);
 bool set_sys_param(SysParam param, u16 value);
 
 // web-editor

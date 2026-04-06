@@ -99,6 +99,36 @@ static s32 pitch_at_step(s8 step, Scale scale) {
 	return OCTS_TO_PITCH(oct) + scale_table[scale][step + 1];
 }
 
+s32 quant_pitch_to_scale(s32 pitch, Scale scale) {
+	// estimate step by multiplying the octaves (float) by the steps per octave
+	s16 step = (float)pitch / PITCH_PER_OCT * scale_table[scale][0];
+	u32 best_distance = UINT32_MAX;
+
+	// find step in scale closest to pitch
+	if (pitch - pitch_at_step(step, scale) > 0) {
+		while (true) {
+			step++;
+			u32 distance = abs(pitch - pitch_at_step(step, scale));
+			if (distance >= best_distance)
+				break;
+			best_distance = distance;
+		}
+		step--;
+	}
+	else {
+		while (true) {
+			step--;
+			u32 distance = abs(pitch - pitch_at_step(step, scale));
+			if (distance >= best_distance)
+				break;
+			best_distance = distance;
+		}
+		step++;
+	}
+
+	return pitch_at_step(step, scale);
+}
+
 s16 step_at_string(u8 string_id, Scale scale) {
 	static u16 string_hash[NUM_STRINGS - 1];
 	static u16 string_start_step[NUM_STRINGS - 1];
@@ -215,12 +245,14 @@ static s32 string_center_pitch(u8 string_id, Scale scale) {
 	return ((pitch3 + pitch4) >> 1) + OCTS_TO_PITCH(oct);
 }
 
-u8 find_string_for_pitch(s32 pitch) {
+u8 find_string_for_pitch(s32 pitch, bool quantize) {
 	// find desired string: center pitch closest to pitch
 	u8 desired_string = 0;
 	u32 prev_pitch_dist = __UINT32_MAX__;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
-		u32 pitch_dist = abs(string_center_pitch(string_id, param_index_poly(PP_SCALE, string_id)) - pitch);
+		Scale scale = param_index_poly(PP_SCALE, string_id);
+		u32 pitch_dist =
+		    abs(string_center_pitch(string_id, scale) - (quantize ? quant_pitch_to_scale(pitch, scale) : pitch));
 		if (pitch_dist >= prev_pitch_dist)
 			break;
 		prev_pitch_dist = pitch_dist;
@@ -596,7 +628,7 @@ static void generate_string_touch(u8 string_id) {
 	// can we read touch input from this string?
 	if (
 	    // we have local control
-	    sys_params.local_on
+	    !sys_params.local_ctrl_off
 	    // default ui, exception for the edit-strip
 	    && ((ui_mode == UI_DEFAULT && !(string_id == 0 && editing_param()))
 	        // sampler in preview mode when a sample is loaded
@@ -1015,36 +1047,15 @@ static void run_voice(u8 voice_id, u32* dst) {
 			else {
 				u16 position = s_touch_sort++->pos; // touch position
 				u8 pad_y = 7 - (position >> 8);     // pad on string
-				s8 total_step_offset = string_step_offset + pad_y;
-				s32 pad_pitch = pitch_at_step(total_step_offset, scale);
+				s32 pad_pitch = pitch_at_step(string_step_offset + pad_y, scale);
+
+				// less than half a semitone offset from P_PITCH: that's just fine pitch
 				if (abs(pitch_param_pitch) < PITCH_PER_SEMI >> 1)
 					pitch_param_fine_pitch = pitch_param_pitch;
-				// quantize the pitch offset from P_PITCH to scale to find the correct pad - UPDATE LOOP
+				// more than half a semitone offset: recalculate which pad we land on
 				else {
 					s32 goal_pitch = pad_pitch + pitch_param_pitch;
-					u32 best_distance = UINT32_MAX;
-					s16 step_offset_with_pitch_param = total_step_offset;
-					if (pitch_param_pitch > 0) {
-						while (true) {
-							step_offset_with_pitch_param++;
-							u32 distance = abs(goal_pitch - pitch_at_step(step_offset_with_pitch_param, scale));
-							if (distance >= best_distance)
-								break;
-							best_distance = distance;
-						}
-						step_offset_with_pitch_param--;
-					}
-					else {
-						while (true) {
-							step_offset_with_pitch_param--;
-							u32 distance = abs(goal_pitch - pitch_at_step(step_offset_with_pitch_param, scale));
-							if (distance >= best_distance)
-								break;
-							best_distance = distance;
-						}
-						step_offset_with_pitch_param++;
-					}
-					pad_pitch = pitch_at_step(step_offset_with_pitch_param, scale);
+					pad_pitch = quant_pitch_to_scale(goal_pitch, scale);
 					pitch_param_fine_pitch = goal_pitch - pad_pitch;
 				}
 
@@ -1052,7 +1063,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 				note_pitch = pad_pitch + oct_pitch_offset;
 
 				// oscillator 2 defines the note number
-				if (osc_id == 2 && (sys_params.midi_out_pres_type != MP_MPE_PRESSURE || s_string->env_trigger))
+				if (osc_id == 2 && (!sys_params.mpe_out || s_string->env_trigger))
 					s_string->note_number = PITCH_TO_NOTE_NR(note_pitch);
 
 				// detuning from pad touch: pitchbend

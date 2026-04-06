@@ -56,6 +56,7 @@ typedef struct MpeZone {
 #define MIDI_BUFFER_SIZE 16
 #define THRU_BUFFER_SIZE 16
 #define PARAM_BUFFER_SIZE 8
+#define MIDI_SEND_BUFFER_FREE (MIDI_BUFFER_SIZE - (midi_send_head - midi_send_tail))
 
 static const MidiString init_midi_string = {MS_UNPRESSED, 255, {UINT14_HALF}};
 static const LastSentString init_last_sent_string = {255, {UINT14_HALF}};
@@ -102,7 +103,8 @@ static u8 thru_buffer_head = 0;
 static u8 thru_buffer_tail = 0;
 static u8 thru_buffer_count = 0;
 static u32 send_param_val[3] = {};
-static Param last_sent_param = 0;
+static Param sending_param_id = 0;
+static u8 sending_param_progress = 255;
 
 // == UTILS == //
 
@@ -181,7 +183,7 @@ static void register_press(u8 string_id, bool mpe, u8 note, u8 velocity, u16 pos
 static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	u8 num_bytes = num_midi_bytes(status);
 	// exit if serial buffer full
-	if (midi_send_head - midi_send_tail + num_bytes > MIDI_BUFFER_SIZE)
+	if (num_bytes > MIDI_SEND_BUFFER_FREE)
 		return false;
 	// set midi channel
 	if (status < MIDI_SYSTEM_EXCLUSIVE)
@@ -192,26 +194,27 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 #ifndef DEBUG_LOG
 
 	// serial midi out
+	if (!sys_params.midi_trs_out_off) {
+		const u8* src = buf + 1;
 
-	const u8* src = buf + 1;
+		// running status
+		static u8 running_status = 0;
+		// match - skip first byte
+		if (status == running_status) {
+			num_bytes--;
+			src++;
+		}
+		// channel voice message - save running status
+		else if (status < MIDI_SYSTEM_EXCLUSIVE)
+			running_status = status;
+		// system common message - cancel running status
+		else if (status < MIDI_TIMING_CLOCK)
+			running_status = 0;
 
-	// running status
-	static u8 running_status = 0;
-	// match - skip first byte
-	if (status == running_status) {
-		num_bytes--;
-		src++;
+		// send to buffer
+		while (num_bytes--)
+			midi_send_buffer[(midi_send_head++) & 15] = *src++;
 	}
-	// channel voice message - save running status
-	else if (status < MIDI_SYSTEM_EXCLUSIVE)
-		running_status = status;
-	// system common message - cancel running status
-	else if (status < MIDI_TIMING_CLOCK)
-		running_status = 0;
-
-	// send to buffer
-	while (num_bytes--)
-		midi_send_buffer[(midi_send_head++) & 15] = *src++;
 
 #endif
 
@@ -222,11 +225,37 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 
 static bool send_double_midi_msg(u8 status1, u8 data1_1, u8 data1_2, u8 status2, u8 data2_1, u8 data2_2) {
 	// exit if not enough space for both messages
-	if (midi_send_head - midi_send_tail + num_midi_bytes(status1) + num_midi_bytes(status2) > MIDI_BUFFER_SIZE)
+	if (num_midi_bytes(status1) + num_midi_bytes(status2) > MIDI_SEND_BUFFER_FREE)
 		return false;
 	// send both messages
 	send_midi_msg(status1, data1_1, data1_2);
 	send_midi_msg(status2, data2_1, data2_2);
+	return true;
+}
+
+static bool send_nrpn(u8 nrpn_msb, u8 nrpn_lsb, u14 value) {
+	// don't send identical parameter numbers
+	static u14 last_nrpn = {UINT14_MAX};
+	bool send_nrpn_msb = nrpn_msb != last_nrpn.msb;
+	bool send_nrpn_lsb = nrpn_lsb != last_nrpn.lsb;
+
+	// we need three bytes for each cc message
+	if (MIDI_SEND_BUFFER_FREE < (send_nrpn_msb + send_nrpn_lsb + 2) * 3)
+		return false;
+
+	// send number
+	if (send_nrpn_msb) {
+		send_midi_msg(MIDI_CONTROL_CHANGE, CC_NRPN_MSB, nrpn_msb);
+		last_nrpn.msb = nrpn_msb;
+	}
+	if (send_nrpn_lsb) {
+		send_midi_msg(MIDI_CONTROL_CHANGE, CC_NRPN_LSB, nrpn_lsb);
+		last_nrpn.lsb = nrpn_lsb;
+	}
+
+	// send data
+	send_midi_msg(MIDI_CONTROL_CHANGE, CC_DATA_MSB, value.msb);
+	send_midi_msg(MIDI_CONTROL_CHANGE, CC_DATA_LSB, value.lsb);
 	return true;
 }
 
@@ -280,6 +309,7 @@ void midi_panic(void) {
 void init_midi(void) {
 	midi_clear_all();
 	midi_precalc_bends();
+	set_mpe_channels(sys_params.mpe_zone, sys_params.mpe_chans + 1);
 	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
 }
 
@@ -290,8 +320,8 @@ static bool cue_midi_string_out(void) {
 		MSG_PITCHBEND,
 		MSG_POLY_PRESSURE,
 		MSG_CHAN_PRESSURE,
-		MSG_PRESSURE_CC,
-		MSG_POSITION_CC,
+		MSG_Z_CONTROL,
+		MSG_Y_CONTROL,
 		MSG_LFOS,
 	} MidiOutState;
 
@@ -303,7 +333,7 @@ static bool cue_midi_string_out(void) {
 	u16 string_pres = clampi(s_string->cur_touch.pres, 0, TOUCH_FULL_PRES);
 	u8 string_vel = maxi(s_string->start_velocity, 1);
 	LastSentString* m_last = &last_sent_string[string_id];
-	bool using_mpe = sys_params.midi_out_pres_type == MP_MPE_PRESSURE;
+	bool using_mpe = sys_params.mpe_out;
 
 	midi_out_channel = using_mpe ? string_id + 1 : sys_params.midi_out_chan;
 
@@ -384,7 +414,7 @@ static bool cue_midi_string_out(void) {
 		// all strings have been tracked
 		if (string_id == 7) {
 			// only update when mono pressure is selected
-			if (sys_params.midi_out_pres_type == MP_CHANNEL_PRESSURE) {
+			if (!using_mpe && sys_params.midi_out_pres_type == MP_CHANNEL_PRESSURE) {
 				chan_pres = midi_out_pressure(max_string_pressure, max_velocity);
 				// require a difference of 5, unless this is an extreme value
 				min_diff = (chan_pres == 0 || chan_pres == 127) ? 1 : 5;
@@ -402,8 +432,8 @@ static bool cue_midi_string_out(void) {
 		msg_state++;
 		// fall thru
 	}
-	case MSG_PRESSURE_CC: // cc 40-47
-		if (sys_params.midi_out_ccs) {
+	case MSG_Z_CONTROL: // cc 40-47
+		if (sys_params.midi_out_yz_control) {
 			// reports directly from touchstrips
 			u8 strip_pressure = clampi(touch->pres, 0, TOUCH_FULL_PRES) >> 4;
 			// always send extreme values
@@ -416,8 +446,8 @@ static bool cue_midi_string_out(void) {
 		}
 		msg_state++;
 		// fall thru
-	case MSG_POSITION_CC: // cc 32-39
-		if (sys_params.midi_out_ccs) {
+	case MSG_Y_CONTROL: // cc 32-39
+		if (sys_params.midi_out_yz_control) {
 			// reports directly from touchstrips
 			u8 strip_position = 127 - (mini(touch->pos, TOUCH_MAX_POS) >> 4);
 			// always send extreme values
@@ -434,7 +464,7 @@ static bool cue_midi_string_out(void) {
 		static u8 lfo_id = 0;
 		// only send lfos after the last string
 		if (string_id == 7) {
-			if (sys_params.midi_out_lfos) {
+			if (sys_params.midi_send_lfo_cc) {
 				// handle all four lfos
 				do {
 					u8 lfo_val = clampi((lfo_cur[lfo_id] + 65536) >> 10, 0, 127);
@@ -470,14 +500,12 @@ static void cue_midi_out(void) {
 		return;
 
 	// send thru
-	if (sys_params.midi_soft_thru) {
-		while (thru_buffer_count) {
-			if (!send_midi_msg(thru_buffer[thru_buffer_tail][0], thru_buffer[thru_buffer_tail][1],
-			                   thru_buffer[thru_buffer_tail][2]))
-				return;
-			thru_buffer_tail = (thru_buffer_tail + 1) % THRU_BUFFER_SIZE;
-			thru_buffer_count--;
-		}
+	while (thru_buffer_count) {
+		if (!send_midi_msg(thru_buffer[thru_buffer_tail][0], thru_buffer[thru_buffer_tail][1],
+		                   thru_buffer[thru_buffer_tail][2]))
+			return;
+		thru_buffer_tail = (thru_buffer_tail + 1) % THRU_BUFFER_SIZE;
+		thru_buffer_count--;
 	}
 
 	// send transport
@@ -494,34 +522,68 @@ static void cue_midi_out(void) {
 		clocks_to_send--;
 	}
 
-	// send one param value
-	if (sys_params.midi_out_params) {
+	midi_out_channel = sys_params.midi_out_chan;
+
+	// send values for one param
+	if (sys_params.midi_send_param_ccs) {
 		Param send_param = NUM_PARAMS;
-		Param start_param = last_sent_param + 1;
-		u8 bank = start_param / 32;
-		u8 position = start_param & 31;
-		// look for set bits to the left of last_sent_param
-		u32 bank_bits = send_param_val[bank] & ~((1 << position) - 1);
-		if (bank_bits) {
-			position = __builtin_ctz(bank_bits);
-			send_param = bank * 32 + position;
+
+		// we were still sending a param
+		if (sending_param_progress != 255)
+			send_param = sending_param_id;
+		// find new param to send
+		else {
+			// start searching beyond the last sent param
+			Param start_param = sending_param_id + 1;
+			u8 bank = start_param >> 5;
+			// mask bits of lower-numbered params
+			u32 bank_bits = send_param_val[bank] & ~((1 << (start_param & 31)) - 1);
+			if (bank_bits)
+				send_param = (bank << 5) + __builtin_ctz(bank_bits);
+			// look for set bits in the other two banks
+			else if (send_param_val[(bank + 1) % 3]) {
+				bank = (bank + 1) % 3;
+				send_param = (bank << 5) + __builtin_ctz(send_param_val[bank]);
+			}
+			else if (send_param_val[(bank + 2) % 3]) {
+				bank = (bank + 2) % 3;
+				send_param = (bank << 5) + __builtin_ctz(send_param_val[bank]);
+			}
+			// found a param, kick off sending
+			if (send_param != NUM_PARAMS)
+				sending_param_progress = 0;
 		}
-		// look for set bits in the other two banks
-		else if (send_param_val[(bank + 1) % 3]) {
-			bank = (bank + 1) % 3;
-			position = __builtin_ctz(send_param_val[bank]);
-			send_param = bank * 32 + position;
-		}
-		else if (send_param_val[(bank + 2) % 3]) {
-			bank = (bank + 2) % 3;
-			position = __builtin_ctz(send_param_val[bank]);
-			send_param = bank * 32 + position;
-		}
+
+		// we have a param to send
 		if (send_param != NUM_PARAMS) {
-			if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
-				return;
-			send_param_val[bank] &= ~(1 << position);
-			last_sent_param = send_param;
+			sending_param_id = send_param;
+			// send param value as cc
+			if (sys_params.midi_send_param_ccs == 1) {
+				if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
+					return;
+			}
+			// send nrpns
+			else {
+				// send param and modulation values
+				for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
+					u8 nrpn_msb = mod_src == 0 ? 0 : mod_src + 16;
+					if (!send_nrpn(nrpn_msb, send_param, param_nrpn_value(send_param, mod_src)))
+						return;
+					sending_param_progress++;
+				}
+				// send poly param values
+				if (PARAM_IS_POLY(send_param)) {
+					for (u8 i = sending_param_progress; i < 15; i++) {
+						u8 string_id = i - 7; // 1 - 7
+						if (!send_nrpn(string_id + 8, send_param, param_nrpn_poly_value(send_param, string_id)))
+							return;
+						sending_param_progress++;
+					}
+				}
+			}
+			// done
+			send_param_val[send_param >> 5] &= ~(1 << (send_param & 31));
+			sending_param_progress = 255;
 		}
 	}
 
@@ -536,19 +598,6 @@ static void cue_midi_out(void) {
 		buffer_free = cue_midi_string_out();
 		strings_checked++;
 	} while (buffer_free && midi_send_head == initial_send_head && strings_checked < NUM_STRINGS);
-}
-
-static void set_mpe_channels(bool upper_zone, u8 num_chans) {
-	// set channels
-	mpe_zone[(u8)upper_zone].num_chans = num_chans;
-	mpe_zone[(u8)!upper_zone].num_chans = mini(mpe_zone[(u8)!upper_zone].num_chans, 15 - num_chans);
-	mpe_zone[1].first_chan = 15 - mpe_zone[1].num_chans;
-	// recalculate num_strings
-	bool one_chan_per_string = mpe_zone[0].num_chans + mpe_zone[1].num_chans <= 8;
-	mpe_zone[(u8)upper_zone].num_strings =
-	    one_chan_per_string ? mpe_zone[(u8)upper_zone].num_chans : (mpe_zone[(u8)upper_zone].num_chans + 1) >> 1;
-	mpe_zone[(u8)!upper_zone].num_strings =
-	    one_chan_per_string ? mpe_zone[(u8)!upper_zone].num_chans : (mpe_zone[(u8)!upper_zone].num_chans + 1) >> 1;
 }
 
 static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
@@ -569,14 +618,14 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
 			u8 num_chans = n_rpn_value->msb & 15;
 			// lower zone
 			if (n_rpn_string == 0) {
-				set_mpe_channels(false, num_chans);
+				set_mpe_channels(0, num_chans);
 				// clear strings in mpe zone
 				for (u8 string_id = 0; string_id < mpe_zone[0].num_strings; string_id++)
 					reset_controls(string_id);
 			}
 			// upper zone
 			else if (n_rpn_string == 15) {
-				set_mpe_channels(true, num_chans);
+				set_mpe_channels(1, num_chans);
 				// clear strings in mpe zone
 				for (u8 string_id = 8 - mpe_zone[1].num_strings; string_id < 8; string_id++)
 					reset_controls(string_id);
@@ -722,15 +771,21 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	//  == not channel based == //
 
 	if (type == MIDI_SYSTEM_COMMON_MSG) {
+		// clock
+		if (status == MIDI_TIMING_CLOCK) {
+			if (sys_params.midi_rcv_clock)
+				clock_rcv_midi(status);
+		}
+		// transport
+		else if (status >= MIDI_START && status <= MIDI_STOP) {
+			if (sys_params.midi_rcv_transport)
+				clock_rcv_midi(status);
+		}
 		// midi reset / panic
-		if (status == MIDI_SYSTEM_RESET)
+		else if (status == MIDI_SYSTEM_RESET)
 			midi_clear_all();
-		// time-related => forward to clock
-		if (status >= MIDI_TIMING_CLOCK && status <= MIDI_STOP)
-			clock_rcv_midi(status);
-		// clock messages get consumed, sysex gets ignored, the remaining six system common msgs get forwarded
-		else if (sys_params.midi_soft_thru
-		         && ((status >= MIDI_TIME_CODE && status <= MIDI_TUNE_REQUEST) || status >= MIDI_ACTIVE_SENSING))
+		// sysex gets ignored, the remaining five system common msgs get forwarded
+		else if (sys_params.midi_soft_thru && status != MIDI_SYSTEM_EXCLUSIVE && status != MIDI_END_OF_EXCLUSIVE)
 			forward_midi_msg(status, data1, data2);
 		return;
 	}
@@ -742,7 +797,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	bool is_member_msg = false;
 	bool mpe_zone_upper;
 	bool using_mpe = false;
-	if (sys_params.midi_in_pres_type == MP_MPE_PRESSURE) {
+	if (sys_params.mpe_in) {
 		if ((channel == 0 && mpe_zone[0].num_chans > 0) || (channel == 15 && mpe_zone[1].num_chans > 0))
 			is_manager_msg = true;
 		else if (channel > 0 && channel <= mpe_zone[0].num_chans) {
@@ -759,8 +814,16 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	// == unused channels: forward & exit == //
 
 	if (!using_mpe && channel != sys_params.midi_in_chan) {
+		u8 mpe_out = sys_params.mpe_out;
+		u8 mpe_zone = sys_params.mpe_zone;
+		u8 mpe_chans = sys_params.mpe_chans;
 		// we forward voice messages not on either our in or out channels
-		if (sys_params.midi_soft_thru && channel != sys_params.midi_out_chan)
+		if (sys_params.midi_soft_thru
+		    // no mpe
+		    && ((!mpe_out && channel != sys_params.midi_out_chan)
+		        || (mpe_out
+		            // mpe lower zone | mpe upper zone
+		            && ((mpe_zone == 0 && channel > mpe_chans) || (mpe_zone == 1 && channel < 15 - mpe_chans)))))
 			forward_midi_msg(status, data1, data2);
 		return;
 	}
@@ -792,15 +855,6 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
 		} break;
 		case MIDI_NOTE_ON: {
-			s32 midi_pitch = 12 *
-			                     // pitch from octave parameter
-			                     ((param_index(P_OCT) << 9)
-			                      // pitch from pitch parameter
-			                      + (param_val(P_PITCH) >> 7))
-			                 // pitch from midi note
-			                 + NOTE_NR_TO_PITCH(data1)
-			                 // pitchbend
-			                 + channel_pitchbend_pitch;
 			u8 string_id = 255;
 
 			// find string pressing or sustaining this note
@@ -813,12 +867,19 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			}
 
 			// no existing string found => find new string
+			s32 midi_pitch = NOTE_NR_TO_PITCH(data1);
 			if (string_id == 255)
-				string_id = find_string_for_pitch(midi_pitch);
+				string_id = find_string_for_pitch(midi_pitch, sys_params.midi_in_scale_quant);
 
 			// no space to register a new midi press => exit
 			if (string_id == 255)
 				break;
+
+			// quantize pitch and note number
+			if (sys_params.midi_in_scale_quant) {
+				midi_pitch = quant_pitch_to_scale(midi_pitch, param_index_poly(PP_SCALE, string_id));
+				data1 = PITCH_TO_NOTE_NR(midi_pitch);
+			}
 
 			// save results
 			register_press(string_id, false, data1, data2, string_position_from_pitch(string_id, midi_pitch));
@@ -877,8 +938,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 					reset_controls(string_id);
 				break;
 			case CC_LOCAL_CONTROL:
-				bool on = data2 >= 64;
-				if (set_sys_param(SYS_LOCAL_ON, on) && !on)
+				bool off = data2 < 64;
+				if (set_sys_param(SYS_LOCAL_CTRL_OFF, off) && off)
 					clear_latch();
 				break;
 			case CC_ALL_NOTES_OFF:
@@ -887,7 +948,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				break;
 			default:
 				// update parameters from ccs
-				params_rcv_cc(data1, data2, false, 0);
+				if (sys_params.midi_rcv_param_ccs)
+					params_rcv_cc(data1, data2, false, 0);
 				break;
 			}
 			break;
@@ -909,18 +971,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			if (m_string->state == MS_PRESSED)
 				m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
 			break;
-		case MIDI_NOTE_ON: {
-			s32 midi_pitch = 12 *
-			                     // pitch from octave parameter
-			                     ((param_index(P_OCT) << 9)
-			                      // pitch from pitch parameter
-			                      + (param_val(P_PITCH) >> 7))
-			                 // pitch from midi note
-			                 + NOTE_NR_TO_PITCH(data1)
-			                 // pitchbend
-			                 + m_string->pitchbend_pitch;
-			register_press(string_id, true, data1, data2, string_position_from_pitch(string_id, midi_pitch));
-		} break;
+		case MIDI_NOTE_ON:
+			register_press(string_id, true, data1, data2,
+			               string_position_from_pitch(string_id, NOTE_NR_TO_PITCH(data1)));
+			break;
 		case MIDI_PITCH_BEND:
 			m_string->pitchbend.lsb = data1;
 			m_string->pitchbend.msb = data2;
@@ -955,7 +1009,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				break;
 			default:
 				// update parameters from ccs
-				params_rcv_cc(data1, data2, true, string_id);
+				if (sys_params.midi_rcv_param_ccs)
+					params_rcv_cc(data1, data2, true, string_id);
 				break;
 			}
 			break;
@@ -1042,6 +1097,21 @@ void midi_tick(void) {
 		process_midi_msg(midi_packet[1], midi_packet[2], midi_packet[3]);
 }
 
+void set_mpe_channels(u8 zone, u8 num_chans) {
+	// set channels
+	mpe_zone[zone].num_chans = num_chans;
+	mpe_zone[(u8)!zone].num_chans = mini(mpe_zone[(u8)!zone].num_chans, 15 - num_chans);
+	mpe_zone[1].first_chan = 15 - mpe_zone[1].num_chans;
+	// recalculate num_strings
+	bool one_chan_per_string = mpe_zone[0].num_chans + mpe_zone[1].num_chans <= 8;
+	mpe_zone[zone].num_strings = one_chan_per_string ? mpe_zone[zone].num_chans : (mpe_zone[zone].num_chans + 1) >> 1;
+	mpe_zone[(u8)!zone].num_strings =
+	    one_chan_per_string ? mpe_zone[(u8)!zone].num_chans : (mpe_zone[(u8)!zone].num_chans + 1) >> 1;
+	// save to sys_params
+	set_sys_param(SYS_MPE_ZONE, zone);
+	set_sys_param(SYS_MPE_CHANS, num_chans);
+}
+
 bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, s8* note_number, u8* start_velocity,
                         s32* pitchbend_pitch) {
 	MidiString* m_string = &midi_string[string_id];
@@ -1051,17 +1121,10 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, s8* note_num
 
 	// synthesize internal pressure from midi velocity and midi pressure
 	u16 midi_pressure14 = 0;
-	switch (sys_params.midi_in_pres_type) {
-	case MP_CHANNEL_PRESSURE:
-		midi_pressure14 = channel_pressure << 7;
-		break;
-	case MP_POLY_AFTERTOUCH:
-	case MP_MPE_PRESSURE:
+	if (sys_params.mpe_in || sys_params.midi_in_pres_type == MP_POLY_AFTERTOUCH)
 		midi_pressure14 = maxi(m_string->pressure << 7, channel_pressure);
-		break;
-	default:
-		break;
-	}
+	else if (sys_params.midi_in_pres_type == MP_CHANNEL_PRESSURE)
+		midi_pressure14 = channel_pressure << 7;
 
 	// apply mod wheel as pressure, map 14-bit mod wheel to 127 << 7 to conform with 7 bit behavior
 	midi_pressure14 =
@@ -1088,13 +1151,13 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, s8* note_num
 // == CUE MIDI OUT == //
 
 void midi_send_clock(void) {
-	clocks_to_send++;
+	if (sys_params.midi_send_clock)
+		clocks_to_send++;
 }
 
 void midi_send_transport(MidiMessageType transport_type) {
-	if (transport_type < MIDI_TIMING_CLOCK)
-		return;
-	send_transport = transport_type;
+	if (sys_params.midi_send_transport && transport_type >= MIDI_TIMING_CLOCK)
+		send_transport = transport_type;
 }
 
 void midi_send_param(Param param_id) {

@@ -8,8 +8,9 @@
 const SynthString* get_synth_string(u8 string_id);
 
 // utils
+s32 quant_pitch_to_scale(s32 pitch, Scale scale);
 s16 step_at_string(u8 string_id, Scale scale); // only for led_viz!
-u8 find_string_for_pitch(s32 pitch);
+u8 find_string_for_pitch(s32 pitch, bool quantize);
 u16 string_position_from_pitch(u8 string_id, s32 pitch);
 void clear_latch(void);
 void clear_synth_string(u8 string_id);

@@ -7,42 +7,38 @@
 #include "hardware/touchstrips.h"
 #include "synth/synth.h"
 
-#define NUM_ITEMS 128
-
 typedef enum Section {
-	// default sections
 	S_SYSTEM,
 	S_MIDI_IN,
 	S_MIDI_OUT,
 	S_CV,
 	S_ACTIONS,
 	NUM_SYS_PARAM_SECTS,
-
-	// alternative sections
-	// S_SECTION_ALT = S_SECTION + 8,
 } Section;
 
 typedef enum Item {
 	// system
 	I_ACCEL_SENS = S_SYSTEM * 8,
 	I_ENC_DIR,
-	I_LOCAL_CONTROL,
+	I_LOCAL_CTRL_OFF,
 	// midi in
 	I_MIDI_IN_CH = S_MIDI_IN * 8,
+	I_MPE_IN,
 	I_MIDI_IN_VEL_BALANCE,
 	I_MIDI_IN_PRES_TYPE,
-	I_MIDI_IN_CLOCK_MULT,
 	I_MIDI_CHANNEL_BEND_RANGE_IN,
-	I_MIDI_STRING_BEND_RANGE_IN,
+	I_MIDI_IN_SCALE_QUANT,
+	I_MIDI_IN_CLOCK_MULT,
+	I_MIDI_IN_FILTER,
 	// midi out
 	I_MIDI_OUT_CH = S_MIDI_OUT * 8,
+	I_MPE_OUT,
 	I_MIDI_OUT_VEL_BALANCE,
 	I_MIDI_OUT_PRES_TYPE,
-	I_MIDI_OUT_CCS,
-	I_MIDI_OUT_LFOS,
-	I_MIDI_OUT_PARAMS,
+	I_MIDI_OUT_YZ_CONTROL,
+	I_MIDI_TRS_OUT_OFF,
 	I_MIDI_SOFT_THRU,
-	I_MIDI_STRING_BEND_RANGE_OUT,
+	I_MIDI_OUT_FILTER,
 	// cv
 	I_CV_QUANT = S_CV * 8,
 	I_CV_PPQN_IN,
@@ -54,59 +50,70 @@ typedef enum Item {
 	I_OG_PRESETS,
 	I_MIDI_PANIC,
 
-	MAX_ITEM,
+	NUM_DEFAULT_ITEMS,
+
+	// alternative items
+
+	I_MPE_IN_CHANS = I_MIDI_IN_CH + 64,
+	I_MIDI_STRING_BEND_RANGE_IN = I_MIDI_IN_PRES_TYPE + 64,
+	I_MPE_OUT_CHANS = I_MIDI_OUT_CH + 64,
+	I_MIDI_STRING_BEND_RANGE_OUT = I_MIDI_OUT_PRES_TYPE + 64,
+	NUM_MENU_ITEMS,
 } Item;
 
-const static u8 num_options[NUM_ITEMS] = {
-    [I_ACCEL_SENS] = 201,
-    [I_ENC_DIR] = 2,
-    [I_LOCAL_CONTROL] = 2,
-    [I_MIDI_IN_CH] = 16,
-    [I_MIDI_OUT_CH] = 16,
-    [I_MIDI_IN_CLOCK_MULT] = 3,
-    [I_MIDI_IN_VEL_BALANCE] = 129,
-    [I_MIDI_OUT_VEL_BALANCE] = 129,
-    [I_MIDI_CHANNEL_BEND_RANGE_IN] = NUM_BEND_RANGES,
-    [I_MIDI_STRING_BEND_RANGE_IN] = NUM_BEND_RANGES,
-    [I_MIDI_IN_PRES_TYPE] = NUM_MIDI_PRESSURE_TYPES,
-    [I_MIDI_OUT_PRES_TYPE] = NUM_MIDI_PRESSURE_TYPES,
-    [I_MIDI_OUT_CCS] = 3,
-    [I_MIDI_OUT_LFOS] = 2,
-    [I_MIDI_OUT_PARAMS] = 2,
-    [I_MIDI_SOFT_THRU] = 2,
-    [I_MIDI_STRING_BEND_RANGE_OUT] = NUM_BEND_RANGES,
-    [I_CV_QUANT] = NUM_CV_QUANT_TYPES,
-    [I_CV_PPQN_IN] = NUM_PPQN_VALUES,
-    [I_CV_PPQN_OUT] = NUM_PPQN_VALUES,
-    [I_REBOOT] = 1,
-    [I_TOUCH_CALIB] = 1,
-    [I_CV_CALIB] = 1,
-    [I_OG_PRESETS] = 1,
-    [I_MIDI_PANIC] = 1,
+const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
+    [I_ACCEL_SENS] = SYS_ACCEL_SENS,
+    [I_ENC_DIR] = SYS_REVERSE_ENCODER,
+    [I_LOCAL_CTRL_OFF] = SYS_LOCAL_CTRL_OFF,
+    [I_MPE_IN] = SYS_MPE_IN,
+    [I_MIDI_IN_CH] = SYS_MIDI_IN_CHAN,
+    [I_MIDI_IN_VEL_BALANCE] = SYS_MIDI_IN_VEL_BALANCE,
+    [I_MIDI_IN_PRES_TYPE] = SYS_MIDI_IN_PRES_TYPE,
+    [I_MIDI_CHANNEL_BEND_RANGE_IN] = SYS_MIDI_CHANNEL_BEND_RANGE_IN,
+    [I_MIDI_IN_SCALE_QUANT] = SYS_MIDI_IN_SCALE_QUANT,
+    [I_MIDI_IN_FILTER] = SYS_MIDI_IN_FILTER,
+    [I_MIDI_IN_CLOCK_MULT] = SYS_MIDI_IN_CLOCK_MULT,
+    [I_MPE_OUT] = SYS_MPE_OUT,
+    [I_MIDI_OUT_CH] = SYS_MIDI_OUT_CHAN,
+    [I_MIDI_OUT_VEL_BALANCE] = SYS_MIDI_OUT_VEL_BALANCE,
+    [I_MIDI_OUT_PRES_TYPE] = SYS_MIDI_OUT_PRES_TYPE,
+    [I_MIDI_OUT_YZ_CONTROL] = SYS_MIDI_OUT_YZ_CONTROL,
+    [I_MIDI_SOFT_THRU] = SYS_MIDI_SOFT_THRU,
+    [I_MIDI_OUT_FILTER] = SYS_MIDI_OUT_FILTER,
+    [I_MIDI_TRS_OUT_OFF] = SYS_MIDI_TRS_OUT_OFF,
+    [I_CV_QUANT] = SYS_CV_QUANT,
+    [I_CV_PPQN_IN] = SYS_CV_PPQN_IN,
+    [I_CV_PPQN_OUT] = SYS_CV_PPQN_OUT,
+    [I_MPE_IN_CHANS] = SYS_MPE_CHANS,
+    [I_MIDI_STRING_BEND_RANGE_IN] = SYS_MIDI_STRING_BEND_RANGE_IN,
+    [I_MPE_OUT_CHANS] = SYS_MPE_CHANS,
+    [I_MIDI_STRING_BEND_RANGE_OUT] = SYS_MIDI_STRING_BEND_RANGE_OUT,
 };
 
 const static char* section_name[NUM_SYS_PARAM_SECTS] = {
     [S_SYSTEM] = "System", [S_MIDI_IN] = "Midi in", [S_MIDI_OUT] = "Midi out", [S_CV] = "CV", [S_ACTIONS] = "Actions",
 };
 
-const static char* item_name[NUM_ITEMS] = {
-    [I_ACCEL_SENS] = "Acc sens",
+const static char* item_name[NUM_MENU_ITEMS] = {
+    [I_ACCEL_SENS] = "Acc Sens",
     [I_ENC_DIR] = "Enc dir",
-    [I_LOCAL_CONTROL] = "Local Ctrl",
+    [I_LOCAL_CTRL_OFF] = "Local Ctrl",
+    [I_MPE_IN] = "MPE",
     [I_MIDI_IN_CH] = "Channel",
     [I_MIDI_IN_VEL_BALANCE] = "Vel/Pres",
     [I_MIDI_IN_PRES_TYPE] = "AfterTch",
+    [I_MIDI_CHANNEL_BEND_RANGE_IN] = "Ch Bend",
+    [I_MIDI_IN_SCALE_QUANT] = "To Scale",
+    [I_MIDI_IN_FILTER] = "Filter",
     [I_MIDI_IN_CLOCK_MULT] = "Clock mult",
-    [I_MIDI_CHANNEL_BEND_RANGE_IN] = "Bend",
-    [I_MIDI_STRING_BEND_RANGE_IN] = "Ch bend",
+    [I_MPE_OUT] = "MPE",
     [I_MIDI_OUT_CH] = "Channel",
     [I_MIDI_OUT_VEL_BALANCE] = "Vel/Pres",
     [I_MIDI_OUT_PRES_TYPE] = "AfterTch",
-    [I_MIDI_OUT_CCS] = "Touch CCs",
-    [I_MIDI_OUT_LFOS] = "LFO CCs",
-    [I_MIDI_OUT_PARAMS] = "Param CCs",
+    [I_MIDI_OUT_YZ_CONTROL] = "YZ Control",
     [I_MIDI_SOFT_THRU] = "Thru",
-    [I_MIDI_STRING_BEND_RANGE_OUT] = "Ch bend",
+    [I_MIDI_OUT_FILTER] = "Filter",
+    [I_MIDI_TRS_OUT_OFF] = "TRS out",
     [I_CV_QUANT] = "Quant",
     [I_CV_PPQN_IN] = "PPQN in",
     [I_CV_PPQN_OUT] = "PPQN out",
@@ -115,6 +122,10 @@ const static char* item_name[NUM_ITEMS] = {
     [I_CV_CALIB] = "CV Calib",
     [I_OG_PRESETS] = "OG Presets",
     [I_MIDI_PANIC] = "Midi Panic",
+    [I_MPE_IN_CHANS] = "Chans",
+    [I_MIDI_STRING_BEND_RANGE_IN] = "Vc Bend",
+    [I_MPE_OUT_CHANS] = "Chans",
+    [I_MIDI_STRING_BEND_RANGE_OUT] = "Vc Bend",
 };
 
 static Item cur_item = 0;
@@ -124,13 +135,19 @@ static bool value_selected = false;
 static u8 fill_start = OLED_WIDTH;
 static bool perform_action = false;
 
+static bool item_exists(Item item) {
+	// actions
+	if (item >= I_REBOOT && item < NUM_DEFAULT_ITEMS)
+		return true;
+	// sys params
+	return item_to_sys_param[item] != 0;
+}
+
 static Item alt_section_check(Item item) {
 	item &= 63;
-	switch ((Section)(item >> 3)) {
-	// if alt section active: item += 64
-	default:
-		break;
-	}
+	if ((sys_params.mpe_in && (item == I_MIDI_IN_CH || item == I_MIDI_IN_PRES_TYPE))
+	    || (sys_params.mpe_out && (item == I_MIDI_OUT_CH || item == I_MIDI_OUT_PRES_TYPE)))
+		return item + 64;
 	return item;
 }
 
@@ -143,142 +160,44 @@ static void select_item(Item item, bool force) {
 	display_section = (cur_item / 8) & 7;
 
 	// retrieve value
-	switch (cur_item) {
-	case I_ACCEL_SENS:
-		cur_value = sys_params.accel_sens;
-		break;
-	case I_ENC_DIR:
-		cur_value = sys_params.reverse_encoder;
-		break;
-	case I_LOCAL_CONTROL:
-		cur_value = sys_params.local_on;
-		break;
-	case I_MIDI_IN_CH:
-		cur_value = sys_params.midi_in_chan;
-		break;
-	case I_MIDI_IN_VEL_BALANCE:
-		cur_value = sys_params.midi_in_vel_balance;
-		break;
-	case I_MIDI_IN_PRES_TYPE:
-		cur_value = sys_params.midi_in_pres_type;
-		break;
-	case I_MIDI_IN_CLOCK_MULT:
-		cur_value = sys_params.midi_in_clock_mult;
-		break;
-	case I_MIDI_CHANNEL_BEND_RANGE_IN:
-		cur_value = sys_params.midi_channel_bend_range_in;
-		break;
-	case I_MIDI_STRING_BEND_RANGE_IN:
-		cur_value = sys_params.midi_string_bend_range_in;
-		break;
-	case I_MIDI_OUT_CH:
-		cur_value = sys_params.midi_out_chan;
-		break;
-	case I_MIDI_OUT_VEL_BALANCE:
-		cur_value = sys_params.midi_out_vel_balance;
-		break;
-	case I_MIDI_OUT_PRES_TYPE:
-		cur_value = sys_params.midi_out_pres_type;
-		break;
-	case I_MIDI_OUT_CCS:
-		cur_value = sys_params.midi_out_ccs;
-		break;
-	case I_MIDI_OUT_LFOS:
-		cur_value = sys_params.midi_out_lfos;
-		break;
-	case I_MIDI_OUT_PARAMS:
-		cur_value = sys_params.midi_out_params;
-		break;
-	case I_MIDI_SOFT_THRU:
-		cur_value = sys_params.midi_soft_thru;
-		break;
-	case I_MIDI_STRING_BEND_RANGE_OUT:
-		cur_value = sys_params.midi_string_bend_range_out;
-		break;
-	case I_CV_QUANT:
-		cur_value = sys_params.cv_quant;
-		break;
-	case I_CV_PPQN_IN:
-		cur_value = sys_params.cv_in_ppqn;
-		break;
-	case I_CV_PPQN_OUT:
-		cur_value = sys_params.cv_out_ppqn;
-		break;
-	default:
-		break;
-	}
+	SysParam param = item_to_sys_param[cur_item];
+	if (param)
+		cur_value = get_sys_param(param);
 }
 
 static void save_value(s16 value) {
-	value = clampi(value, 0, num_options[cur_item] - 1);
+	SysParam param = item_to_sys_param[cur_item];
+	if (!param)
+		return;
+
+	value = clampi(value, 0, sys_param_range(param) - 1);
+
+	// actions on value save
 	switch (cur_item) {
-	case I_ACCEL_SENS:
-		set_sys_param(SYS_ACCEL_SENS, value);
-		break;
-	case I_ENC_DIR:
-		set_sys_param(SYS_REVERSE_ENCODER, value);
-		break;
-	case I_LOCAL_CONTROL:
-		if (set_sys_param(SYS_LOCAL_ON, value) && !value)
+	case I_LOCAL_CTRL_OFF:
+		if (set_sys_param(param, value) && value)
 			clear_latch();
 		break;
 	case I_MIDI_IN_CH:
-		if (set_sys_param(SYS_MIDI_IN_CHAN, value))
+		if (set_sys_param(param, value))
 			midi_clear_all();
 		break;
-	case I_MIDI_IN_VEL_BALANCE:
-		set_sys_param(SYS_MIDI_IN_VEL_BALANCE, value);
-		break;
-	case I_MIDI_IN_PRES_TYPE:
-		set_sys_param(SYS_MIDI_IN_PRES_TYPE, value);
-		break;
-	case I_MIDI_IN_CLOCK_MULT:
-		set_sys_param(SYS_MIDI_IN_CLOCK_MULT, value);
-		break;
 	case I_MIDI_CHANNEL_BEND_RANGE_IN:
-		set_sys_param(SYS_MIDI_CHANNEL_BEND_RANGE_IN, value);
-		midi_precalc_bends();
-		break;
 	case I_MIDI_STRING_BEND_RANGE_IN:
-		set_sys_param(SYS_MIDI_STRING_BEND_RANGE_IN, value);
+	case I_MIDI_STRING_BEND_RANGE_OUT:
+		set_sys_param(param, value);
 		midi_precalc_bends();
 		break;
 	case I_MIDI_OUT_CH:
-		if (set_sys_param(SYS_MIDI_OUT_CHAN, value))
+		if (set_sys_param(param, value))
 			midi_clear_all();
 		break;
-	case I_MIDI_OUT_VEL_BALANCE:
-		set_sys_param(SYS_MIDI_OUT_VEL_BALANCE, value);
-		break;
-	case I_MIDI_OUT_PRES_TYPE:
-		set_sys_param(SYS_MIDI_OUT_PRES_TYPE, value);
-		break;
-	case I_MIDI_OUT_CCS:
-		set_sys_param(SYS_MIDI_OUT_CCS, value);
-		break;
-	case I_MIDI_OUT_LFOS:
-		set_sys_param(SYS_MIDI_OUT_LFOS, value);
-		break;
-	case I_MIDI_OUT_PARAMS:
-		set_sys_param(SYS_MIDI_OUT_PARAMS, value);
-		break;
-	case I_MIDI_SOFT_THRU:
-		set_sys_param(SYS_MIDI_SOFT_THRU, value);
-		break;
-	case I_MIDI_STRING_BEND_RANGE_OUT:
-		set_sys_param(SYS_MIDI_STRING_BEND_RANGE_OUT, value);
-		midi_precalc_bends();
-		break;
-	case I_CV_QUANT:
-		set_sys_param(SYS_CV_QUANT, value);
-		break;
-	case I_CV_PPQN_IN:
-		set_sys_param(SYS_CV_PPQN_IN, value);
-		break;
-	case I_CV_PPQN_OUT:
-		set_sys_param(SYS_CV_PPQN_OUT, value);
+	case I_MPE_IN_CHANS:
+	case I_MPE_OUT_CHANS:
+		set_mpe_channels(sys_params.mpe_zone, value + 1);
 		break;
 	default:
+		set_sys_param(param, value);
 		break;
 	}
 	cur_value = value;
@@ -292,7 +211,7 @@ void open_settings_menu(void) {
 
 void press_settings_menu_pad(u8 x, u8 y) {
 	Item item = alt_section_check(y * 8 + x);
-	if (num_options[item])
+	if (item_exists(item))
 		select_item(item, false);
 }
 
@@ -356,17 +275,33 @@ void edit_settings_from_encoder(s8 enc_diff) {
 	// edit value
 	if (value_selected) {
 		s16 new_value = cur_value;
+		bool is_mpe_chans = cur_item == I_MPE_IN_CHANS || cur_item == I_MPE_OUT_CHANS;
+		bool is_vel_balance = cur_item == I_MIDI_IN_VEL_BALANCE || cur_item == I_MIDI_OUT_VEL_BALANCE;
+		// switch between lower/upper mpe zone through the mpe channels setting
+		if (is_mpe_chans && new_value == 14) {
+			if (enc_diff > 0 && sys_params.mpe_zone == 0) {
+				set_sys_param(SYS_MPE_ZONE, 1);
+				enc_diff--;
+			}
+			else if (enc_diff < 0 && sys_params.mpe_zone == 1) {
+				set_sys_param(SYS_MPE_ZONE, 0);
+				enc_diff++;
+			}
+		}
 		if (
 		    // avoid encoder glitching while editing its direction
 		    (cur_item == I_ENC_DIR && cur_value)
 		    // editing balance feels more natural inverted
-		    || cur_item == I_MIDI_IN_VEL_BALANCE || cur_item == I_MIDI_OUT_VEL_BALANCE)
+		    || is_vel_balance
+		    // upper zone channels go from high to low
+		    || (is_mpe_chans && sys_params.mpe_zone == 1)
+		    // inverted params
+		    || cur_item == I_LOCAL_CTRL_OFF || cur_item == I_MIDI_TRS_OUT_OFF)
 			enc_diff = -enc_diff;
 		// update value
 		new_value += enc_diff;
 		// users should only be able to select 101 out of the 129 possible values
-		if ((cur_item == I_MIDI_IN_VEL_BALANCE || cur_item == I_MIDI_OUT_VEL_BALANCE)
-		    && (((new_value * 100) & 127) >= 100))
+		if (is_vel_balance && (((new_value * 100) & 127) >= 100))
 			new_value += enc_diff > 0 ? 1 : -1;
 		save_value(new_value);
 		return;
@@ -374,16 +309,16 @@ void edit_settings_from_encoder(s8 enc_diff) {
 	// edit item selection
 	Item new_item = cur_item & 63;
 	if (enc_diff > 0)
-		while (new_item < MAX_ITEM - 1 && enc_diff != 0) {
+		while (new_item < NUM_DEFAULT_ITEMS - 1 && enc_diff != 0) {
 			new_item++;
-			while (!num_options[alt_section_check(new_item)])
+			while (!item_exists(alt_section_check(new_item)))
 				new_item++;
 			enc_diff--;
 		}
 	else
 		while (new_item > 0 && enc_diff != 0) {
 			new_item--;
-			while (!num_options[alt_section_check(new_item)])
+			while (!item_exists(alt_section_check(new_item)))
 				new_item--;
 			enc_diff++;
 		}
@@ -408,6 +343,15 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MIDI_OUT_CH:
 		sprintf(val_buf, "%d", value + 1);
 		return val_buf;
+	case I_MPE_IN_CHANS:
+	case I_MPE_OUT_CHANS:
+		// upper
+		if (sys_params.mpe_zone)
+			sprintf(val_buf, sys_params.mpe_chans == 0 ? "15 [16]" : "%u-15 [16]", 15 - sys_params.mpe_chans);
+		// lower
+		else
+			sprintf(val_buf, sys_params.mpe_chans == 0 ? "2 [ 1 ]" : "2-%u [ 1 ]", sys_params.mpe_chans + 2);
+		return val_buf;
 	case I_MIDI_IN_CLOCK_MULT:
 		switch (value) {
 		case 0:
@@ -427,14 +371,15 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 			return "Mono";
 		case 2:
 			return "Poly";
-		case 3:
-			return "MPE";
 		}
-	case I_LOCAL_CONTROL:
-	case I_MIDI_OUT_CCS:
-	case I_MIDI_OUT_LFOS:
-	case I_MIDI_OUT_PARAMS:
+	case I_MPE_IN:
+	case I_MPE_OUT:
+	case I_MIDI_IN_SCALE_QUANT:
+	case I_MIDI_OUT_YZ_CONTROL:
 		return value ? "On" : "Off";
+	case I_LOCAL_CTRL_OFF:
+	case I_MIDI_TRS_OUT_OFF:
+		return value ? "Off" : "On";
 	case I_MIDI_SOFT_THRU:
 		return value ? "Consume" : "Off";
 	case I_CV_QUANT:
@@ -448,8 +393,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MIDI_CHANNEL_BEND_RANGE_IN:
 	case I_MIDI_STRING_BEND_RANGE_IN:
 	case I_MIDI_STRING_BEND_RANGE_OUT:
-		sprintf(val_buf, "%d%ssemi", bend_ranges[value],
-		        (item == I_MIDI_STRING_BEND_RANGE_IN || item == I_MIDI_STRING_BEND_RANGE_OUT) && value >= 5 ? "" : " ");
+		sprintf(val_buf, "%d%ssemi", bend_ranges[value], value >= 5 ? "" : " ");
 		return val_buf;
 	default:
 		sprintf(val_buf, "%d", value);
@@ -478,11 +422,44 @@ void draw_settings_menu(void) {
 	draw_str(value_selected ? 110 : 0, 16, font, value_selected ? I_LEFT : I_RIGHT);
 	// name
 	draw_str(value_selected ? 0 : 18, 17, font, item_name[cur_item]);
+	// icons
+	u8 arrow_offset = OLED_WIDTH - (value_selected ? 21 : 2);
+	if (cur_item == I_MIDI_IN_FILTER) {
+		u8 x = arrow_offset - 48;
+		draw_str(x, 17, font, sys_params.midi_rcv_clock ? I_TEMPO : I_CROSS);
+		draw_str(x + 16, 17, font, sys_params.midi_rcv_transport ? I_PLAY : I_CROSS);
+		draw_str(x + 32, 17, font, sys_params.midi_rcv_param_ccs ? I_KNOB : I_CROSS);
+	}
+	else if (cur_item == I_MIDI_OUT_FILTER) {
+		u8 x = arrow_offset - 64;
+		draw_str(x, 17, font, sys_params.midi_send_clock ? I_TEMPO : I_CROSS);
+		x += 16;
+		draw_str(x, 17, font, sys_params.midi_send_transport ? I_PLAY : I_CROSS);
+		x += 16;
+		draw_str(x, 17, font, sys_params.midi_send_param_ccs ? I_KNOB : I_CROSS);
+		if (sys_params.midi_send_param_ccs == 2) {
+			x += 2;
+			fill_rectangle(x, 17, x + 11, 32);
+			inverted_rectangle(x, 17, x + 11, 32);
+			x++;
+			draw_str(x, 18, F_8, "N");
+			draw_str(x, 25, F_8, "P");
+			x += 5;
+			draw_str(x, 18, F_8, "R");
+			draw_str(x, 25, F_8, "N");
+			x += 8;
+		}
+		else
+			x += 16;
+		draw_str(x, 17, font, sys_params.midi_send_lfo_cc ? I_ALFO : I_CROSS);
+	}
 	// value
-	char val_buf[16];
-	const char* val_str = get_param_str(cur_item, cur_value, val_buf);
-	u8 width = str_width(font, val_str);
-	draw_str(OLED_WIDTH - width - (value_selected ? 21 : 2), 17, font, val_str);
+	else {
+		char val_buf[16];
+		const char* val_str = get_param_str(cur_item, cur_value, val_buf);
+		u8 width = str_width(font, val_str);
+		draw_str(arrow_offset - width, 17, font, val_str);
+	}
 }
 
 void settings_menu_leds(u8 pulse) {
@@ -495,7 +472,7 @@ void settings_menu_leds(u8 pulse) {
 			if (item == cur_item)
 				leds[x][y] = 255;
 			// light up section items
-			else if (num_options[item])
+			else if (item_exists(item))
 				leds[x][y] = led_add_gamma(active_sect ? 64 : 32);
 		}
 	}
