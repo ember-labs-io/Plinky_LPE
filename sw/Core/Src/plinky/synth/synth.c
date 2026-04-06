@@ -735,7 +735,7 @@ static void generate_string_touch(u8 string_id) {
 	    && ((ui_mode == UI_DEFAULT && !editing_poly_param() && !(string_id == 0 && editing_param()))
 	        // sampler in preview mode when a sample is loaded
 	        || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER))) {
-		bool touching = strip_touched & mask;
+		bool touching = get_strip_touched() & mask;
 		bool first_touch_global = false;
 
 		u8 pad_id = 7 - (touch->pos >> 8);
@@ -890,11 +890,11 @@ void generate_string_touches(void) {
 		// framerate - whenever touchstrips.h has read out a full frame of touches, strings_write_frame increments to
 		// make use of the new touch-data
 
-		if (synth_write_frame != touch_frame) {
+		if (synth_write_frame != get_touch_frame()) {
 			// we read from the frame that was written just before
 			synth_read_frame = synth_write_frame;
 			// we write to the frame that is currently being processed by the touchstrips
-			synth_write_frame = touch_frame;
+			synth_write_frame = get_touch_frame();
 			// utility masks
 			read_frame_mask = 1 << synth_read_frame;
 			write_frame_mask = 1 << synth_write_frame;

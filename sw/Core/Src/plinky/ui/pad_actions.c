@@ -270,7 +270,7 @@ void handle_pad_actions(u8 strip_id) {
 
 	bool valid_action =
 	    // touched
-	    (strip_touched & mask)
+	    (get_strip_touched() & mask)
 	    && (
 	        // function strip
 	        strip_id == 8 ||

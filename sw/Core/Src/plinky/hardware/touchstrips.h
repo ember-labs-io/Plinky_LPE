@@ -6,9 +6,8 @@
 // - each touchstrip gets read up to two times per cycle, leading to 18 touch readings and 36 saved sensor values
 // - after processing, these readings are reduced to 9 touches
 
-extern u8 touch_frame;
-extern u16 strip_touched;
-
+u8 get_touch_frame(void);
+u16 get_strip_touched(void);
 const Touch* get_touch(u8 touch_id, u8 frames_back);
 
 // main
