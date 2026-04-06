@@ -113,10 +113,10 @@ void plinky_init(void) {
 	init_codec();
 	init_adc_dac();
 	init_spi();
+	init_memory();
 	init_midi();
 	init_usb();
 	init_leds();
-	init_memory();
 	launch_calib(0);
 	leds_bootswish();
 	launch_calib(1);

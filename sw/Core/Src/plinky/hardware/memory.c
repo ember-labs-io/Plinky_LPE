@@ -1,6 +1,7 @@
 #include "memory.h"
 #include "codec.h"
 #include "gfx/gfx.h"
+#include "mem_defs.h"
 #include "synth/audio.h"
 #include "synth/params.h"
 #include "synth/sampler.h"
@@ -176,160 +177,20 @@ u8* preset_flash_ptr(u8 preset_id) {
 	return (u8*)fp;
 }
 
+u16 get_sys_param(SysParam param) {
+	return sys_param_getters[param]();
+}
+
+u8 sys_param_range(SysParam param) {
+	return sys_param_ranges[param];
+}
+
 // returns whether this saved the new value
 bool set_sys_param(SysParam param, u16 value) {
-	s32 saved_value = 0;
-	switch (param) {
-	case SYS_PRESET_ID:
-		saved_value = sys_params.preset_id;
-		break;
-	case SYS_MIDI_IN_CHAN:
-		saved_value = sys_params.midi_in_chan;
-		break;
-	case SYS_MIDI_OUT_CHAN:
-		saved_value = sys_params.midi_out_chan;
-		break;
-	case SYS_ACCEL_SENS:
-		saved_value = sys_params.accel_sens;
-		break;
-	case SYS_VOLUME:
-		saved_value = (sys_params.volume_msb << 8) + sys_params.volume_lsb;
-		break;
-	case SYS_CV_QUANT:
-		saved_value = sys_params.cv_quant;
-		break;
-	case SYS_CV_PPQN_IN:
-		saved_value = sys_params.cv_in_ppqn;
-		break;
-	case SYS_CV_PPQN_OUT:
-		saved_value = sys_params.cv_out_ppqn;
-		break;
-	case SYS_REVERSE_ENCODER:
-		saved_value = sys_params.reverse_encoder;
-		break;
-	case SYS_PRESET_ALIGNED:
-		saved_value = sys_params.preset_aligned;
-		break;
-	case SYS_PATTERN_ALIGNED:
-		saved_value = sys_params.pattern_aligned;
-		break;
-	case SYS_MIDI_IN_CLOCK_MULT:
-		saved_value = sys_params.midi_in_clock_mult;
-		break;
-	case SYS_MIDI_IN_VEL_BALANCE:
-		saved_value = sys_params.midi_in_vel_balance;
-		break;
-	case SYS_MIDI_OUT_VEL_BALANCE:
-		saved_value = sys_params.midi_out_vel_balance;
-		break;
-	case SYS_MIDI_IN_PRES_TYPE:
-		saved_value = sys_params.midi_in_pres_type;
-		break;
-	case SYS_MIDI_OUT_PRES_TYPE:
-		saved_value = sys_params.midi_out_pres_type;
-		break;
-	case SYS_MIDI_OUT_CCS:
-		saved_value = sys_params.midi_out_ccs;
-		break;
-	case SYS_MIDI_OUT_LFOS:
-		saved_value = sys_params.midi_out_lfos;
-		break;
-	case SYS_MIDI_OUT_PARAMS:
-		saved_value = sys_params.midi_out_params;
-		break;
-	case SYS_MIDI_SOFT_THRU:
-		saved_value = sys_params.midi_soft_thru;
-		break;
-	case SYS_MIDI_CHANNEL_BEND_RANGE_IN:
-		saved_value = sys_params.midi_channel_bend_range_in;
-		break;
-	case SYS_MIDI_STRING_BEND_RANGE_IN:
-		saved_value = sys_params.midi_string_bend_range_in;
-		break;
-	case SYS_MIDI_STRING_BEND_RANGE_OUT:
-		saved_value = sys_params.midi_string_bend_range_out;
-		break;
-	case SYS_LOCAL_ON:
-		saved_value = sys_params.local_on;
-		break;
-	}
+	u16 saved_value = sys_param_getters[param]();
 	if (value == saved_value)
 		return false;
-	switch (param) {
-	case SYS_PRESET_ID:
-		sys_params.preset_id = value;
-		break;
-	case SYS_MIDI_IN_CHAN:
-		sys_params.midi_in_chan = value;
-		break;
-	case SYS_MIDI_OUT_CHAN:
-		sys_params.midi_out_chan = value;
-		break;
-	case SYS_ACCEL_SENS:
-		sys_params.accel_sens = value;
-		break;
-	case SYS_VOLUME:
-		sys_params.volume_lsb = value & 255;
-		sys_params.volume_msb = (value >> 8) & 7;
-		break;
-	case SYS_CV_QUANT:
-		sys_params.cv_quant = value;
-		break;
-	case SYS_CV_PPQN_IN:
-		sys_params.cv_in_ppqn = value;
-		break;
-	case SYS_CV_PPQN_OUT:
-		sys_params.cv_out_ppqn = value;
-		break;
-	case SYS_REVERSE_ENCODER:
-		sys_params.reverse_encoder = value;
-		break;
-	case SYS_PRESET_ALIGNED:
-		sys_params.preset_aligned = value;
-		break;
-	case SYS_PATTERN_ALIGNED:
-		sys_params.pattern_aligned = value;
-		break;
-	case SYS_MIDI_IN_CLOCK_MULT:
-		sys_params.midi_in_clock_mult = value;
-		break;
-	case SYS_MIDI_IN_VEL_BALANCE:
-		sys_params.midi_in_vel_balance = value;
-		break;
-	case SYS_MIDI_OUT_VEL_BALANCE:
-		sys_params.midi_out_vel_balance = value;
-		break;
-	case SYS_MIDI_IN_PRES_TYPE:
-		sys_params.midi_in_pres_type = value;
-		break;
-	case SYS_MIDI_OUT_PRES_TYPE:
-		sys_params.midi_out_pres_type = value;
-		break;
-	case SYS_MIDI_OUT_CCS:
-		sys_params.midi_out_ccs = value;
-		break;
-	case SYS_MIDI_OUT_LFOS:
-		sys_params.midi_out_lfos = value;
-		break;
-	case SYS_MIDI_OUT_PARAMS:
-		sys_params.midi_out_params = value;
-		break;
-	case SYS_MIDI_SOFT_THRU:
-		sys_params.midi_soft_thru = value;
-		break;
-	case SYS_MIDI_CHANNEL_BEND_RANGE_IN:
-		sys_params.midi_channel_bend_range_in = value;
-		break;
-	case SYS_MIDI_STRING_BEND_RANGE_IN:
-		sys_params.midi_string_bend_range_in = value;
-		break;
-	case SYS_MIDI_STRING_BEND_RANGE_OUT:
-		sys_params.midi_string_bend_range_out = value;
-		break;
-	case SYS_LOCAL_ON:
-		sys_params.local_on = value;
-		break;
-	}
+	sys_param_setters[param](value);
 	log_ram_edit(SEG_SYS_PARAMS);
 	return true;
 }
@@ -573,7 +434,7 @@ void init_memory(void) {
 		sys_params.midi_out_vel_balance = 64; // 50/50
 		sys_params.midi_in_pres_type = MP_CHANNEL_PRESSURE;
 		sys_params.midi_out_pres_type = MP_CHANNEL_PRESSURE;
-		sys_params.midi_out_ccs = 0; // off
+		sys_params.midi_out_yz_control = 0; // off
 
 		// finalize
 		sys_params.version = LPE_SYS_PARAMS_VERSION;

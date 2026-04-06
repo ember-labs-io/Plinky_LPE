@@ -60,7 +60,6 @@
 #define RAW_SIZE 1024
 #define RAW_HALF (RAW_SIZE / 2)
 #define NUM_14BIT_CCS 32
-#define NUM_MIDI_PRESSURE_TYPES 4
 
 // MEMORY
 
@@ -241,21 +240,28 @@ typedef enum SysParam {
 	SYS_MIDI_OUT_VEL_BALANCE,
 	SYS_MIDI_IN_PRES_TYPE,
 	SYS_MIDI_OUT_PRES_TYPE,
-	SYS_MIDI_OUT_CCS,
-	SYS_MIDI_OUT_LFOS,
-	SYS_MIDI_OUT_PARAMS,
+	SYS_MIDI_OUT_YZ_CONTROL,
 	SYS_MIDI_SOFT_THRU,
 	SYS_MIDI_CHANNEL_BEND_RANGE_IN,
 	SYS_MIDI_STRING_BEND_RANGE_IN,
 	SYS_MIDI_STRING_BEND_RANGE_OUT,
-	SYS_LOCAL_ON,
+	SYS_LOCAL_CTRL_OFF,
+	SYS_MPE_IN,
+	SYS_MPE_OUT,
+	SYS_MPE_ZONE,
+	SYS_MPE_CHANS,
+	SYS_MIDI_IN_SCALE_QUANT,
+	SYS_MIDI_IN_FILTER,
+	SYS_MIDI_OUT_FILTER,
+	SYS_MIDI_TRS_OUT_OFF,
+	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
 typedef enum MidiPressureType {
 	MP_NONE,
 	MP_CHANNEL_PRESSURE,
 	MP_POLY_AFTERTOUCH,
-	MP_MPE_PRESSURE,
+	NUM_MIDI_PRESSURE_TYPES,
 } MidiPressureType;
 
 // PITCH
@@ -843,34 +849,57 @@ typedef struct ConditionalStep {
 } ConditionalStep;
 
 typedef struct SysParams {
+	// 0 bytes
 	u8 preset_id;
 	u8 midi_in_chan : 4;
 	u8 midi_out_chan : 4;
 	u8 accel_sens;
 	u8 volume_lsb;
+	// 4 bytes
 	u8 volume_msb : 3; // add 3 bits to make editing in 0-1024 range possible
 	u8 cv_quant : 2;
-	u8 reverse_encoder : 1;
-	u8 preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
-	u8 pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
+	bool reverse_encoder : 1;
+	bool preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
+	bool pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
+	// 5 bytes
 	u8 cv_in_ppqn : 3;
 	u8 cv_out_ppqn : 3;
 	u8 midi_in_clock_mult : 2; // 0 = 1/2x, 1 = 1x, 2 = 2x
-	u8 midi_in_vel_balance;    // balance between incoming velocity and pressure
-	u8 midi_out_vel_balance;   // balance between outgoing velocity and pressure
+	// 6 bytes
+	u8 midi_in_vel_balance;  // balance between incoming velocity and pressure
+	u8 midi_out_vel_balance; // balance between outgoing velocity and pressure
+	// 8 bytes
 	MidiPressureType midi_in_pres_type : 2;
 	MidiPressureType midi_out_pres_type : 2;
-	u8 midi_out_ccs : 1;
+	bool midi_out_yz_control : 1;
 	u8 midi_channel_bend_range_in : 3;
-	u8 midi_out_lfos : 1;
-	u8 midi_out_params : 1;
+	// 9 bytes
+	bool mpe_in : 1;
+	bool mpe_out : 1;
 	u8 midi_string_bend_range_in : 3;
 	u8 midi_string_bend_range_out : 3;
-	u8 midi_soft_thru : 1;
-	u8 local_on : 1;
-	u8 paddy : 6;
-	u8 pad[16 - 12];
+	// 10 bytes
+	u8 mpe_chans : 6; // values 0-14 represent 1-15 channels
+	bool midi_soft_thru : 1;
+	bool local_ctrl_off : 1;
+	// 11 bytes
+	bool midi_rcv_clock : 1;
+	bool midi_rcv_transport : 1;
+	bool midi_rcv_param_ccs : 1;
+	bool midi_send_clock : 1;
+	bool midi_send_transport : 1;
+	bool midi_send_param_ccs : 2; // 0 = off, 1 = CCs, 2 = 14bit CCs
+	bool midi_send_lfo_cc : 1;
+	// 12 bytes
+	u8 mpe_zone : 1; // 0 = lower, 1 = upper
+	bool midi_in_scale_quant : 1;
+	bool midi_trs_out_off : 1;
+	u8 paddy : 5;
+	// 13 bytes
+	u8 pad[16 - 14];
+	// 15 bytes
 	u8 version;
+	// 16 bytes
 } SysParams;
 
 typedef struct Preset {

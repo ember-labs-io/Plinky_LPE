@@ -93,10 +93,6 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 	return true;
 }
 
-#define PARAM_IS_POLY(param_id)                                                                                        \
-	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
-	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT))
-
 // "modulatable"
 #define PARAM_MODDABLE(param_id) (range_type[param_id] != R_UNUSED && param_id != P_VOLUME)
 
@@ -573,10 +569,24 @@ s8 param_index_unmod(Param param_id) {
 }
 
 u8 param_cc_value(Param param_id) {
-	u16 value = PARAM_VAL_RAW(param_id, SRC_BASE);
+	s16 value = PARAM_VAL_RAW(param_id, SRC_BASE);
 	if (PARAM_SIGNED(param_id))
 		value = (value + RAW_SIZE) >> 1;
 	return clampi(value >> 3, 0, 127);
+}
+
+u14 param_nrpn_value(Param param_id, ModSource mod_src) {
+	s16 value = PARAM_VAL_RAW(param_id, mod_src) << 4;
+	if (mod_src != SRC_BASE || PARAM_SIGNED(param_id))
+		value = (value + (1 << 14)) >> 1;
+	return (u14){clampi(value, 0, UINT14_MAX)};
+}
+
+u14 param_nrpn_poly_value(Param param_id, u8 string_id) {
+	s16 value = poly_params[poly_param_from_param[param_id]][string_id - 1];
+	if (PARAM_SIGNED(param_id))
+		value = (value + (1 << 14)) >> 1;
+	return (u14){clampi(value, 0, UINT14_MAX)};
 }
 
 // == SAVING == //
@@ -596,7 +606,7 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	if (PARAM_IS_POLY(param_id))
 		align_poly_param(poly_param_from_param[param_id]);
 	// send to midi
-	if (sys_params.midi_out_params && mod_src == SRC_BASE)
+	if ((sys_params.midi_send_param_ccs == 1 && mod_src == SRC_BASE) || sys_params.midi_send_param_ccs == 2)
 		midi_send_param(param_id);
 	log_ram_edit(SEG_PRESET);
 }
@@ -609,7 +619,7 @@ void save_poly_param_raw(Param param_id, u8 string_id, s16 data) {
 		// save
 		cur_preset.params[param_id][SRC_BASE] = data;
 		// send to midi
-		if (sys_params.midi_out_params)
+		if (sys_params.midi_send_param_ccs)
 			midi_send_param(param_id);
 		log_ram_edit(SEG_PRESET);
 	}
@@ -1119,7 +1129,7 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 }
 
 static bool has_modulation(Param param_id) {
-	for (u8 mod_src = SRC_ENV2; mod_src <= SRC_RND; mod_src++)
+	for (u8 mod_src = SRC_ENV2; mod_src < NUM_MOD_SOURCES; mod_src++)
 		if (cur_preset.params[param_id][mod_src])
 			return true;
 	return false;

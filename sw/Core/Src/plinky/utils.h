@@ -132,6 +132,10 @@ static inline void DebugLog(const char* fmt, ...) {
 #define NOTE_NR_TO_PITCH(note) SEMIS_TO_PITCH(note - 24)
 #define PITCH_TO_NOTE_NR(pitch) (PITCH_TO_SEMIS(pitch) + 24)
 
+#define PARAM_IS_POLY(param_id)                                                                                        \
+	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
+	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT))
+
 static inline float deadzone(float f, float zone) {
 	if (f < zone && f > -zone)
 		return 0.f;

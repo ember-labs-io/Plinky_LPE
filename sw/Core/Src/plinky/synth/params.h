@@ -26,6 +26,8 @@ s8 param_index(Param param_id);
 s8 param_index_poly(PolyParam pp_id, u8 string_id);
 s8 param_index_unmod(Param param_id);
 u8 param_cc_value(Param param_id);
+u14 param_nrpn_value(Param param_id, ModSource mod_src);
+u14 param_nrpn_poly_value(Param param_id, u8 string_id);
 
 // param saving
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);
