@@ -32,6 +32,7 @@ extern SysParams sys_params;
 extern Preset cur_preset;
 extern PatternQuarter cur_pattern_qtr[4];
 extern SampleInfo cur_sample_info;
+extern GlobalData global_data;
 
 // utils
 u32 get_sample_address(void);
