@@ -273,7 +273,7 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 			return;
 		u16 value14 = (value[0] << 7) | value[1];
 		// maxed out
-		if (value14 == 16383)
+		if (value14 == UINT14_MAX)
 			return;
 		// increase
 		value14++;
@@ -326,7 +326,7 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 	// CCs 0 through 31 are treated as regular 7 bit CCs by default
 	// Once any CC in the range 32 through 63 has been received, all following CCs in the range 0 through 31 will be
 	// treated as 14 bit CCs
-	static u8 cc14[NUM_14BIT_CCS][NUM_STRINGS][2] = {};
+	static u14 cc14_values[NUM_14BIT_CCS][NUM_STRINGS] = {};
 	static bool seen_14bit = false;
 
 	if (!seen_14bit && data1 >= NUM_14BIT_CCS && data1 < 2 * NUM_14BIT_CCS)
@@ -334,8 +334,7 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 
 	// define param id
 	bool is_14bit = seen_14bit && data1 < 2 * NUM_14BIT_CCS;
-	u8 param_cc = is_14bit ? data1 % NUM_14BIT_CCS : data1;
-	Param param_id = midi_cc_table[param_cc];
+	Param param_id = midi_cc_table[is_14bit ? data1 % NUM_14BIT_CCS : data1];
 	if (param_id >= NUM_PARAMS)
 		return;
 
@@ -345,21 +344,21 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 		string_id = 0;
 	}
 
-	u8* cc14_ptr;
-	if (param_cc < NUM_14BIT_CCS)
-		cc14_ptr = cc14[param_cc][string_id];
-
 	s16 raw;
 	// 14 bit CCs
 	if (is_14bit) {
-		cc14_ptr[data1 / NUM_14BIT_CCS] = data2;
-		raw = CC14_TO_RAW((cc14_ptr[0] << 7) | cc14_ptr[1], param_id);
+		u14* cc14 = &cc14_values[data1 % NUM_14BIT_CCS][string_id];
+		if (data1 < NUM_14BIT_CCS)
+			cc14->msb = data2;
+		else
+			cc14->lsb = data2;
+		raw = CC14_TO_RAW(cc14->value, param_id);
 	}
 	// 7 bit CCs
 	else {
 		// save in cc14 array in case the second byte comes in later
-		if (param_cc < NUM_14BIT_CCS)
-			cc14_ptr[0] = data2;
+		if (data1 < NUM_14BIT_CCS)
+			cc14_values[data1][string_id].msb = data2;
 		raw = CC_TO_RAW(data2, param_id);
 	}
 
