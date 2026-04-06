@@ -117,14 +117,12 @@ static void draw_main_leds(void) {
 				}
 				// fall thru
 			case UI_DEFAULT:
-				// draw left column value editor
-				if (x == 0) {
-					s16 edit_k = value_editor_column_led(y);
-					if (edit_k >= 0) {
-						k = edit_k;
-						// done
-						break;
-					}
+				// draw value editors
+				u8 edit_k = value_editor_column_led(x, y);
+				if (edit_k > 0) {
+					k = edit_k;
+					// done
+					break;
 				}
 				// pulse selected param
 				if (is_snap_param(x, y))

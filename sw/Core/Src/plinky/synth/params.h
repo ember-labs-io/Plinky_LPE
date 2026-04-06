@@ -6,6 +6,10 @@
 // utils
 const Preset* init_params_ptr(void);
 bool editing_param(void);
+bool editing_poly_param(void);
+void dec_selected_edit_strip(void);
+void inc_selected_edit_strip(void);
+void reset_selected_edit_strip(void);
 bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
@@ -37,7 +41,7 @@ void save_param_index(Param param_id, s8 index);
 bool try_restore_param(bool mode_a);
 void close_edit_mode(void);
 
-void touch_edit_strip(u16 position, bool is_press_start);
+void touch_edit_strip(u8 strip_id, u16 position, bool is_press_start);
 void press_param_pad(u8 pad_id, bool is_press_start);
 void press_mod_pad(u8 pad_y);
 
@@ -57,6 +61,6 @@ void draw_arp_flag(void);
 void draw_latch_flag(void);
 
 bool is_snap_param(u8 x, u8 y);
-s16 value_editor_column_led(u8 y);
+u8 value_editor_column_led(u8 x, u8 y);
 u8 ui_editing_led(u8 x, u8 y, u8 pulse);
 void param_function_leds(u8 pulse);

@@ -2,6 +2,7 @@
 #include "gfx/gfx.h"
 #include "hardware/memory.h"
 #include "hardware/touchstrips.h"
+#include "oled_viz.h"
 #include "settings_menu.h"
 #include "synth/params.h"
 #include "synth/sampler.h"
@@ -81,12 +82,24 @@ static void press_function(FunctionPad new_function) {
 		ui_mode = UI_LOAD;
 		break;
 	case FN_LEFT:
-		keep_ui_open = ui_mode != UI_PTN_START;
-		ui_mode = UI_PTN_START;
+		if (ui_mode == UI_DEFAULT && editing_poly_param()) {
+			dec_selected_edit_strip();
+			break;
+		}
+		else {
+			keep_ui_open = ui_mode != UI_PTN_START;
+			ui_mode = UI_PTN_START;
+		}
 		break;
 	case FN_RIGHT:
-		keep_ui_open = ui_mode != UI_PTN_END;
-		ui_mode = UI_PTN_END;
+		if (ui_mode == UI_DEFAULT && editing_poly_param()) {
+			inc_selected_edit_strip();
+			break;
+		}
+		else {
+			keep_ui_open = ui_mode != UI_PTN_END;
+			ui_mode = UI_PTN_END;
+		}
 		break;
 	case FN_CLEAR:
 		if (ui_mode == UI_LOAD)
@@ -162,13 +175,15 @@ static void release_function(void) {
 		cancel_main_press();
 		break;
 	case FN_LEFT:
-		if (press_start_ui_mode != UI_PTN_START && press_start_ui_mode != UI_PTN_END && short_press) {
+		if (!editing_poly_param() && press_start_ui_mode != UI_PTN_START && press_start_ui_mode != UI_PTN_END
+		    && short_press) {
 			seq_press_left(press_start_ui_mode == UI_DEFAULT);
 			keep_ui_open = false;
 		}
 		break;
 	case FN_RIGHT:
-		if (press_start_ui_mode != UI_PTN_START && press_start_ui_mode != UI_PTN_END && short_press) {
+		if (!editing_poly_param() && press_start_ui_mode != UI_PTN_START && press_start_ui_mode != UI_PTN_END
+		    && short_press) {
 			seq_press_right();
 			keep_ui_open = false;
 		}
@@ -249,6 +264,7 @@ void handle_pad_actions(u8 strip_id) {
 
 	u8 pad_y = touch->pos >> 8;       // local pad (on strip, 0 - 7)
 	u8 pad_id = strip_id * 8 + pad_y; // global pad (on plate, 0 - 71)
+	bool poly_editing = editing_poly_param();
 
 	bool valid_action =
 	    // touched
@@ -258,8 +274,8 @@ void handle_pad_actions(u8 strip_id) {
 	        strip_id == 8 ||
 	        // any non-default ui
 	        ui_mode != UI_DEFAULT ||
-	        // using the edit strip in the synth
-	        (ui_mode == UI_DEFAULT && strip_id == 0 && editing_param()));
+	        // using the edit strip(s) in the synth
+	        (ui_mode == UI_DEFAULT && (poly_editing || (strip_id == 0 && editing_param()))));
 
 	u8 prev_pad_y = prev_action_pad[strip_id];
 	// action tries to slide from one pad to the next
@@ -312,12 +328,12 @@ void handle_pad_actions(u8 strip_id) {
 				keep_ui_open = true;
 				break;
 			}
-			// left strip => touched edit strip
-			if (strip_id == 0) {
+			// left strip or poly edit => touched edit strip
+			if (strip_id == 0 || (poly_editing && ui_mode == UI_DEFAULT)) {
 				// pressure stable
 				if (abs(touch_1back->pres - touch->pres) < STABLE_PRESS_RANGE
 				    && abs(touch_2back->pres - touch->pres) < STABLE_PRESS_RANGE)
-					touch_edit_strip(touch->pos, is_press_start);
+					touch_edit_strip(strip_id, touch->pos, is_press_start);
 			}
 			// center six strips => pressed a parameter
 			else if (strip_id < 7) {
@@ -381,10 +397,18 @@ void pad_actions_frame(void) {
 	}
 	if (!main_press_canceled)
 		main_press_ms = millis() - main_press_start;
-	// actions on long press
+	// long press action in load ui
 	if (ui_mode == UI_LOAD && main_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
 		long_press_mem_item(main_press_pad);
 		cancel_main_press();
+	}
+	// toggle editing poly params
+	if ((ui_mode == UI_EDITING_A || ui_mode == UI_EDITING_B)
+	    && main_press_ms >= PRESS_DELAY + SHORT_PRESS_TIME + LONG_PRESS_TIME + POST_PRESS_DELAY) {
+		set_sys_param(SYS_EDIT_POLY_PARAMS, !sys_params.edit_poly_params);
+		reset_selected_edit_strip();
+		cancel_main_press();
+		flash_message(F_16_BOLD, "%s", "Poly Editing", sys_params.edit_poly_params ? "On" : "Off");
 	}
 }
 
@@ -417,6 +441,29 @@ bool oled_function_visuals(void) {
 		break;
 	default:
 		switch (function_pressed) {
+		// edit poly params toggle
+		case FN_SHIFT_A:
+		case FN_SHIFT_B:
+			if (main_press_ms > PRESS_DELAY + SHORT_PRESS_TIME) {
+				u8 id_on_row = main_press_pad >> 3;
+				// not a parameter
+				if (id_on_row == 0 || id_on_row > 6) {
+					cancel_main_press();
+					return false;
+				}
+
+				u8 param_pad = ((main_press_pad & 7) * 6 + (id_on_row - 1));
+				// not a poly param
+				if (!PARAM_IS_POLY(2 * param_pad + (function_pressed == FN_SHIFT_B ? 6 : 0))) {
+					cancel_main_press();
+					return false;
+				}
+
+				draw_str_ctr(8, F_16_BOLD, "Toggle Poly Edit");
+				draw_load_bar(main_press_ms - PRESS_DELAY - SHORT_PRESS_TIME, LONG_PRESS_TIME);
+				return true;
+			}
+			break;
 		case FN_CLEAR:
 			if (ui_mode == UI_LOAD)
 				return false;
