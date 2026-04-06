@@ -321,15 +321,16 @@ void handle_pad_actions(u8 strip_id) {
 	// actions
 	if (action_on_main_strip & mask) {
 		switch (ui_mode) {
-		case UI_DEFAULT:
 		case UI_EDITING_A:
 		case UI_EDITING_B:
 			// settings menu
-			if (pad_id == 47) {
+			if (ui_mode != UI_DEFAULT && pad_id == 47) {
 				open_settings_menu();
 				keep_ui_open = true;
 				break;
 			}
+		// fall thru
+		case UI_DEFAULT:
 			// left strip or poly edit => touched edit strip
 			if (strip_id == 0 || (poly_editing && ui_mode == UI_DEFAULT)) {
 				// pressure stable
