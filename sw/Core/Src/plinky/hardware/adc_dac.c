@@ -286,7 +286,8 @@ void cv_calib(void) {
 	// text scrolling
 	s16 top_line_pos = 128;
 	s16 top_line_width = str_width(F_16, top_line);
-	u8 cur_frame = touch_frame;
+	u8 cur_frame = get_touch_frame();
+	;
 	// track neutral cv in averages
 	float adc_avgs[NUM_CV_INS][2];
 	for (u8 i = 0; i < NUM_CV_INS; ++i)
@@ -331,9 +332,9 @@ void cv_calib(void) {
 		oled_flip();
 
 		// wait for touchstrips to update
-		while (touch_frame == cur_frame)
+		while (get_touch_frame() == cur_frame)
 			__asm__ volatile("" ::: "memory");
-		cur_frame = touch_frame;
+		cur_frame = get_touch_frame();
 
 		// use touch to change cv_out values
 		for (u8 column = 0; column < 4; ++column) {
