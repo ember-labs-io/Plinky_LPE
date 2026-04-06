@@ -27,10 +27,10 @@ typedef struct MidiString {
 
 	// midi values
 	u8 note_number;    // note on number
-	s16 pitchbend;     // pitchbend value
+	u14 pitchbend;     // pitchbend value
 	u8 start_velocity; // note on value
 	u8 pressure;       // poly aftertouch or mpe pressure value
-	u8 mod_wheel[2];   // mod wheel value
+	u14 mod_wheel;     // mod wheel value
 
 	// modified values
 	bool sustain_pressed; // CC64 as a bool
@@ -50,7 +50,7 @@ typedef struct LastSentString {
 #define THRU_BUFFER_SIZE 16
 #define PARAM_BUFFER_SIZE 8
 
-static const MidiString init_midi_string = {MS_UNPRESSED, 255};
+static const MidiString init_midi_string = {MS_UNPRESSED, 255, {UINT14_HALF}};
 static const LastSentString init_last_sent_string = {255};
 
 // buffers - double sized to allow linearizing cross-boundary reads/writes
@@ -67,7 +67,7 @@ static u16 max_string_bend_pitch_out; // not implemented yet
 // midi state
 static MidiString midi_string[NUM_STRINGS];
 static u8 channel_pressure;
-static s16 channel_pitchbend;
+static u14 channel_pitchbend;
 static s32 channel_pitchbend_pitch;
 static bool mod_wheel_14bit = false;
 
@@ -120,11 +120,12 @@ static u8 midi_out_pressure(u8 string_pres, u8 start_velocity) {
 }
 
 static void update_channel_pitchbend(void) {
-	channel_pitchbend_pitch = channel_pitchbend * max_channel_bend_pitch_in >> 13;
+	channel_pitchbend_pitch = (channel_pitchbend.value - UINT14_HALF) * max_channel_bend_pitch_in >> 13;
 }
 
 static void update_string_pitchbend(u8 string_id) {
-	midi_string[string_id].pitchbend_pitch = midi_string[string_id].pitchbend * max_string_bend_pitch_in >> 13;
+	midi_string[string_id].pitchbend_pitch =
+	    (midi_string[string_id].pitchbend.value - UINT14_HALF) * max_string_bend_pitch_in >> 13;
 }
 
 static void force_release_string(u8 string_id) {
@@ -145,8 +146,8 @@ static void apply_sustain(bool new_sustain, u8 string_id) {
 static void reset_controls(u8 string_id) {
 	force_release_string(string_id);
 	MidiString* m_string = &midi_string[string_id];
-	m_string->mod_wheel[1] = m_string->mod_wheel[0] = 0;
-	m_string->pitchbend = 0;
+	m_string->mod_wheel.value = 0;
+	m_string->pitchbend.value = UINT14_HALF;
 	update_string_pitchbend(string_id);
 	m_string->pressure = 0;
 	params_rcv_cc(CC_NRPN_LSB, 127, true, string_id);
@@ -244,7 +245,7 @@ void midi_clear_all(void) {
 	midi_send_head = 0;
 	midi_send_tail = 0;
 	channel_pressure = 0;
-	channel_pitchbend = 0;
+	channel_pitchbend.value = UINT14_HALF;
 	update_channel_pitchbend();
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
 		memcpy(&midi_string[string_id], &init_midi_string, sizeof(MidiString));
@@ -618,7 +619,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			}
 			break;
 		case MIDI_PITCH_BEND:
-			channel_pitchbend = (data2 << 7) + data1 - 8192;
+			channel_pitchbend.lsb = data1;
+			channel_pitchbend.msb = data2;
 			update_channel_pitchbend();
 			break;
 		case MIDI_CHANNEL_PRESSURE:
@@ -629,11 +631,11 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			// update all string mod wheels
 			case CC_MOD_WHEEL:
 				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-					midi_string[string_id].mod_wheel[0] = data2;
+					midi_string[string_id].mod_wheel.msb = data2;
 				break;
 			case CC_MOD_WHEEL_LSB:
 				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-					midi_string[string_id].mod_wheel[1] = data2;
+					midi_string[string_id].mod_wheel.lsb = data2;
 				mod_wheel_14bit = true;
 				break;
 			// update all string sustains
@@ -653,7 +655,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			case CC_RESET_ALL_CTR:
 				// global
 				channel_pressure = 0;
-				channel_pitchbend = 0;
+				channel_pitchbend.value = UINT14_HALF;
 				update_channel_pitchbend();
 				// per string
 				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
@@ -702,7 +704,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			register_press(string_id, true, data1, data2, string_position_from_pitch(string_id, midi_pitch));
 		} break;
 		case MIDI_PITCH_BEND:
-			m_string->pitchbend = (data2 << 7) + data1 - 8192;
+			m_string->pitchbend.lsb = data1;
+			m_string->pitchbend.msb = data2;
 			update_string_pitchbend(string_id);
 			break;
 		case MIDI_CHANNEL_PRESSURE:
@@ -711,10 +714,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		case MIDI_CONTROL_CHANGE:
 			switch (data1) {
 			case CC_MOD_WHEEL:
-				m_string->mod_wheel[0] = data2;
+				m_string->mod_wheel.msb = data2;
 				break;
 			case CC_MOD_WHEEL_LSB:
-				m_string->mod_wheel[1] = data2;
+				m_string->mod_wheel.lsb = data2;
 				mod_wheel_14bit = true;
 				break;
 			case CC_SUSTAIN:
@@ -842,8 +845,7 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, s8* note_num
 
 	// apply mod wheel as pressure, map 14-bit mod wheel to 127 << 7 to conform with 7 bit behavior
 	midi_pressure14 =
-	    maxi(midi_pressure14, mod_wheel_14bit ? ((m_string->mod_wheel[0] << 7) + m_string->mod_wheel[1]) * 127 >> 7
-	                                          : m_string->mod_wheel[0] << 7);
+	    maxi(midi_pressure14, mod_wheel_14bit ? m_string->mod_wheel.value * 127 >> 7 : m_string->mod_wheel.msb << 7);
 
 	// synthesize internal pressure based on velocity/pressure balance
 	u8 velo_mult = sys_params.midi_in_vel_balance;

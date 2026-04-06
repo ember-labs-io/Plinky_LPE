@@ -34,6 +34,18 @@ typedef char bool;
 #define false 0
 #endif
 
+// custom basic typedef
+#define UINT14_MAX 16383
+#define UINT14_HALF 8192
+
+typedef union u14 {
+	u16 value;
+	struct {
+		u16 lsb : 7;
+		u16 msb : 7;
+	};
+} u14;
+
 // basic plinky info
 #include "defs.h"
 
