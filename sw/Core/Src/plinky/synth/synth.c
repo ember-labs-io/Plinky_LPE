@@ -726,8 +726,8 @@ static void generate_string_touch(u8 string_id) {
 	if (
 	    // we have local control
 	    !sys_params.local_ctrl_off
-	    // default ui, exception for the edit-strip
-	    && ((ui_mode == UI_DEFAULT && !(string_id == 0 && editing_param()))
+	    // default ui, exception for the edit-strips
+	    && ((ui_mode == UI_DEFAULT && !editing_poly_param() && !(string_id == 0 && editing_param()))
 	        // sampler in preview mode when a sample is loaded
 	        || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER))) {
 		bool touching = strip_touched & mask;

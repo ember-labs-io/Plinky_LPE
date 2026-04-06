@@ -47,7 +47,8 @@ static Param selected_param = 255;
 static ModSource selected_mod_src = SRC_BASE;
 static Param mem_param = 255; // remembers previous selected_param, used by encoder and A/B shift-presses
 static s16 edit_strip_start_pos = 0;
-static ValueSmoother edit_strip_pos = {};
+static ValueSmoother edit_strip_pos[NUM_STRINGS] = {};
+static u8 selected_edit_strip = 0;
 
 // mod sources
 static Envelope envelope2[NUM_STRINGS] = {};
@@ -121,6 +122,23 @@ const Preset* init_params_ptr(void) {
 
 bool editing_param(void) {
 	return EDITING_PARAM;
+}
+
+bool editing_poly_param(void) {
+	return EDITING_PARAM && sys_params.edit_poly_params && selected_mod_src == SRC_BASE
+	       && PARAM_IS_POLY(selected_param);
+}
+
+void dec_selected_edit_strip(void) {
+	selected_edit_strip = (selected_edit_strip - 1 + NUM_STRINGS) % NUM_STRINGS;
+}
+
+void inc_selected_edit_strip(void) {
+	selected_edit_strip = (selected_edit_strip + 1) % NUM_STRINGS;
+}
+
+void reset_selected_edit_strip(void) {
+	selected_edit_strip = 0;
 }
 
 // is the arp actively being executed?
@@ -658,31 +676,34 @@ void close_edit_mode(void) {
 	clear_last_encoder_use();
 }
 
-static void reset_edit_strip_pos(void) {
-	edit_strip_start_pos = PARAM_VAL_RAW(selected_param, selected_mod_src);
-	set_smoother(&edit_strip_pos, edit_strip_start_pos);
+static void reset_edit_strip_pos(u8 strip_id) {
+	edit_strip_start_pos = strip_id == 0 ? PARAM_VAL_RAW(selected_param, selected_mod_src)
+	                                     : cur_preset.poly_params[selected_param][strip_id - 1];
+	set_smoother(&edit_strip_pos[strip_id], edit_strip_start_pos);
 }
 
-void touch_edit_strip(u16 position, bool is_press_start) {
+void touch_edit_strip(u8 strip_id, u16 position, bool is_press_start) {
 	static const u16 STRIP_DEADZONE = 256;
 	static const float HALF_CENTER_DEADZONE = 32.f;
 
 	if (!EDITING_PARAM)
 		return;
 
+	selected_edit_strip = strip_id;
+
 	if (is_press_start)
-		reset_edit_strip_pos();
+		reset_edit_strip_pos(strip_id);
 
 	// scale the press position to a param size value
 	float press_value =
 	    clampf((TOUCH_MAX_POS - STRIP_DEADZONE - position) * (RAW_SIZE / (TOUCH_MAX_POS - 2.f * STRIP_DEADZONE)), 0.f,
 	           RAW_SIZE);
-	bool is_signed = PARAM_SIGNED(param_snap) || selected_mod_src != SRC_BASE;
+	bool is_signed = PARAM_SIGNED(selected_param) || selected_mod_src != SRC_BASE;
 	if (is_signed)
 		press_value = press_value * 2 - RAW_SIZE;
 	// smooth the pressed value
-	smooth_value(&edit_strip_pos, press_value, 256);
-	float smoothed_value = clampf(edit_strip_pos.y2, is_signed ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
+	smooth_value(&edit_strip_pos[strip_id], press_value, 256);
+	float smoothed_value = clampf(edit_strip_pos[strip_id].y2, is_signed ? -RAW_SIZE - 0.1f : 0.f, RAW_SIZE + 0.1f);
 	// value stops exactly at +/- 100%
 	bool notch_at_50 =
 	    selected_mod_src == SRC_BASE && (selected_param == P_PLAY_SPD || selected_param == P_SMP_STRETCH);
@@ -716,7 +737,10 @@ void touch_edit_strip(u16 position, bool is_press_start) {
 		raw = smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f);
 	}
 	// save to parameter
-	save_param_raw(selected_param, selected_mod_src, raw);
+	if (sys_params.edit_poly_params)
+		save_poly_param_raw(selected_param, strip_id, raw);
+	else
+		save_param_raw(selected_param, selected_mod_src, raw);
 }
 
 void press_param_pad(u8 pad_id, bool is_press_start) {
@@ -736,8 +760,10 @@ void press_param_pad(u8 pad_id, bool is_press_start) {
 		if (selected_param == P_TEMPO)
 			trigger_tap_tempo();
 	}
-	if (selected_param != prev_param)
-		reset_edit_strip_pos();
+	if (selected_param != prev_param) {
+		for (u8 strip_id = 0; strip_id < NUM_STRINGS; strip_id++)
+			reset_edit_strip_pos(strip_id);
+	}
 }
 
 void press_mod_pad(u8 pad_y) {
@@ -759,7 +785,10 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	if (function_pressed == FN_SHIFT_A || function_pressed == FN_SHIFT_B)
 		pad_actions_keep_edit_mode_open();
 
-	s16 raw = PARAM_VAL_RAW(param_id, selected_mod_src);
+	bool edit_poly = sys_params.edit_poly_params && selected_mod_src == SRC_BASE && PARAM_IS_POLY(param_id);
+	s16 raw = edit_poly && selected_edit_strip > 0
+	              ? cur_preset.poly_params[poly_param_from_param[param_id]][selected_edit_strip - 1]
+	              : PARAM_VAL_RAW(param_id, selected_mod_src);
 	u8 range = PARAM_RANGE(param_id);
 
 	// negative values of delay/dual clock are unranged
@@ -773,7 +802,10 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		// smooth transition between synced and free timing
 		if ((range_type[param_id] == R_DLYCLK || range_type[param_id] == R_DUACLK) && index < 0)
 			raw = -1;
-		save_param_raw(param_id, SRC_BASE, raw);
+		if (edit_poly)
+			save_poly_param_raw(param_id, selected_edit_strip, raw);
+		else
+			save_param_raw(param_id, SRC_BASE, raw);
 		return;
 	}
 
@@ -806,34 +838,48 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		break;
 	}
 	raw = clampi(raw, (PARAM_SIGNED(param_id) || selected_mod_src != SRC_BASE) ? -RAW_SIZE : 0, RAW_SIZE);
-	save_param_raw(param_id, selected_mod_src, raw);
+	if (edit_poly)
+		save_poly_param_raw(param_id, selected_edit_strip, raw);
+	else
+		save_param_raw(param_id, selected_mod_src, raw);
 }
 
 void params_toggle_default_value(void) {
-	static u16 param_hash = NUM_PARAMS * NUM_MOD_SOURCES;
+	static u16 param_hash = NUM_PARAMS << 6;
 	static s16 saved_val = INT16_MAX;
 
 	Param param_id = RECENT_PARAM;
 	if (param_id >= NUM_PARAMS)
 		return;
 
+	bool edit_poly = sys_params.edit_poly_params && selected_mod_src == SRC_BASE && PARAM_IS_POLY(param_id);
+
 	// clear saved value when we're seeing a new parameter
-	u16 new_hash = param_id * NUM_MOD_SOURCES + selected_mod_src;
+	u16 new_hash = (param_id << 6) + (selected_mod_src << 3) + (edit_poly ? selected_edit_strip : 0);
 	if (new_hash != param_hash) {
 		saved_val = INT16_MAX;
 		param_hash = new_hash;
 	}
 
-	s16 cur_val = PARAM_VAL_RAW(param_id, selected_mod_src);
+	s16 cur_val = edit_poly && selected_edit_strip > 0
+	                  ? cur_preset.poly_params[poly_param_from_param[param_id]][selected_edit_strip - 1]
+	                  : PARAM_VAL_RAW(param_id, selected_mod_src);
 	s16 init_val = selected_mod_src ? 0 : init_params.params[param_id][0];
 	// first press: save current value and set init value
 	if (cur_val != init_val || saved_val == INT16_MAX) {
-		saved_val = PARAM_VAL_RAW(param_id, selected_mod_src);
-		save_param_raw(param_id, selected_mod_src, init_val);
+		saved_val = cur_val;
+		if (edit_poly)
+			save_poly_param_raw(param_id, selected_edit_strip, init_val);
+		else
+			save_param_raw(param_id, selected_mod_src, init_val);
 	}
 	// second press: restore saved value
-	else
-		save_param_raw(param_id, selected_mod_src, saved_val);
+	else {
+		if (edit_poly)
+			save_poly_param_raw(param_id, selected_edit_strip, saved_val);
+		else
+			save_param_raw(param_id, selected_mod_src, saved_val);
+	}
 }
 
 void hold_encoder_for_params(u16 duration) {
@@ -1171,7 +1217,10 @@ void draw_cur_param(void) {
 	u8 width = 0;
 	u8 x_center = 0;
 	u8 x;
-	s16 raw = PARAM_VAL_RAW(draw_param, draw_src);
+	bool poly_editing = sys_params.edit_poly_params && selected_mod_src == SRC_BASE && PARAM_IS_POLY(draw_param);
+	s16 raw = poly_editing && selected_edit_strip > 0
+	              ? cur_preset.poly_params[poly_param_from_param[draw_param]][selected_edit_strip - 1]
+	              : PARAM_VAL_RAW(draw_param, draw_src);
 
 	gfx_text_color = 3;
 	// draw section name
@@ -1230,11 +1279,18 @@ void draw_cur_param(void) {
 	}
 
 	u8 text_x = 19;
-	u8 text_right_x = OLED_WIDTH - 17;
+	u8 text_right_x = OLED_WIDTH - 16;
 	// draw section icon
 	draw_str(0, sect_str[0] == I_NOTES[0] ? 1 : 0, F_12, (char[]){sect_str[0], '\0'});
 	// draw section name
-	draw_str(text_x, 3, F_12, sect_str + 1);
+	u8 poly_id_x = draw_str(text_x, 3, F_12, sect_str + 1) + (poly_editing && draw_param == P_SCALE ? 0 : 1);
+	// draw poly param string number
+	if (poly_editing) {
+		fdraw_str(poly_id_x
+		              + (selected_edit_strip == 0 || selected_edit_strip == 2 || selected_edit_strip == 3 ? 2 : 1),
+		          1, F_8, "%u", selected_edit_strip + 1);
+		inverted_rectangle(poly_id_x, 0, poly_id_x + 6, 8);
+	}
 
 	// modulated value
 	if (draw_src != SRC_BASE || has_modulation(draw_param)) {
@@ -1270,7 +1326,7 @@ void draw_cur_param(void) {
 		switch (draw_param) {
 		case P_SCALE:
 			font = F_12;
-			x_center = 82;
+			x_center = 83;
 			break;
 		case P_ARP_ORDER:
 			font = F_12;
@@ -1310,7 +1366,7 @@ void draw_cur_param(void) {
 	// draw first line
 	width = str_width(font, val_buf);
 	x = x_center == 0 ? text_right_x - width : x_center - width / 2;
-	if (x < text_x + str_width(F_12, sect_str + 1)) {
+	if (text_x + str_width(F_12, sect_str + 1) > 54 && +val_buf[0] == '-' && strlen(val_buf) == 6) {
 		font--;
 		width = str_width(font, val_buf);
 		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
@@ -1473,16 +1529,26 @@ bool is_snap_param(u8 x, u8 y) {
 	return param_snap < NUM_PARAMS && x > 0 && x < 7 && (param_snap == pA || param_snap == pA + 6);
 }
 
-static u8 col_led(float brightness) {
-	const static u8 bg = 48;
-	return clampf(brightness, 0.f, 1.f) * (255 - bg) + bg;
+static u8 col_led(float brightness, bool selected) {
+	const float dim_mult = 0.4f;
+	u8 bg = selected ? 48 : 32;
+	return (clampf(brightness, 0.f, 1.f) * (selected ? 1.f : dim_mult) * (255 - bg) + bg);
 }
 
-s16 value_editor_column_led(u8 y) {
+u8 value_editor_column_led(u8 x, u8 y) {
+	// no param selected
 	if (param_snap >= NUM_PARAMS)
-		return -1;
+		return 0;
+
+	// non-zero strip when not poly editing
+	bool poly_editing = editing_poly_param();
+	if (x > 0 && !poly_editing)
+		return 0;
+
+	bool selected = !poly_editing || x == selected_edit_strip;
 	bool is_signed = PARAM_SIGNED(param_snap) || src_snap != SRC_BASE;
-	s16 raw = PARAM_VAL_RAW(param_snap, src_snap);
+	s16 raw =
+	    x == 0 ? PARAM_VAL_RAW(param_snap, src_snap) : cur_preset.poly_params[poly_param_from_param[param_snap]][x - 1];
 	u8 pad_id = 7 - y;
 	u8 range = src_snap == SRC_BASE ? PARAM_RANGE(param_snap) : 0;
 	float pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
@@ -1492,7 +1558,7 @@ s16 value_editor_column_led(u8 y) {
 	if (is_signed) {
 		// absolute center
 		if (raw == 0 && (y == 3 || y == 4))
-			return col_led(1);
+			return col_led(1, selected);
 		// mapped
 		pad_pos = fabs(pad_pos) / 2.f - 0.5f;
 		switch (pad_id) {
@@ -1501,40 +1567,40 @@ s16 value_editor_column_led(u8 y) {
 		case 1:
 		case 2:
 			if (raw > 0)
-				return col_led(0);
+				return col_led(0, selected);
 			if (pad_id >= 3 - (u8)pad_pos)
-				return col_led(1);
+				return col_led(1, selected);
 			if (pad_id == 2 - (u8)pad_pos)
-				return col_led(fmod(pad_pos, 1));
+				return col_led(fmod(pad_pos, 1), selected);
 			break;
 		// center
 		case 3:
 		case 4:
 			if ((raw < 0) ^ (pad_id == 4))
-				return col_led(1);
+				return col_led(1, selected);
 			if (pad_pos < 0)
-				return col_led(-2 * pad_pos);
+				return col_led(-2 * pad_pos, selected);
 			break;
 		// positive
 		case 5:
 		case 6:
 		case 7:
 			if (raw < 0)
-				return col_led(0);
+				return col_led(0, selected);
 			if (pad_id <= (u8)pad_pos + 4)
-				return col_led(1);
+				return col_led(1, selected);
 			if (pad_id == (u8)pad_pos + 5)
-				return col_led(fmod(pad_pos, 1));
+				return col_led(fmod(pad_pos, 1), selected);
 			break;
 		}
 	}
 	else {
 		if (pad_id <= (u8)pad_pos)
-			return col_led(1);
+			return col_led(1, selected);
 		if (pad_id == (u8)pad_pos + 1)
-			return col_led(fmod(pad_pos, 1));
+			return col_led(fmod(pad_pos, 1), selected);
 	}
-	return col_led(0);
+	return col_led(0, selected);
 }
 
 u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
@@ -1545,7 +1611,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 	u8 k = 0;
 	if (x == 0)
 		// edit strip
-		k = value_editor_column_led(y);
+		k = value_editor_column_led(x, y);
 	else if (x < 7) {
 		u8 pAorB = x - 1 + y * 12 + (ui_mode == UI_EDITING_B ? 6 : 0);
 		// holding down a mod source => light up params that are modulated by it

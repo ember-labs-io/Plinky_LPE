@@ -261,6 +261,7 @@ typedef enum SysParam {
 	SYS_MIDI_TUNING,
 	SYS_REFERENCE_PITCH,
 	SYS_CV_GATE_IN_IS_PRESSURE,
+	SYS_EDIT_POLY_PARAMS,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -891,7 +892,8 @@ typedef struct SysParams {
 	bool midi_in_scale_quant : 1;
 	bool midi_trs_out_off : 1;
 	bool midi_tuning : 1;
-	u8 pad1 : 3;
+	bool edit_poly_params : 1; // show eight edit strips for poly params
+	u8 pad1 : 2;
 	// 13 bytes
 	u8 cv_gate_in_is_pressure : 1;
 	u8 reference_pitch : 4;
