@@ -315,6 +315,7 @@ void cv_calib(void) {
 	send_pitch_cv_raw((s32)cv_out[cur_lo_column], (s32)cv_out[cur_hi_column]);
 
 	// adapt pitch hi/lo output voltage with touch columns
+	send_cv_gate(true);
 	do {
 		// encoder press activates adc/dac monitoring mode
 		if (encoder_pressed)
@@ -395,6 +396,7 @@ void cv_calib(void) {
 
 		// loop until pitch cable is inserted
 	} while (!(pitch_present && !pitch_present_2back));
+	send_cv_gate(false);
 
 	// save calibrated pitch out values
 	adc_dac_calib[DAC_PITCH_CV_LO].bias = cv_out[0];
