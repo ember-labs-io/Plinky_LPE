@@ -1052,7 +1052,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 				note_pitch = pad_pitch + oct_pitch_offset;
 
 				// oscillator 2 defines the note number
-				if (osc_id == 2)
+				if (osc_id == 2 && (sys_params.midi_out_pres_type != MP_MPE_PRESSURE || s_string->env_trigger))
 					s_string->note_number = PITCH_TO_NOTE_NR(note_pitch);
 
 				// detuning from pad touch: pitchbend
@@ -1078,17 +1078,19 @@ static void run_voice(u8 voice_id, u32* dst) {
 			    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
 		}
 
+		s32 final_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
+
 		if (!using_midi)
-			s_string->pitchbend_pitch = pitchbend_pitch_4x >> 2;
+			s_string->pitchbend_pitch = (final_pitch_4x >> 2) - NOTE_NR_TO_PITCH(s_string->note_number);
 
 		// save the lowest and highest string that are touched
 		if (s_string->touched) {
 			if (!got_low_pitch) {
-				low_string_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
+				low_string_pitch_4x = final_pitch_4x;
 				got_low_pitch = true;
 			}
 			high_string_note = s_string->note_number;
-			high_string_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
+			high_string_pitch_4x = final_pitch_4x;
 			got_high_pitch = true;
 		}
 	}

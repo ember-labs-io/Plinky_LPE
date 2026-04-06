@@ -41,6 +41,7 @@ typedef struct MidiString {
 
 typedef struct LastSentString {
 	u8 note_number;
+	u14 pitchbend;
 	u8 pressure;
 	u8 pressure_cc;
 	u8 position_cc;
@@ -51,7 +52,7 @@ typedef struct LastSentString {
 #define PARAM_BUFFER_SIZE 8
 
 static const MidiString init_midi_string = {MS_UNPRESSED, 255, {UINT14_HALF}};
-static const LastSentString init_last_sent_string = {255};
+static const LastSentString init_last_sent_string = {255, {UINT14_HALF}};
 
 // buffers - double sized to allow linearizing cross-boundary reads/writes
 static u8 midi_receive_buffer[2 * MIDI_BUFFER_SIZE];
@@ -62,7 +63,7 @@ static u8 midi_send_tail;
 // settings
 static u16 max_channel_bend_pitch_in;
 static u16 max_string_bend_pitch_in;
-static u16 max_string_bend_pitch_out; // not implemented yet
+static u16 max_string_bend_pitch_out;
 
 // midi state
 static MidiString midi_string[NUM_STRINGS];
@@ -275,6 +276,7 @@ void init_midi(void) {
 static bool cue_midi_string_out(void) {
 	typedef enum MidiOutState {
 		MSG_NOTE,
+		MSG_PITCHBEND,
 		MSG_POLY_PRESSURE,
 		MSG_CHAN_PRESSURE,
 		MSG_PRESSURE_CC,
@@ -318,6 +320,22 @@ static bool cue_midi_string_out(void) {
 			if (!send_midi_msg(MIDI_NOTE_OFF, last_note, 0))
 				return false;
 			m_last->note_number = 255;
+		}
+		msg_state++;
+		// fall thru
+	}
+	case MSG_PITCHBEND: {
+		if (using_mpe) {
+			u14 s_pitchbend = {
+			    clampi(((s_string->pitchbend_pitch << 13) / max_string_bend_pitch_out) + UINT14_HALF, 0, UINT14_MAX)};
+			// require a difference of 5, unless this is an extreme value
+			u8 min_diff = (s_pitchbend.value == -UINT14_HALF || s_pitchbend.value == 8191) ? 1 : 5;
+			// send if changed
+			if (abs(s_pitchbend.value - m_last->pitchbend.value) >= min_diff) {
+				if (!send_midi_msg(MIDI_PITCH_BEND, s_pitchbend.lsb, s_pitchbend.msb))
+					return false;
+				m_last->pitchbend = s_pitchbend;
+			}
 		}
 		msg_state++;
 		// fall thru
