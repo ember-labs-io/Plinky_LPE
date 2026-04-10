@@ -800,10 +800,8 @@ typedef struct LatchTouch {
 } LatchTouch;
 
 typedef struct SynthString {
-	Touch touch_frames[NUM_TOUCH_FRAMES]; // last eight frames of touches
-	Touch touch_sorted[NUM_TOUCH_FRAMES]; // sorted copy of touch
-	u8 ext_touch;                         // bitmask for last eight frames of touches
-	Touch cur_touch;                      // active touch for this frame
+	bool ext_touch : 1;
+	Touch touch;
 	u8 note_number;
 	u8 start_velocity;
 	s32 pitchbend_pitch;
@@ -811,12 +809,6 @@ typedef struct SynthString {
 	bool touched : 1;
 	bool env_trigger : 1;
 } SynthString;
-
-const static SynthString init_synth_string = {
-    .touch_frames = {init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch},
-    .touch_sorted = {init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch, init_touch},
-    .cur_touch = init_touch,
-};
 
 typedef struct TouchCalibData {
 	u16 pres[PADS_PER_STRIP];

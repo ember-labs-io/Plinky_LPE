@@ -54,9 +54,9 @@ static void precalc_waves(float** next_wave_ptr) {
 			}
 			float target = corners * (1.f / 12.f) + edges * (1.f * 2.f / 12.f);
 			target *= life_damping;
-			const Touch* c_touch = &get_synth_string(x)->cur_touch;
-			if (c_touch->pos >> 8 == y) {
-				float pressure = c_touch->pres * (1.f / 2048.f);
+			const Touch* touch = &get_synth_string(x)->touch;
+			if (touch->pos >> 8 == y) {
+				float pressure = touch->pres * (1.f / 2048.f);
 				target = lerp(target, life_input_power, clampf(pressure * 2.f, 0.f, 1.f));
 			}
 			float pos = prev_wave[i];
@@ -101,9 +101,9 @@ static void draw_main_leds(void) {
 			k = maxi(k, clampi((int)((next_wave[x + y * 8]) * 64.f) - 20, 0, 128));
 
 			// draw finger press
-			const Touch* c_touch = &get_synth_string(x)->cur_touch;
-			if (c_touch->pos / 256 == y)
-				k = maxi(k, mini(c_touch->pres / 8, 255));
+			const Touch* touch = &get_synth_string(x)->touch;
+			if (touch->pos / 256 == y)
+				k = maxi(k, mini(touch->pres / 8, 255));
 
 			// draw seq press
 			k = maxi(k, seq_press_led(x, y));
