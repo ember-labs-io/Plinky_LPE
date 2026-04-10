@@ -340,7 +340,7 @@ static bool cue_midi_string_out(void) {
 
 	const Touch* touch = get_touch(string_id, 0);
 	const SynthString* s_string = get_synth_string(string_id);
-	u16 string_pres = clampi(s_string->cur_touch.pres, 0, TOUCH_FULL_PRES);
+	u16 string_pres = clampi(s_string->touch.pres, 0, TOUCH_FULL_PRES);
 	u8 string_vel = maxi(s_string->start_velocity, 1);
 	LastSentString* m_last = &last_sent_string[string_id];
 	bool using_mpe = sys_params.mpe_out;

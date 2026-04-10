@@ -431,7 +431,7 @@ void params_tick(void) {
 		env->level16 = SATURATE17(env->level * param_val_poly(PP_ENV_LVL2, string_id));
 
 		// collect max pressure
-		max_pres_global = maxi(max_pres_global, s_string->cur_touch.pres);
+		max_pres_global = maxi(max_pres_global, s_string->touch.pres);
 		// collect max envelope
 		max_envelope2 = maxf(max_envelope2, env->level16);
 	}
@@ -511,7 +511,7 @@ s32 param_val_poly(PolyParam pp_id, u8 string_id) {
 	mod_val += envelope2[string_id].level16 * param[SRC_ENV2];
 
 	// apply pressure modulation
-	mod_val += clampi(get_synth_string(string_id)->cur_touch.pres << 5, 0, 65535) * param[SRC_PRES];
+	mod_val += clampi(get_synth_string(string_id)->touch.pres << 5, 0, 65535) * param[SRC_PRES];
 
 	// apply lfo modulation
 	mod_val += poly_param_lfo_offset[pp_id];

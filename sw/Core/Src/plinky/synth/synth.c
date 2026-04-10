@@ -68,12 +68,14 @@ const static s16 ref_pitch_offset[16] = {-102, -82, -62, -41, -21, 0, 20, 40, 61
 static u32 tuning_offset;
 
 static Voice voices[NUM_VOICES];
-static SynthString synth_string[NUM_STRINGS];
+static SynthString synth_string[2][NUM_STRINGS];
+static Touch touch_frames[NUM_STRINGS][NUM_TOUCH_FRAMES];
+static Touch touch_sorted[NUM_STRINGS][NUM_TOUCH_FRAMES];
 
-static u8 synth_write_frame;
-static u8 write_frame_mask;
-static u8 synth_read_frame;
-static u8 read_frame_mask;
+static u8 write_frame;
+static u8 play_frame;
+static SynthString* write_strings = synth_string[0];
+static SynthString* play_strings = synth_string[1];
 
 static u8 phys_touch_mask = 0;
 static u8 no_arp_touch_mask = 0;
@@ -91,7 +93,7 @@ static u8 string_start_step_valid = 0;
 static u8 string_root_pitch_valid = 0;
 
 const SynthString* get_synth_string(u8 string_id) {
-	return &synth_string[string_id];
+	return &play_strings[string_id];
 }
 
 // === UTILS === //
@@ -334,7 +336,7 @@ u8 find_string_for_pitch(u16 pitch) {
 		if (dist >= prev_dist)
 			break;
 		// log non-sounding strings
-		if (!synth_string[string_id].touched && voices[string_id].env1_lvl < 0.001f)
+		if (!play_strings[string_id].touched && voices[string_id].env1_lvl < 0.001f)
 			best_string = string_id;
 		prev_dist = dist;
 	}
@@ -347,7 +349,7 @@ u8 find_string_for_pitch(u16 pitch) {
 	float min_vol = __FLT_MAX__;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
 		float vol = voices[string_id].env1_lvl;
-		if (!synth_string[string_id].touched && vol < min_vol) {
+		if (!play_strings[string_id].touched && vol < min_vol) {
 			min_vol = vol;
 			best_string = string_id;
 		}
@@ -382,18 +384,27 @@ u16 string_position_from_pitch(u8 string_id, u16 pitch) {
 
 void clear_latch(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
-		synth_string[string_id].latch_touch.pos = 0;
-		synth_string[string_id].latch_touch.pres = 0;
+		write_strings[string_id].latch_touch.pos = 0;
+		write_strings[string_id].latch_touch.pres = 0;
+		play_strings[string_id].latch_touch.pos = 0;
+		play_strings[string_id].latch_touch.pres = 0;
 	}
 }
 
 void clear_synth_string(u8 string_id) {
-	synth_string[string_id] = init_synth_string;
+	write_strings[string_id] = (SynthString){.touch = init_touch};
+	play_strings[string_id] = (SynthString){.touch = init_touch};
+	Touch* frames = touch_frames[string_id];
+	Touch* sorted = touch_sorted[string_id];
+	for (u8 frame = 0; frame < NUM_TOUCH_FRAMES; frame++) {
+		frames[frame] = init_touch;
+		sorted[frame] = init_touch;
+	}
 }
 
 void clear_synth_strings(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-		synth_string[string_id] = init_synth_string;
+		clear_synth_string(string_id);
 }
 
 void set_note_tuning(u8 note_number, u16 pitch) {
@@ -470,11 +481,12 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 		sizejit = param_val_poly(PP_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
 		gratejit = param_val_poly(PP_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
 	}
-	int trig = synth_string[voice_id].env_trigger;
+	const SynthString* s_string = &play_strings[voice_id];
+	int trig = s_string->env_trigger;
 
 	int prevsliceidx = voice->slice_id;
 	bool gp = ui_mode == UI_SAMPLE_EDIT;
-	u16 touch_pos = synth_string[voice_id].cur_touch.pos;
+	u16 touch_pos = s_string->touch.pos;
 
 	// decide on the sample for the NEXT frame
 	if (trig) { // on trigger frames, we FADE out the old grains! then the next dma fetch will be the new sample and
@@ -715,7 +727,8 @@ void init_synth(void) {
 // string_touch[string_id]
 static void generate_string_touch(u8 string_id) {
 	static bool suppress_latch = false;
-	SynthString* s_string = &synth_string[string_id];
+	SynthString* s_string = &write_strings[string_id];
+
 	LatchTouch* s_latch = &s_string->latch_touch;
 	u8 mask = 1 << string_id;
 	bool pres_increasing = false;
@@ -824,37 +837,38 @@ static void generate_string_touch(u8 string_id) {
 
 	// any available pressure from touch/latch/sequencer overrides midi/cv
 	if (pressure > 0)
-		s_string->ext_touch &= ~write_frame_mask;
+		s_string->ext_touch = false;
 	// retrieve touch from cv
 	else if (cv_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
 	                          &s_string->pitchbend_pitch))
-		s_string->ext_touch |= write_frame_mask;
+		s_string->ext_touch = true;
 	// retrieve touch from midi
 	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
 	                            &s_string->pitchbend_pitch))
-		s_string->ext_touch |= write_frame_mask;
+		s_string->ext_touch = true;
 
 	// === FINISHING UP === //
 
-	Touch prev_touch = s_string->touch_frames[(synth_write_frame + 7) & 7];
+	Touch* s_touch_frames = touch_frames[string_id];
+	Touch prev_touch = s_touch_frames[(write_frame + 7) & 7];
 
 	// no pressure => retain previous frame's position
 	if (pressure <= 0)
 		position = prev_touch.pos;
 	// new finger touch => fill (non-pressed) history with slightly randomized variant of current position
 	else if (prev_touch.pres <= 0) {
-		Touch* s_touch = s_string->touch_frames;
+		Touch* s_touch = s_touch_frames;
 		for (u8 frame = 0; frame < NUM_TOUCH_FRAMES; frame++, s_touch++)
-			if (frame != synth_write_frame && s_touch->pres <= 0)
+			if (frame != write_frame && s_touch->pres <= 0)
 				s_touch->pos = position ^ (s_touch->pos & 3);
 	}
 
 	// save results to the synth string
-	s_string->touch_frames[synth_write_frame].pres = pressure;
-	s_string->touch_frames[synth_write_frame].pos = position;
+	s_touch_frames[write_frame].pres = pressure;
+	s_touch_frames[write_frame].pos = position;
 
 	// sort touch frames by position
-	sort8((int*)s_string->touch_sorted, (int*)s_string->touch_frames);
+	sort8((int*)touch_sorted[string_id], (int*)s_touch_frames);
 }
 
 // manage generating the string_touch array
@@ -890,14 +904,14 @@ void generate_string_touches(void) {
 		// framerate - whenever touchstrips.h has read out a full frame of touches, strings_write_frame increments to
 		// make use of the new touch-data
 
-		if (synth_write_frame != get_touch_frame()) {
+		if (write_frame != get_touch_frame()) {
 			// we read from the frame that was written just before
-			synth_read_frame = synth_write_frame;
+			play_frame = write_frame;
 			// we write to the frame that is currently being processed by the touchstrips
-			synth_write_frame = get_touch_frame();
-			// utility masks
-			read_frame_mask = 1 << synth_read_frame;
-			write_frame_mask = 1 << synth_write_frame;
+			write_frame = get_touch_frame();
+			// update synth_string buffer pointers
+			write_strings = synth_string[write_frame & 1];
+			play_strings = synth_string[play_frame & 1];
 			arp_next_strings_frame_trig();
 		}
 	}
@@ -905,11 +919,14 @@ void generate_string_touches(void) {
 	// toggle which half we process
 	do_second_half = !do_second_half;
 
+	// -- writing data do the synth strings is now complete, we continue with doing some precalc
+	// for the strings that will be playing this frame -- //
+
 	// calculate string touches
 	no_arp_touch_mask_1back = no_arp_touch_mask;
 	no_arp_touch_mask = 0;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
-		if (synth_string[string_id].touch_frames[synth_read_frame].pres > 0)
+		if (touch_frames[string_id][play_frame].pres > 0)
 			no_arp_touch_mask |= 1 << string_id;
 	u8 envelope_trigger = no_arp_touch_mask & ~no_arp_touch_mask_1back;
 
@@ -929,21 +946,25 @@ void generate_string_touches(void) {
 
 	// precalc and populate strings for this frame
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
-		SynthString* s_string = &synth_string[string_id];
-		Touch* c_touch = &s_string->cur_touch;
+		SynthString* s_string = &play_strings[string_id];
+		Touch* cur_touch = &s_string->touch;
 		u8 mask = 1 << string_id;
 
 		// basic properties
 		s_string->touched = !!(touch_mask & mask);
 		s_string->env_trigger = !!(envelope_trigger & mask);
 		// save frame touch to current touch
-		*c_touch = s_string->touch_frames[synth_read_frame];
+		*cur_touch = touch_frames[string_id][play_frame];
 		// clear pressure if not touched
 		if (!s_string->touched)
-			c_touch->pres = TOUCH_MIN_PRES;
-		// generate start velocity for physical touches
-		if (!(s_string->ext_touch & read_frame_mask) && s_string->env_trigger)
-			s_string->start_velocity = clampi((c_touch->pres << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
+			cur_touch->pres = TOUCH_MIN_PRES;
+		// generate start velocity for physical touches - needs to be saved in both buffers as this only generates on
+		// env_trigger
+		if (!s_string->ext_touch && s_string->env_trigger) {
+			u8 start_velocity = clampi((cur_touch->pres << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
+			s_string->start_velocity = start_velocity;
+			write_strings[string_id].start_velocity = start_velocity;
+		}
 	}
 }
 
@@ -1101,16 +1122,16 @@ static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, flo
 
 static void run_voice(u8 voice_id, u32* dst) {
 	// the synth string we read data from
-	SynthString* s_string = &synth_string[voice_id];
+	SynthString* s_string = &play_strings[voice_id];
 	// the voice we write the resulting data to
 	Voice* voice = &voices[voice_id];
-	s16 pressure = s_string->cur_touch.pres;
+	s16 pressure = s_string->touch.pres;
 	float env_lvl = voice->env1_lvl;
 	bool voice_audible = env_lvl > 0.001f;
 
 	// turn off external touch if it has rung out
-	if ((s_string->ext_touch & read_frame_mask) && !s_string->touched && !voice_audible)
-		s_string->ext_touch &= ~read_frame_mask;
+	if (s_string->ext_touch && !s_string->touched && !voice_audible)
+		s_string->ext_touch = false;
 
 	// generate cv gate
 	if (s_string->touched)
@@ -1122,7 +1143,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// precalc some parameters
 		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
 		s32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
-		bool ext_touch = !!(s_string->ext_touch & read_frame_mask);
+		bool ext_touch = s_string->ext_touch;
 
 		// we're filling these
 		s32 note_pitch = 0;
@@ -1130,7 +1151,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		s32 pitch_4x = 0;
 
 		// these only get used by touch
-		Touch* s_touch_sort = &s_string->touch_sorted[2]; // we use pitches 2-5, discarding extreme values
+		Touch* s_touch_sort = &touch_sorted[voice_id][2]; // we use pitches 2-5, discarding extreme values
 		u16 root_pitch;
 		Scale scale = S_MAJOR;
 		u8 scale_steps = 0;
@@ -1177,9 +1198,14 @@ static void run_voice(u8 voice_id, u32* dst) {
 				// non-detuned pitch
 				note_pitch = root_pitch + pad_pitch + arp_oct_pitch;
 
-				// oscillator 2 defines the note number
-				if (osc_id == 2 && (!sys_params.mpe_out || s_string->env_trigger))
-					s_string->note_number = PITCH_TO_NOTE_NR(clampi(note_pitch, 0, MAX_PITCH));
+				// oscillator 2 defines the note number - needs to be saved to both buffers as this only generates on
+				// env_trigger
+				if (osc_id == 2 && (!sys_params.mpe_out || s_string->env_trigger)) {
+					u8 note_number = PITCH_TO_NOTE_NR(clampi(note_pitch, 0, MAX_PITCH));
+					s_string->note_number = note_number;
+					if (s_string->env_trigger)
+						write_strings[voice_id].note_number = note_number;
+				}
 			}
 
 			// add detuning pitches
@@ -1381,7 +1407,7 @@ void handle_synth_voices(u32* dst) {
 			// we only budget for LAST_GRAIN_SPI_STATE transfers. so after that, len goes to 0. also helps CPU load
 			if (i < 8 - MAX_SAMPLE_VOICES)
 				len = 0;
-			else if (voices[fi].env1_lvl <= 0.01f && !synth_string[fi].touched)
+			else if (voices[fi].env1_lvl <= 0.01f && !play_strings[fi].touched)
 				len = 0; // if your finger is up and the volume is 0, we can just skip this one.
 			lengths[fi] = (pos + len * 4 > GRAINBUF_BUDGET) ? 0 : len;
 			pos += len * 4;
@@ -1422,7 +1448,7 @@ void draw_voices(bool show_latch) {
 		// top
 		fill_rectangle(x, OLED_HEIGHT - bar_height - 1, x + bar_width, OLED_HEIGHT - bar_height + 1);
 		// bar
-		if (synth_string[voice_id].touched)
+		if (play_strings[voice_id].touched)
 			half_rectangle(x, OLED_HEIGHT - bar_height + 1, x + bar_width, OLED_HEIGHT);
 		// outline
 		hline(x, OLED_HEIGHT - bar_height - 2, x + bar_width, 0);
