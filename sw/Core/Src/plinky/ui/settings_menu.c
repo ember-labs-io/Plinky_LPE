@@ -38,10 +38,10 @@ typedef enum Item {
 	I_MPE_OUT,
 	I_MIDI_OUT_VEL_BALANCE,
 	I_MIDI_OUT_PRES_TYPE,
-	I_MIDI_OUT_YZ_CONTROL,
 	I_MIDI_TRS_OUT_OFF,
 	I_MIDI_SOFT_THRU,
-	I_MIDI_OUT_FILTER,
+	I_MIDI_OUT_FILTER_1,
+	I_MIDI_OUT_FILTER_2,
 	// cv
 	I_CV_QUANT = S_CV * 8,
 	I_CV_GATE_IN_IS_PRESSURE,
@@ -85,9 +85,9 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_MIDI_OUT_CH] = SYS_MIDI_OUT_CHAN,
     [I_MIDI_OUT_VEL_BALANCE] = SYS_MIDI_OUT_VEL_BALANCE,
     [I_MIDI_OUT_PRES_TYPE] = SYS_MIDI_OUT_PRES_TYPE,
-    [I_MIDI_OUT_YZ_CONTROL] = SYS_MIDI_OUT_YZ_CONTROL,
     [I_MIDI_SOFT_THRU] = SYS_MIDI_SOFT_THRU,
-    [I_MIDI_OUT_FILTER] = SYS_MIDI_OUT_FILTER,
+    [I_MIDI_OUT_FILTER_1] = SYS_MIDI_OUT_FILTER_1,
+    [I_MIDI_OUT_FILTER_2] = SYS_MIDI_OUT_FILTER_2,
     [I_MIDI_TRS_OUT_OFF] = SYS_MIDI_TRS_OUT_OFF,
     [I_CV_QUANT] = SYS_CV_QUANT,
     [I_CV_GATE_IN_IS_PRESSURE] = SYS_CV_GATE_IN_IS_PRESSURE,
@@ -121,9 +121,9 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_MIDI_OUT_CH] = "Channel",
     [I_MIDI_OUT_VEL_BALANCE] = "Vel/Pres",
     [I_MIDI_OUT_PRES_TYPE] = "AfterTch",
-    [I_MIDI_OUT_YZ_CONTROL] = "YZ Control",
     [I_MIDI_SOFT_THRU] = "Thru",
-    [I_MIDI_OUT_FILTER] = "Filter",
+    [I_MIDI_OUT_FILTER_1] = "Filter 1",
+    [I_MIDI_OUT_FILTER_2] = "Filter 2",
     [I_MIDI_TRS_OUT_OFF] = "TRS out",
     [I_CV_QUANT] = "Quant",
     [I_CV_GATE_IN_IS_PRESSURE] = "Gate In",
@@ -409,7 +409,6 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MPE_IN:
 	case I_MPE_OUT:
 	case I_MIDI_IN_SCALE_QUANT:
-	case I_MIDI_OUT_YZ_CONTROL:
 	case I_MIDI_TUNING:
 		return value ? "On" : "Off";
 	case I_LOCAL_CTRL_OFF:
@@ -479,8 +478,8 @@ void draw_settings_menu(void) {
 			draw_str(x, 25, F_8, "4");
 		}
 	}
-	else if (cur_item == I_MIDI_OUT_FILTER) {
-		u8 x = arrow_offset - 64;
+	else if (cur_item == I_MIDI_OUT_FILTER_1) {
+		u8 x = arrow_offset - 48;
 		draw_str(x, 17, font, sys_params.midi_send_clock ? I_TEMPO : I_CROSS);
 		x += 16;
 		draw_str(x, 17, font, sys_params.midi_send_transport ? I_PLAY : I_CROSS);
@@ -496,11 +495,26 @@ void draw_settings_menu(void) {
 			x += 5;
 			draw_str(x, 18, F_8, "R");
 			draw_str(x, 25, F_8, "N");
-			x += 8;
+		}
+	}
+	else if (cur_item == I_MIDI_OUT_FILTER_2) {
+		u8 x = arrow_offset - 48;
+		draw_str(x, 17, font, sys_params.mpe_out_fine_tuning ? I_FORK : I_CROSS);
+		if (sys_params.mpe_out_fine_tuning) {
+			u8 y = 21;
+			fill_rectangle(x, y + 1, x + 16, y + 7);
+			inverted_rectangle(x, y + 1, x + 16, y + 7);
+			draw_str(x, y, F_8, "mpe");
+		}
+		x += 16;
+		draw_str(x, 17, font, sys_params.midi_send_lfo_cc ? I_ALFO : I_CROSS);
+		x += 16;
+		if (sys_params.midi_out_yz_control) {
+			draw_str(x + 1, 18, F_12, "Y");
+			draw_str(x + 8, 22, F_12, "Z");
 		}
 		else
-			x += 16;
-		draw_str(x, 17, font, sys_params.midi_send_lfo_cc ? I_ALFO : I_CROSS);
+			draw_str(x, 17, font, I_CROSS);
 	}
 	// value
 	else {
