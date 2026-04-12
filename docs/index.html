@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plinky LPE Docs</title>
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/dark.css">
+  <link rel="stylesheet" href="stylesheets/extra.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    var iconDefsPromise = fetch('includes/icons.md').then(function(r) { return r.text(); });
+
+    window.$docsify = {
+      name: 'Plinky LPE Docs',
+      repo: 'https://github.com/ember-labs-io/Plinky_LPE',
+      homepage: 'manual.md',
+      loadSidebar: true,
+      subMaxLevel: 2,
+      search: {
+        placeholder: 'Search',
+        noData: 'No results.',
+      },
+      plugins: [
+        function(hook) {
+          // Append icon reference definitions to every page.
+          hook.beforeEach(function(content, next) {
+            iconDefsPromise.then(function(iconDefs) {
+              next(content + '\n\n' + iconDefs);
+            });
+          });
+
+          // Rewrite #/README back to #/ — Docsify hardcodes /README for the
+          // homepage route, but we want the URL to stay clean at the root.
+          hook.doneEach(function() {
+            if (window.location.hash === '#/README') {
+              window.history.replaceState(null, '', '#/');
+            }
+          });
+
+          // Handle attr_list { .class } syntax: <img ...>{ .icon-sm } → <img class="icon-sm" ...>
+          hook.afterEach(function(html) {
+            return html.replace(/<img([^>]*?)\/?>[ \t]*\{([^}]+)\}/g, function(match, attrs, classes) {
+              var classNames = (classes.match(/\.([a-zA-Z][\w-]*)/g) || [])
+                .map(function(c) { return c.slice(1); }).join(' ');
+              return classNames ? '<img' + attrs + ' class="' + classNames + '">' : match;
+            });
+          });
+        }
+      ]
+    };
+  </script>
+  <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+</body>
+</html>

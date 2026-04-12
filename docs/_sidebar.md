@@ -1,0 +1,4 @@
+- [Manual](/)
+- [MIDI CC Map](midi-cc.md)
+- [Parameters](parameters.md)
+- [Build Guide](raw_build_guide.md)

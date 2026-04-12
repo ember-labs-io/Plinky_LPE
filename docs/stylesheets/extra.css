@@ -1,0 +1,90 @@
+/* Dark theme overrides — replace Docsify dark.css's gray with near-black */
+:root {
+  --base-background-color: #05060a;
+  --base-color: #e6edf3;
+  --sidebar-background: #010409;
+  --sidebar-nav-link-color: #8b949e;
+  --sidebar-nav-link-color--active: #c9d1d9;
+  --sidebar-border-color: #30363d;
+  --cover-background-color: #05060a;
+  --theme-color: #9575cd;
+  --link-color: #9575cd;
+}
+
+html, body, #main, .content, .markdown-section {
+  background-color: var(--base-background-color) !important;
+}
+
+.sidebar {
+  background-color: var(--sidebar-background) !important;
+  border-right: 1px solid #30363d;
+}
+
+.sidebar-toggle {
+  background-color: var(--sidebar-background) !important;
+}
+
+/* Tables */
+.markdown-section table {
+  display: table !important;
+  width: auto !important;
+  border-collapse: collapse;
+  border: 1px solid #3b2d6b;
+}
+
+.markdown-section table tr {
+  background-color: #13111f !important;
+  border-bottom: 1px solid #2a1f4a;
+}
+
+.markdown-section table thead tr {
+  background: linear-gradient(90deg, #1e1030, #2a1a45) !important;
+  border-bottom: 2px solid #5c3d9e;
+}
+
+.markdown-section table th {
+  padding: 10px 14px;
+  color: #ce9ff5 !important;
+  font-weight: 600;
+  text-align: left;
+}
+
+.markdown-section table td {
+  padding: 8px 14px;
+  color: #e2dff0 !important;
+}
+
+.markdown-section table tr:hover {
+  background-color: #1a1235 !important;
+}
+
+/* Default size for all Plinky icon images */
+img[src*="icons/"] {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    vertical-align: middle;
+    margin: 0 1px;
+}
+
+/* Size variants — use via attr_list, e.g. ![delay]{ .icon-sm } */
+img[src*="icons/"].icon-sm {
+    width: 16px;
+    height: 16px;
+}
+
+img[src*="icons/"].icon-md {
+    width: 24px;
+    height: 24px;
+}
+
+img[src*="icons/"].icon-lg {
+    width: 32px;
+    height: 32px;
+}
+
+img[src*="icons/"].icon-xl {
+    width: 48px;
+    height: 48px;
+}
+
