@@ -950,7 +950,8 @@ void generate_string_touches(void) {
 static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noise_diff, float drive,
                                   float resonance, u32* dst) {
 	// two loops handling two oscillators each
-	float glide = lpf_k(param_val_poly(PP_GLIDE, voice_id) >> 2) * (0.5f / SAMPLES_PER_TICK);
+	u32 glide_param = param_val_poly(PP_GLIDE, voice_id);
+	float glide = lpf_k(glide_param >> 2) * (0.5f / SAMPLES_PER_TICK);
 	s32 osc_shape = param_val_poly(PP_SHAPE, voice_id);
 	float noise;
 	for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE / 2; osc_id++) {
@@ -977,6 +978,11 @@ static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, flo
 				osc[0].phase_diff += phase0_fix;
 				osc[0].goal_phase_diff += phase0_fix;
 			}
+		}
+		// remove unwanted pitch glides if voice is quiet
+		if (glide_param == 0 && osc_lpg < 0.001f) {
+			osc[0].phase_diff = osc[0].goal_phase_diff;
+			osc[2].phase_diff = osc[2].goal_phase_diff;
 		}
 		int dd_phase1 = (int)((osc->goal_phase_diff - osc->phase_diff) * glide);
 		u32 phase1 = osc->phase;
