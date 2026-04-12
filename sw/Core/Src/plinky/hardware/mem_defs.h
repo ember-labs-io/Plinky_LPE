@@ -66,10 +66,6 @@ static u16 get_midi_out_pres_type(void) {
 	return sys_params.midi_out_pres_type;
 }
 
-static u16 get_midi_out_yz_control(void) {
-	return sys_params.midi_out_yz_control;
-}
-
 static u16 get_midi_soft_thru(void) {
 	return sys_params.midi_soft_thru;
 }
@@ -114,9 +110,12 @@ static u16 get_midi_in_filter(void) {
 	return sys_params.midi_rcv_param_ccs + sys_params.midi_rcv_transport * 3 + sys_params.midi_rcv_clock * 6;
 }
 
-static u16 get_midi_out_filter(void) {
-	return sys_params.midi_send_lfo_cc + sys_params.midi_send_param_ccs * 2 + sys_params.midi_send_transport * 6
-	       + sys_params.midi_send_clock * 12;
+static u16 get_midi_out_filter_1(void) {
+	return sys_params.midi_send_param_ccs + sys_params.midi_send_transport * 3 + sys_params.midi_send_clock * 6;
+}
+
+static u16 get_midi_out_filter_2(void) {
+	return (sys_params.mpe_out_fine_tuning << 2) | (sys_params.midi_send_lfo_cc << 1) | sys_params.midi_out_yz_control;
 }
 
 static u16 get_midi_trs_out_off(void) {
@@ -158,7 +157,6 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_MIDI_OUT_VEL_BALANCE] = get_midi_out_vel_balance,
     [SYS_MIDI_IN_PRES_TYPE] = get_midi_in_pres_type,
     [SYS_MIDI_OUT_PRES_TYPE] = get_midi_out_pres_type,
-    [SYS_MIDI_OUT_YZ_CONTROL] = get_midi_out_yz_control,
     [SYS_MIDI_SOFT_THRU] = get_midi_soft_thru,
     [SYS_MIDI_CHANNEL_BEND_RANGE_IN] = get_midi_channel_bend_range_in,
     [SYS_MIDI_STRING_BEND_RANGE_IN] = get_midi_string_bend_range_in,
@@ -170,7 +168,8 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_MPE_CHANS] = get_mpe_chans,
     [SYS_MIDI_IN_SCALE_QUANT] = get_midi_in_scale_quant,
     [SYS_MIDI_IN_FILTER] = get_midi_in_filter,
-    [SYS_MIDI_OUT_FILTER] = get_midi_out_filter,
+    [SYS_MIDI_OUT_FILTER_1] = get_midi_out_filter_1,
+    [SYS_MIDI_OUT_FILTER_2] = get_midi_out_filter_2,
     [SYS_MIDI_TRS_OUT_OFF] = get_midi_trs_out_off,
     [SYS_MIDI_TUNING] = get_midi_tuning,
     [SYS_REFERENCE_PITCH] = get_reference_pitch,
@@ -244,10 +243,6 @@ static void set_midi_out_pres_type(u16 value) {
 	sys_params.midi_out_pres_type = value;
 }
 
-static void set_midi_out_yz_control(u16 value) {
-	sys_params.midi_out_yz_control = value;
-}
-
 static void set_midi_soft_thru(u16 value) {
 	sys_params.midi_soft_thru = value;
 }
@@ -294,11 +289,16 @@ static void set_midi_in_filter(u16 value) {
 	sys_params.midi_rcv_clock = (value / 6) % 2;
 }
 
-static void set_midi_out_filter(u16 value) {
-	sys_params.midi_send_lfo_cc = value % 2;
-	sys_params.midi_send_param_ccs = (value / 2) % 3;
-	sys_params.midi_send_transport = (value / 6) % 2;
-	sys_params.midi_send_clock = (value / 12) % 2;
+static void set_midi_out_filter_1(u16 value) {
+	sys_params.midi_send_param_ccs = value % 3;
+	sys_params.midi_send_transport = (value / 3) % 2;
+	sys_params.midi_send_clock = (value / 6) % 2;
+}
+
+static void set_midi_out_filter_2(u16 value) {
+	sys_params.mpe_out_fine_tuning = (value >> 2) & 1;
+	sys_params.midi_send_lfo_cc = (value >> 1) & 1;
+	sys_params.midi_out_yz_control = value & 1;
 }
 
 static void set_midi_trs_out_off(u16 value) {
@@ -340,7 +340,6 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_MIDI_OUT_VEL_BALANCE] = set_midi_out_vel_balance,
     [SYS_MIDI_IN_PRES_TYPE] = set_midi_in_pres_type,
     [SYS_MIDI_OUT_PRES_TYPE] = set_midi_out_pres_type,
-    [SYS_MIDI_OUT_YZ_CONTROL] = set_midi_out_yz_control,
     [SYS_MIDI_SOFT_THRU] = set_midi_soft_thru,
     [SYS_MIDI_CHANNEL_BEND_RANGE_IN] = set_midi_channel_bend_range_in,
     [SYS_MIDI_STRING_BEND_RANGE_IN] = set_midi_string_bend_range_in,
@@ -352,7 +351,8 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_MPE_CHANS] = set_mpe_chans,
     [SYS_MIDI_IN_SCALE_QUANT] = set_midi_in_scale_quant,
     [SYS_MIDI_IN_FILTER] = set_midi_in_filter,
-    [SYS_MIDI_OUT_FILTER] = set_midi_out_filter,
+    [SYS_MIDI_OUT_FILTER_1] = set_midi_out_filter_1,
+    [SYS_MIDI_OUT_FILTER_2] = set_midi_out_filter_2,
     [SYS_MIDI_TRS_OUT_OFF] = set_midi_trs_out_off,
     [SYS_MIDI_TUNING] = set_midi_tuning,
     [SYS_REFERENCE_PITCH] = set_reference_pitch,
@@ -377,7 +377,6 @@ const u8 sys_param_ranges[] = {
     [SYS_MIDI_OUT_VEL_BALANCE] = 129,
     [SYS_MIDI_IN_PRES_TYPE] = NUM_MIDI_PRESSURE_TYPES,
     [SYS_MIDI_OUT_PRES_TYPE] = NUM_MIDI_PRESSURE_TYPES,
-    [SYS_MIDI_OUT_YZ_CONTROL] = 2,
     [SYS_MIDI_SOFT_THRU] = 2,
     [SYS_MIDI_CHANNEL_BEND_RANGE_IN] = NUM_BEND_RANGES,
     [SYS_MIDI_STRING_BEND_RANGE_IN] = NUM_BEND_RANGES,
@@ -389,7 +388,8 @@ const u8 sys_param_ranges[] = {
     [SYS_MPE_CHANS] = 15,
     [SYS_MIDI_IN_SCALE_QUANT] = 2,
     [SYS_MIDI_IN_FILTER] = 12,
-    [SYS_MIDI_OUT_FILTER] = 24,
+    [SYS_MIDI_OUT_FILTER_1] = 12,
+    [SYS_MIDI_OUT_FILTER_2] = 8,
     [SYS_MIDI_TRS_OUT_OFF] = 2,
     [SYS_MIDI_TUNING] = 2,
     [SYS_REFERENCE_PITCH] = 16,

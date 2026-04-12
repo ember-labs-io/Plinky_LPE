@@ -1294,8 +1294,8 @@ void midi_push_preset(void) {
 	pushing_preset = false;
 }
 
-bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
-                        s32* pitchbend_pitch) {
+bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, s32* note_offset_pitch,
+                        u8* start_velocity) {
 	MidiString* m_string = &midi_string[string_id];
 	// not pressed => exit
 	if (m_string->state == MS_UNPRESSED)
@@ -1326,7 +1326,7 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 	*position = m_string->position;
 	*note_number = m_string->note_number;
 	*start_velocity = m_string->start_velocity;
-	*pitchbend_pitch = channel_pitchbend_pitch + (m_string->mpe ? m_string->pitchbend_pitch : 0);
+	*note_offset_pitch = channel_pitchbend_pitch + (m_string->mpe ? m_string->pitchbend_pitch : 0);
 	return true;
 }
 

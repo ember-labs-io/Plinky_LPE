@@ -30,7 +30,7 @@ typedef struct CvTouch {
 	u8 string_id;
 	u8 start_velocity;
 	u8 note_number;
-	s32 pitchbend_pitch;
+	s32 note_offset_pitch;
 	u16 position;
 	u16 pressure;
 } CvTouch;
@@ -181,7 +181,7 @@ void adc_dac_tick(void) {
 			cv_touch.note_number = PITCH_TO_NOTE_NR(cv_pitch);
 			cv_touch.position = string_position_from_pitch(cv_touch.string_id, cv_pitch);
 		}
-		cv_touch.pitchbend_pitch = cv_pitch - NOTE_NR_TO_PITCH(cv_touch.note_number);
+		cv_touch.note_offset_pitch = cv_pitch - NOTE_NR_TO_PITCH(cv_touch.note_number);
 		cv_touch.pressure = (sys_params.cv_gate_in_is_pressure ? adc_get_smooth(ADC_S_GATE) : 1) * TOUCH_FULL_PRES;
 	}
 }
@@ -246,8 +246,8 @@ bool new_seq_cv_gate(void) {
 	return new_gate;
 }
 
-bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
-                      s32* pitchbend_pitch) {
+bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, s32* note_offset_pitch,
+                      u8* start_velocity) {
 	// not pressed => exit
 	if (!cv_touch.touched || cv_touch.string_id != string_id)
 		return false;
@@ -257,15 +257,18 @@ bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_numbe
 	*position = cv_touch.position;
 	*note_number = cv_touch.note_number;
 	*start_velocity = cv_touch.start_velocity;
-	*pitchbend_pitch = cv_touch.pitchbend_pitch;
+	*note_offset_pitch = cv_touch.note_offset_pitch;
 
 	return true;
 }
 
-void send_cv_pitch(bool pitch_hi, u32 pitch_4x) {
-	// shift three octaves so 0V = C2, apply calibration
+void send_cv_pitch(bool pitch_hi, u16 pitch) {
+	// shift three octaves so 0V = C2
+	s32 pitch_4x = (pitch - 3 * PITCH_PER_OCT) << 2;
+
+	// apply calibration
 	ADC_DAC_Calib* calib = &adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO];
-	s32 cv_pitch_4x = ((s32)pitch_4x - (PITCH_PER_OCT << 2) * 3) * calib->scale + calib->bias;
+	s32 cv_pitch_4x = pitch_4x * calib->scale + calib->bias;
 
 	// shift octave to keep pitch within bounds
 	u16 octave_size = abs((PITCH_PER_OCT << 2) * calib->scale);
@@ -281,8 +284,8 @@ void cv_calib(void) {
 	calib_mode = CALIB_CV;
 	const char* top_line = "Unplug all inputs. Use left 4 columns to adjust pitch cv outputs. Plug pitch lo output to "
 	                       "pitch input when done.";
-	const char* const bottom_lines[5] = {"touch column 1-4", "pitch lo = 0V/C1", "pitch lo = 2V/C3", "pitch hi = 0V/C1",
-	                                     "pitch hi = 2V/C3"};
+	const char* const bottom_lines[5] = {"touch column 1-4", "pitch lo = 0V/C2", "pitch lo = 2V/C4", "pitch hi = 0V/C2",
+	                                     "pitch hi = 2V/C4"};
 	// text scrolling
 	s16 top_line_pos = 128;
 	s16 top_line_width = str_width(F_16, top_line);

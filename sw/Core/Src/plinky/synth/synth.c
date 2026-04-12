@@ -16,7 +16,6 @@ typedef struct Osc {
 	u32 phase;
 	u32 prev_sample;
 	s32 phase_diff;
-	s32 goal_phase_diff;
 	u16 pitch;
 } Osc;
 
@@ -35,6 +34,8 @@ typedef struct GrainPair {
 typedef struct Voice {
 	// oscillator (sampler only uses the pitch value)
 	Osc osc[OSCS_PER_VOICE];
+	// the pitch of osc[2] with pitch modulation and portamento applied
+	u16 pitch;
 	// env 1
 	float env1_lvl;
 	bool env1_decaying;
@@ -104,6 +105,10 @@ const SynthString* get_synth_string(u8 string_id) {
 #define MIDI_TUNING_IS_ACTIVE(note_nr) (global_data.midi_tuning_active[(note_nr) >> 5] & (1u << ((note_nr) & 31)))
 #define MIDI_TUNING_SET_ACTIVE(note_nr) (global_data.midi_tuning_active[(note_nr) >> 5] |= (1u << ((note_nr) & 31)))
 #define USING_MIDI_TUNING(note_number) (sys_params.midi_tuning && MIDI_TUNING_IS_ACTIVE(note_number))
+
+static u16 pitch_at_note_with_midi_tuning(u8 note_number) {
+	return USING_MIDI_TUNING(note_number) ? global_data.midi_tuning_pitch[note_number] : NOTE_NR_TO_PITCH(note_number);
+}
 
 static s8 string_oct(u8 string_id) {
 	static s8 oct[NUM_STRINGS] = {};
@@ -686,6 +691,10 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 		}
 		voice->lpg_smoother[osc_id].y1 = y1;
 		voice->lpg_smoother[osc_id].y2 = y2;
+
+		// save voice pitch
+		if (osc_id == 0)
+			voice->pitch = voice->osc[2].pitch;
 	} // osc loop
 
 	voice->env1_lvl = goal_lpg;
@@ -837,15 +846,15 @@ static void generate_string_touch(u8 string_id) {
 
 	// any available pressure from touch/latch/sequencer overrides midi/cv
 	if (pressure > 0)
-		s_string->ext_touch = false;
+		s_string->touch_type = PHYS_TOUCH;
 	// retrieve touch from cv
-	else if (cv_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
-	                          &s_string->pitchbend_pitch))
-		s_string->ext_touch = true;
+	else if (cv_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->note_offset_pitch,
+	                          &s_string->start_velocity))
+		s_string->touch_type = CV_TOUCH;
 	// retrieve touch from midi
-	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->start_velocity,
-	                            &s_string->pitchbend_pitch))
-		s_string->ext_touch = true;
+	else if (midi_try_get_touch(string_id, &pressure, &position, &s_string->note_number, &s_string->note_offset_pitch,
+	                            &s_string->start_velocity))
+		s_string->touch_type = MIDI_TOUCH;
 
 	// === FINISHING UP === //
 
@@ -960,7 +969,7 @@ void generate_string_touches(void) {
 			cur_touch->pres = TOUCH_MIN_PRES;
 		// generate start velocity for physical touches - needs to be saved in both buffers as this only generates on
 		// env_trigger
-		if (!s_string->ext_touch && s_string->env_trigger) {
+		if (s_string->touch_type == PHYS_TOUCH && s_string->env_trigger) {
 			u8 start_velocity = clampi((cur_touch->pres << 3) / sys_params.midi_out_vel_balance - 1, 0, 127);
 			s_string->start_velocity = start_velocity;
 			write_strings[string_id].start_velocity = start_velocity;
@@ -983,6 +992,8 @@ static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, flo
 		float osc_lpg_diff = (goal_lpg - osc_lpg) * (1.f / SAMPLES_PER_TICK);
 
 		Osc* osc = &voice->osc[osc_id];
+		s32 goal_phase_diff1 = table_interp(pitches, osc[0].pitch + tuning_offset) * (65536.f * 128.f);
+		s32 goal_phase_diff2 = table_interp(pitches, osc[2].pitch + tuning_offset) * (65536.f * 128.f);
 
 		u32 flippity = 0;
 		if (osc_shape != 0) {
@@ -990,27 +1001,27 @@ static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, flo
 			u32 avg_phase_diff = (osc[0].phase_diff + osc[2].phase_diff) / 2;
 			osc[0].phase_diff = avg_phase_diff;
 			osc[2].phase_diff = avg_phase_diff;
-			avg_phase_diff = (osc[0].goal_phase_diff + osc[2].goal_phase_diff) / 2;
-			osc[0].goal_phase_diff = avg_phase_diff;
-			osc[2].goal_phase_diff = avg_phase_diff;
+			avg_phase_diff = (goal_phase_diff1 + goal_phase_diff2) / 2;
+			goal_phase_diff1 = avg_phase_diff;
+			goal_phase_diff2 = avg_phase_diff;
 			if (osc_shape < 0) {
 				s32 phase0_fix =
 				    (s32)(osc[2].phase - osc[0].phase - (osc_shape << 16) + (1 << 31)) / (SAMPLES_PER_TICK);
 				osc[0].phase_diff += phase0_fix;
-				osc[0].goal_phase_diff += phase0_fix;
+				goal_phase_diff1 += phase0_fix;
 			}
 		}
 		// remove unwanted pitch glides if voice is quiet
 		if (glide_param == 0 && osc_lpg < 0.001f) {
-			osc[0].phase_diff = osc[0].goal_phase_diff;
-			osc[2].phase_diff = osc[2].goal_phase_diff;
+			osc[0].phase_diff = goal_phase_diff1;
+			osc[2].phase_diff = goal_phase_diff2;
 		}
-		int dd_phase1 = (int)((osc->goal_phase_diff - osc->phase_diff) * glide);
+		int dd_phase1 = (int)((goal_phase_diff1 - osc->phase_diff) * glide);
 		u32 phase1 = osc->phase;
 		s32 phase1_diff = osc->phase_diff;
 		u32 prev_sample1 = osc->prev_sample;
 		osc += 2;
-		int dd_phase2 = (int)((osc->goal_phase_diff - osc->phase_diff) * glide);
+		int dd_phase2 = (int)((goal_phase_diff2 - osc->phase_diff) * glide);
 		u32 phase2 = osc->phase;
 		s32 phase2_diff = osc->phase_diff;
 		u32 prev_sample2 = osc->prev_sample;
@@ -1112,6 +1123,10 @@ static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, flo
 		osc[2].phase_diff = phase2_diff;
 		osc[2].prev_sample = prev_sample2;
 
+		// save exact pitch including pitch modulation and portamento
+		if (osc_id == 0)
+			voice->pitch = log2f((float)phase2_diff * SAMPLE_RATE / (BASE_FREQUENCY * ((u64)1 << 32))) * PITCH_PER_OCT;
+
 		voice->lpg_smoother[osc_id].y1 = y1;
 		voice->lpg_smoother[osc_id].y2 = y2;
 	} // osc loop
@@ -1130,8 +1145,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 	bool voice_audible = env_lvl > 0.001f;
 
 	// turn off external touch if it has rung out
-	if (s_string->ext_touch && !s_string->touched && !voice_audible)
-		s_string->ext_touch = false;
+	if (s_string->touch_type != PHYS_TOUCH && !s_string->touched && !voice_audible)
+		s_string->touch_type = PHYS_TOUCH;
 
 	// generate cv gate
 	if (s_string->touched)
@@ -1141,65 +1156,57 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 	if (s_string->touched || voice_audible) {
 		// precalc some parameters
+		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
 		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
 		s32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
-		bool ext_touch = s_string->ext_touch;
+		TouchType touch_type = s_string->touch_type;
 
-		// we're filling these
+		// the pitch of the base note
 		s32 note_pitch = 0;
-		s32 pitchbend_pitch = 0;
+		// the offset from the base note caused by touch position, pitchbend
+		s32 note_offset_pitch = 0;
+		// the combined pitch of the four oscillators
 		s32 pitch_4x = 0;
 
-		// these only get used by touch
+		// these only get used by phys touch
 		Touch* s_touch_sort = &touch_sorted[voice_id][2]; // we use pitches 2-5, discarding extreme values
 		u16 root_pitch;
 		Scale scale = S_MAJOR;
 		u8 scale_steps = 0;
 		s16 string_step_offset = 0;
 		s32 arp_oct_pitch = 0;
-		s16 pitch_param_pitch = 0;
 
-		if (ext_touch) {
-			u8 note_number = s_string->note_number;
-			note_pitch = USING_MIDI_TUNING(note_number) ? global_data.midi_tuning_pitch[note_number]
-			                                            : NOTE_NR_TO_PITCH(note_number);
-		}
-		else {
+		if (touch_type == PHYS_TOUCH) {
 			root_pitch = string_root_pitch(voice_id);
 			scale = string_scale(voice_id);
 			scale_steps = steps_in_scale[scale];
 			string_step_offset = string_start_step(voice_id) + param_index_poly(PP_DEGREE, voice_id);
 			arp_oct_pitch = OCTS_TO_PITCH(arp_oct_offset);
-			pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
 		}
+		else
+			note_pitch = pitch_at_note_with_midi_tuning(s_string->note_number);
 
 		// loop through oscillators
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
 			u16 osc_pitch = 0;
 
-			// external touch
-			if (ext_touch)
-				// generate pitch spread
-				pitchbend_pitch = s_string->pitchbend_pitch + ((osc_id - 2) * micro_param >> 10);
-			// physical touch
-			else {
+			if (touch_type == PHYS_TOUCH) {
 				u16 position = s_touch_sort++->pos;
 				// steps from string + steps from pad
 				s16 pad_step = clampi(string_step_offset + (7 - (position >> 8)), 0, MAX_VALID_SCALE_STEP(scale));
 
-				// detuning from pad touch: pitchbend
-				s8 pos_on_pad = 127 - (position & 255);
+				// pitch from closest pad
 				u16 pad_pitch = pitch_at_step_with_midi_tuning(pad_step, scale, scale_steps);
+				note_pitch = root_pitch + pad_pitch + arp_oct_pitch;
+
+				// pitch offset from pad touch
+				s8 pos_on_pad = 127 - (position & 255);
 				u16 next_pad_pitch =
 				    pitch_at_step_with_midi_tuning(pad_step + (pos_on_pad > 0 ? 1 : -1), scale, scale_steps);
 				s16 pitch_to_next_pad = next_pad_pitch - pad_pitch;
-				pitchbend_pitch = (s64)abs(pos_on_pad) * micro_param * pitch_to_next_pad >> 24;
+				note_offset_pitch = (s64)abs(pos_on_pad) * micro_param * pitch_to_next_pad >> 24;
 
-				// non-detuned pitch
-				note_pitch = root_pitch + pad_pitch + arp_oct_pitch;
-
-				// oscillator 2 defines the note number - needs to be saved to both buffers as this only generates on
-				// env_trigger
+				// generate note number - needs to be saved to both buffers when this only generates on env_trigger
 				if (osc_id == 2 && (!sys_params.mpe_out || s_string->env_trigger)) {
 					u8 note_number = PITCH_TO_NOTE_NR(clampi(note_pitch, 0, MAX_PITCH));
 					s_string->note_number = note_number;
@@ -1207,21 +1214,23 @@ static void run_voice(u8 voice_id, u32* dst) {
 						write_strings[voice_id].note_number = note_number;
 				}
 			}
+			// external touch: saved offset pitch + generate pitch spread
+			else
+				note_offset_pitch = s_string->note_offset_pitch + ((osc_id - 2) * micro_param >> 10);
 
-			// add detuning pitches
-			osc_pitch = clampi(note_pitch + pitchbend_pitch + pitch_param_pitch, 0, MAX_PITCH);
+			// save combined pitch, used for calculating pitchbend below
+			osc_pitch = note_pitch + note_offset_pitch;
 			pitch_4x += osc_pitch;
+
+			// add pitch modulation
+			osc_pitch = clampi(osc_pitch + pitch_param_pitch, 0, MAX_PITCH);
 
 			// add osc interval (if within valid pitch range)
 			osc_pitch += (osc_id & 1) == 1 && osc_pitch + osc_interval_pitch <= MAX_PITCH ? osc_interval_pitch : 0;
 
 			// save to voice
 			voice->osc[osc_id].pitch = osc_pitch;
-			voice->osc[osc_id].goal_phase_diff = table_interp(pitches, osc_pitch + tuning_offset) * (65536.f * 128.f);
 		}
-
-		if (!ext_touch)
-			s_string->pitchbend_pitch = (pitch_4x >> 2) - SEMIS_TO_PITCH(s_string->note_number);
 
 		// save the lowest and highest string that are touched
 		if (s_string->touched) {
@@ -1230,6 +1239,13 @@ static void run_voice(u8 voice_id, u32* dst) {
 			high_string_id = voice_id;
 			high_string_note = s_string->note_number;
 		}
+
+		// save outgoing pitchbend
+		s_string->pitchbend_pitch = touch_type == PHYS_TOUCH
+		                                // for physical touches, pitchbend is derived from the average oscillator pitch
+		                                ? clampi(pitch_4x >> 2, 0, MAX_PITCH) - SEMIS_TO_PITCH(s_string->note_number)
+		                                // for external touches, the offset pitch is precalculated in the module
+		                                : s_string->note_offset_pitch;
 	}
 
 	// == UPDATE ENVELOPE == //
@@ -1319,8 +1335,12 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 	if (USING_SAMPLER)
 		apply_sample_lpg_noise(voice_id, voice, env_lvl, noise_diff, drive, dst);
-	else
+	else {
 		apply_synth_lpg_noise(voice_id, voice, env_lvl, noise_diff, drive, resonance, dst);
+		// make the pitchbend value observe pitch modulation and portamento
+		if (sys_params.mpe_out && sys_params.mpe_out_fine_tuning)
+			s_string->pitchbend_pitch = voice->pitch - pitch_at_note_with_midi_tuning(s_string->note_number);
+	}
 }
 
 void handle_synth_voices(u32* dst) {
@@ -1349,28 +1369,10 @@ void handle_synth_voices(u32* dst) {
 	if (low_string_id == high_string_id && no_arp_touch_mask)
 		low_string_id = __builtin_ctz(no_arp_touch_mask);
 
-	if (low_string_id != 255) {
-		Osc* osc = voices[low_string_id].osc;
-		send_cv_pitch(
-		    false,
-		    USING_SAMPLER
-		        // just use the saved pitch value for samples, no fine tuning
-		        ? osc->pitch << 2
-		        // calculate exact pitch from phase_diff for synth, which includes microtone and portamento fine tuning
-		        : log2f((float)osc->phase_diff * SAMPLE_RATE / (BASE_FREQUENCY * ((u64)1 << 32)))
-		              * (PITCH_PER_OCT << 2));
-	}
-	if (high_string_id != 255) {
-		Osc* osc = voices[high_string_id].osc;
-		send_cv_pitch(
-		    true,
-		    USING_SAMPLER
-		        // just use the saved pitch value for samples, no fine tuning
-		        ? osc->pitch << 2
-		        // calculate exact pitch from phase_diff for synth, which includes microtone and portamento fine tuning
-		        : log2f((float)osc->phase_diff * SAMPLE_RATE / (BASE_FREQUENCY * ((u64)1 << 32)))
-		              * (PITCH_PER_OCT << 2));
-	}
+	if (low_string_id != 255)
+		send_cv_pitch(false, voices[low_string_id].pitch);
+	if (high_string_id != 255)
+		send_cv_pitch(true, voices[high_string_id].pitch);
 
 	if (USING_SAMPLER) {
 		// decide on a priority for 8 voices

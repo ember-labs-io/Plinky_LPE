@@ -15,9 +15,9 @@ void adc_dac_tick(void);
 // cv
 
 bool new_seq_cv_gate(void);
-bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
-                      s32* pitchbend_pitch);
-void send_cv_pitch(bool pitch_hi, u32 pitch_4x);
+bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, s32* note_offset_pitch,
+                      u8* start_velocity);
+void send_cv_pitch(bool pitch_hi, u16 pitch);
 void cv_calib(void);
 
 // pwm cv outs take range 0-256 and generate 6.6V at 256

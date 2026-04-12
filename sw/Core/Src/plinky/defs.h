@@ -110,6 +110,12 @@ static u8 const bend_ranges[NUM_BEND_RANGES] = {1, 2, 7, 12, 14, 24, 48, 96};
 
 // MODULE ENUMS
 
+typedef enum TouchType {
+	PHYS_TOUCH,
+	MIDI_TOUCH,
+	CV_TOUCH,
+} TouchType;
+
 // position of the ADC reading in the adc_buffer
 typedef enum ADC_DAC_Index {
 	ADC_PITCH,
@@ -245,7 +251,6 @@ typedef enum SysParam {
 	SYS_MIDI_OUT_VEL_BALANCE,
 	SYS_MIDI_IN_PRES_TYPE,
 	SYS_MIDI_OUT_PRES_TYPE,
-	SYS_MIDI_OUT_YZ_CONTROL,
 	SYS_MIDI_SOFT_THRU,
 	SYS_MIDI_CHANNEL_BEND_RANGE_IN,
 	SYS_MIDI_STRING_BEND_RANGE_IN,
@@ -257,7 +262,8 @@ typedef enum SysParam {
 	SYS_MPE_CHANS,
 	SYS_MIDI_IN_SCALE_QUANT,
 	SYS_MIDI_IN_FILTER,
-	SYS_MIDI_OUT_FILTER,
+	SYS_MIDI_OUT_FILTER_1,
+	SYS_MIDI_OUT_FILTER_2,
 	SYS_MIDI_TRS_OUT_OFF,
 	SYS_MIDI_TUNING,
 	SYS_REFERENCE_PITCH,
@@ -800,9 +806,10 @@ typedef struct LatchTouch {
 } LatchTouch;
 
 typedef struct SynthString {
-	bool ext_touch : 1;
+	TouchType touch_type;
 	Touch touch;
 	u8 note_number;
+	s32 note_offset_pitch;
 	u8 start_velocity;
 	s32 pitchbend_pitch;
 	LatchTouch latch_touch;
@@ -887,7 +894,8 @@ typedef struct SysParams {
 	bool midi_trs_out_off : 1;
 	bool midi_tuning : 1;
 	bool edit_poly_params : 1; // show eight edit strips for poly params
-	u8 pad1 : 2;
+	bool mpe_out_fine_tuning : 1;
+	u8 pad1 : 1;
 	// 13 bytes
 	u8 cv_gate_in_is_pressure : 1;
 	u8 reference_pitch : 4;
