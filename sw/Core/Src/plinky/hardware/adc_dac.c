@@ -107,9 +107,9 @@ static float adc_get_calib(ADC_DAC_Index index) {
 }
 
 float adc_get_smooth(ADCSmoothIndex index) {
-	// make sure the knobs reach the full 100%
+	// make sure the knobs reach the full 100%, apply deadzone
 	if (index == ADC_S_A_KNOB || index == ADC_S_B_KNOB)
-		return clampf(adc_smoother[index].y2 * 1.0001f, -1.f, 1.f);
+		return deadzone_scaled(clampf(adc_smoother[index].y2 * 1.0001f, -1.f, 1.f), 0.01f);
 	return adc_smoother[index].y2;
 }
 

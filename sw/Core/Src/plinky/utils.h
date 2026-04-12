@@ -148,6 +148,15 @@ static inline float deadzone(float f, float zone) {
 	return f;
 }
 
+static inline float deadzone_scaled(float f, float zone) {
+	if (f < zone && f > -zone)
+		return 0.f;
+	if (f > 0.f)
+		return (f - zone) / (1.f - zone);
+	else
+		return (f + zone) / (1.f - zone);
+}
+
 static inline void set_smoother(ValueSmoother* s, float new_val) {
 	s->y1 = s->y2 = new_val;
 }
