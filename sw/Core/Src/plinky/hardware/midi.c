@@ -532,6 +532,15 @@ static void cue_midi_out(void) {
 		clocks_to_send--;
 	}
 
+	// send channel pitchbend
+	static u14 last_channel_pitchbend = {};
+	if (last_channel_pitchbend.value != channel_pitchbend.value) {
+		midi_out_channel = sys_params.midi_out_chan;
+		if (!send_midi_msg(MIDI_PITCH_BEND, channel_pitchbend.lsb, channel_pitchbend.msb))
+			return;
+		last_channel_pitchbend.value = channel_pitchbend.value;
+	}
+
 	midi_out_channel = sys_params.midi_out_chan;
 
 	// send values for one param
