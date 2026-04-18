@@ -398,12 +398,12 @@ void pad_actions_frame(void) {
 		main_press_ms = 0;
 		return;
 	}
-	if (!main_press_canceled)
+	if (!main_press_canceled) {
 		main_press_ms = millis() - main_press_start;
-	// long press action in load ui
-	if (ui_mode == UI_LOAD && main_press_ms >= PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY) {
-		long_press_mem_item(main_press_pad);
-		cancel_main_press();
+
+		// press action in load ui
+		if (ui_mode == UI_LOAD && press_mem_item(main_press_pad))
+			cancel_main_press();
 	}
 	// toggle editing poly params
 	if ((ui_mode == UI_EDITING_A || ui_mode == UI_EDITING_B)
