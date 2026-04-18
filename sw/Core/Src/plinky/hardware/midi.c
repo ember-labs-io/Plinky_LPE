@@ -36,9 +36,10 @@ typedef struct MidiString {
 	u14 mod_wheel;     // mod wheel value
 
 	// modified values
-	bool sustain_pressed; // CC64 as a bool
-	s32 pitchbend_pitch;  // pitchbend expressed as a 512/semi pitch offset
-	u16 position;         // position on the string, tries to light up pad led at midi pitch
+	bool sustain_pressed;   // CC64 as a bool
+	bool sostenuto_pressed; // CC66 as a bool
+	s32 pitchbend_pitch;    // pitchbend expressed as a 512/semi pitch offset
+	u16 position;           // position on the string, tries to light up pad led at midi pitch
 } MidiString;
 
 typedef struct LastSentString {
@@ -160,6 +161,7 @@ static void update_string_pitchbend(u8 string_id) {
 
 static void force_release_string(u8 string_id) {
 	midi_string[string_id].sustain_pressed = false;
+	midi_string[string_id].sostenuto_pressed = false;
 	midi_string[string_id].state = MS_UNPRESSED;
 }
 
@@ -168,7 +170,22 @@ static void apply_sustain(bool new_sustain, u8 string_id) {
 	if (new_sustain != m_string->sustain_pressed) {
 		m_string->sustain_pressed = new_sustain;
 		// release midi note held by the sustain
-		if (!new_sustain && m_string->state == MS_SUSTAINED)
+		if (!new_sustain && m_string->state == MS_SUSTAINED && !m_string->sostenuto_pressed)
+			m_string->state = MS_UNPRESSED;
+	}
+}
+
+static void apply_sostenuto(bool new_sostenuto, u8 string_id) {
+	MidiString* m_string = &midi_string[string_id];
+
+	// only apply sostenuto to already pressed strings
+	if (new_sostenuto && m_string->state == MS_UNPRESSED)
+		return;
+
+	if (new_sostenuto != m_string->sostenuto_pressed) {
+		m_string->sostenuto_pressed = new_sostenuto;
+		// release midi note held by the sostenuto
+		if (!new_sostenuto && m_string->state == MS_SUSTAINED && !m_string->sustain_pressed)
 			m_string->state = MS_UNPRESSED;
 	}
 }
@@ -967,7 +984,8 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				}
 			}
 			if (string_found)
-				m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
+				m_string->state =
+				    (m_string->sustain_pressed || m_string->sostenuto_pressed) ? MS_SUSTAINED : MS_UNPRESSED;
 		} break;
 		case MIDI_NOTE_ON: {
 			// we can't play this note => ignore
@@ -1034,11 +1052,17 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				mod_wheel_14bit = true;
 				break;
 			// update string sustains
-			case CC_SUSTAIN:
+			case CC_SUSTAIN: {
 				bool new_sustain = data2 >= 64;
 				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
 					apply_sustain(new_sustain, string_id);
-				break;
+			} break;
+			// update string sostenutos
+			case CC_SOSTENUTO: {
+				bool new_sostenuto = data2 >= 64;
+				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
+					apply_sostenuto(new_sostenuto, string_id);
+			} break;
 			default:
 				// update parameters from ccs
 				if (sys_params.midi_rcv_param_ccs)
@@ -1082,11 +1106,17 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				mod_wheel_14bit = true;
 				break;
 			// update string sustains
-			case CC_SUSTAIN:
+			case CC_SUSTAIN: {
 				bool new_sustain = data2 >= 64;
 				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
 					apply_sustain(new_sustain, string_id);
-				break;
+			} break;
+			// update string sostenutos
+			case CC_SOSTENUTO: {
+				bool new_sostenuto = data2 >= 64;
+				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
+					apply_sostenuto(new_sostenuto, string_id);
+			} break;
 			default:
 				// update parameters from ccs
 				if (sys_params.midi_rcv_param_ccs) {
@@ -1112,7 +1142,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	switch (type) {
 	case MIDI_NOTE_OFF:
 		if (m_string->state == MS_PRESSED)
-			m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
+			m_string->state = (m_string->sustain_pressed || m_string->sostenuto_pressed) ? MS_SUSTAINED : MS_UNPRESSED;
 		break;
 	case MIDI_NOTE_ON:
 		// we can't play this note => ignore
@@ -1142,6 +1172,9 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			break;
 		case CC_SUSTAIN:
 			apply_sustain(data2 >= 64, string_id);
+			break;
+		case CC_SOSTENUTO:
+			apply_sostenuto(data2 >= 64, string_id);
 			break;
 		default:
 			// update parameters from ccs
