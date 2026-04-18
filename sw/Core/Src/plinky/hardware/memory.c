@@ -25,7 +25,7 @@
 #define FOOTER_VERSION 2
 #define CALIB_PAGE 255
 #define MAGIC ((u64)0xf00dcafe473ff02a)
-#define NUM_RAM_ITEMS (NUM_PRESETS + NUM_PATTERNS + NUM_SAMPLES)
+#define NUM_RAM_ITEMS (NUM_PRESETS + NUM_PATTERNS + NUM_SAMPLES + 1)
 #define SHOW_RECENT_DURATION 1000 // ms
 
 // == TYPEDEFS == //
@@ -114,10 +114,10 @@ static u32 last_flash_write[NUM_MEM_SEGMENTS] = {};
 // == UTILS == //
 
 #define GET_ITEM_TYPE(item_id)                                                                                         \
-	((item_id) < PATTERNS_START      ? MEM_PRESET                                                                      \
-	 : (item_id) < SAMPLES_START     ? MEM_PATTERN                                                                     \
-	 : (item_id) < NUM_RAM_ITEMS + 1 ? MEM_SAMPLE                                                                      \
-	                                 : NUM_RAM_ITEMS)
+	((item_id) < PATTERNS_START  ? MEM_PRESET                                                                          \
+	 : (item_id) < SAMPLES_START ? MEM_PATTERN                                                                         \
+	 : (item_id) < NUM_RAM_ITEMS ? MEM_SAMPLE                                                                          \
+	                             : NUM_MEM_ITEM_TYPES)
 
 static u16 compute_hash(const void* data, u16 nbytes) {
 	u16 hash = 123;
@@ -920,8 +920,18 @@ void cue_mem_item(u8 item_id) {
 
 // == UI == //
 
-void long_press_mem_item(u8 item_id) {
+bool press_mem_item(u8 item_id) {
 	MemItemType item_type = GET_ITEM_TYPE(item_id);
+
+	// fast load for samples and presets/patterns with no changes
+	bool fast_load = function_pressed == FN_NONE
+	                 && ((item_type == MEM_PRESET && sys_params.preset_aligned)
+	                     || (item_type == MEM_PATTERN && sys_params.pattern_aligned) || item_type == MEM_SAMPLE);
+
+	// user hasn't pressed long enough => early exit
+	if (!fast_load && main_press_ms < PRESS_DELAY + LONG_PRESS_TIME + POST_PRESS_DELAY)
+		return false;
+
 	switch (function_pressed) {
 	// not holding function pad: cue item for loading
 	case FN_NONE:
@@ -968,6 +978,8 @@ void long_press_mem_item(u8 item_id) {
 	default:
 		break;
 	}
+
+	return true;
 }
 
 // line up cur_preset to be saved to ram_preset_id during the next tick
@@ -1204,12 +1216,20 @@ u8 ui_load_led(u8 x, u8 y, u8 pulse1, u8 pulse2) {
 	// all patterns low brightness
 	u8 k = GET_ITEM_TYPE(item_id) == MEM_PATTERN ? 64 : 0;
 
-	// full selected load item
+	// dim item while being loaded
 	if (item_id == load_preset_id)
-		k = 255;
+		k = 64;
 	if (item_id == PATTERNS_START + load_pattern_id)
-		k = 255;
+		k = 0;
 	if (item_id == SAMPLES_START + load_sample_id)
+		k = 64;
+
+	// full brightness loaded item
+	if (item_id == ram_preset_id)
+		k = 255;
+	if (item_id == PATTERNS_START + ram_pattern_id)
+		k = 255;
+	if (item_id == SAMPLES_START + ram_sample_id)
 		k = 255;
 
 	// pulse cued load item
