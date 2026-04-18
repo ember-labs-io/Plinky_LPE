@@ -477,7 +477,7 @@ typedef enum MidiMessageType {
 // 100 - RPN LSB
 // 101 - RPN MSB
 //
-// available midi CCs: 30, 65-68, 70, 84, 86, 87, 88, 115
+// available midi CCs: 30, 65, 67, 68, 70, 84, 86, 87, 88, 115
 
 typedef enum MidiCC {
 	CC_MOD_WHEEL = 1,
@@ -485,6 +485,7 @@ typedef enum MidiCC {
 	CC_MOD_WHEEL_LSB = 33,
 	CC_DATA_LSB = 38,
 	CC_SUSTAIN = 64,
+	CC_SOSTENUTO = 66,
 	CC_DATA_INC = 96,
 	CC_DATA_DEC = 97,
 	CC_NRPN_LSB = 98,
