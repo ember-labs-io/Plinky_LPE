@@ -1434,11 +1434,11 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 	// synthesize internal pressure from midi velocity and midi pressure
 	u16 midi_pressure14 = 0;
 	if (using_mpe)
-		midi_pressure14 = maxi(m_string->pressure << 7, mpe_zone[zone].pressure);
+		midi_pressure14 = MAP_7BIT_TO_14BIT(maxi(m_string->pressure, mpe_zone[zone].pressure));
 	else if (sys_params.midi_in_pres_type == MP_POLY_AFTERTOUCH)
-		midi_pressure14 = maxi(m_string->pressure << 7, channel_pressure);
+		midi_pressure14 = MAP_7BIT_TO_14BIT(maxi(m_string->pressure, channel_pressure));
 	else if (sys_params.midi_in_pres_type == MP_CHANNEL_PRESSURE)
-		midi_pressure14 = channel_pressure << 7;
+		midi_pressure14 = MAP_7BIT_TO_14BIT(channel_pressure);
 
 	// apply mod wheel as pressure
 	midi_pressure14 = maxi(midi_pressure14, MAP_7BIT_TO_14BIT(m_string->mod_wheel));
