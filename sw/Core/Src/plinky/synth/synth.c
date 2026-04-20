@@ -389,10 +389,8 @@ u16 string_position_from_pitch(u8 string_id, u16 pitch) {
 
 void clear_latch(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
-		write_strings[string_id].latch_touch.pos = 0;
-		write_strings[string_id].latch_touch.pres = 0;
-		play_strings[string_id].latch_touch.pos = 0;
-		play_strings[string_id].latch_touch.pres = 0;
+		write_strings[string_id].latch_touch = (LatchTouch){};
+		play_strings[string_id].latch_touch = (LatchTouch){};
 	}
 }
 
@@ -793,48 +791,24 @@ static void generate_string_touch(u8 string_id) {
 				suppress_latch = seq_state() == SEQ_STEP_RECORDING;
 			}
 			// save latch values
-			if (!suppress_latch) {
-				s_latch->pres = pres_compress(pressure);
-				s_latch->pos = pos_compress(position);
-			}
-			// RJ: I could not work out a way to work with average values that wasn't
-			// sluggish or gave undesired intermediate values - slides and in-between notes
-			// Current solution is just saving one value and randomizing when reading it out
-			// Result feels great, but good to reconsider when the exact contents of
-			// touchstrip and string_touch are more clear
-
-			// Averaging code for reference:
-			//
-			// u8 max_pos = 0, min_pos = 255, maxpressure = 0;
-			// Touch* f = string_touch[string_id];
-			// for (int j = 0; j < 8; ++j, ++f) {
-			// 	u8 p = clampi((f->pos + 4) / 8, 0, 255);
-			// 	min_pos = mini(p, min_pos);
-			// 	max_pos = maxi(p, max_pos);
-			// 	u8 pr = clampi(f->pres / 12, 0, 255);
-			// 	maxpressure = maxi(maxpressure, pr);
-			// }
-			// latch[string_id].pres = maxpressure;
-			// latch[string_id].min_pos = min_pos;
-			// latch[string_id].max_pos = max_pos;
+			if (!suppress_latch)
+				fill_latch(string_id, s_latch);
 		}
 	}
 
-	// recall latch if it's larger than the pressure we're holding
-	if (latch_active() && s_latch->pres > 0 && s_latch->pres * 24 > pressure) {
-		// recall latch values
-		pressure = pres_decompress(s_latch->pres);
-		position = pos_decompress(s_latch->pos);
-		pres_increasing = true;
-
-		// Averaging code for reference:
-		//
-		// int min_pos = latch[string_id].min_pos * 8 + 2;
-		// int max_pos = latch[string_id].max_pos * 8 + 6;
-		// int avgpos = (min_pos + max_pos) / 2;
-		// int range = (max_pos - min_pos) / 4;
-		// pressure = latchpres ? rand_range(latchpres - 12, latchpres) : -1024;
-		// position = rand_range(avgpos-range,avgpos+range);
+	if (latch_active() && s_latch->min.pres > 0) {
+		// randomize 25% variation around the center position
+		s16 avg_pres = (s_latch->min.pres + s_latch->max.pres) / 2;
+		s16 pres_range = (s_latch->max.pres - s_latch->min.pres) / 4;
+		s16 latch_pres = random_in_range(avg_pres - pres_range, avg_pres + pres_range);
+		// use latch if it's larger than the pressure we're holding
+		if (latch_pres > pressure) {
+			pressure = latch_pres;
+			u16 avg_pos = (s_latch->min.pos + s_latch->max.pos) >> 1;
+			u16 pos_range = (s_latch->max.pos - s_latch->min.pos) >> 2;
+			position = random_in_range(avg_pos - pos_range, avg_pos + pos_range);
+			pres_increasing = true;
+		}
 	}
 
 	// record touch to sequencer
