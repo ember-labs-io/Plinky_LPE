@@ -33,7 +33,7 @@ typedef struct MidiString {
 	u14 pitchbend;     // pitchbend value
 	u8 start_velocity; // note on value
 	u8 pressure;       // poly aftertouch or mpe pressure value
-	u14 mod_wheel;     // mod wheel value
+	u8 mod_wheel;      // mod wheel value
 
 	// modified values
 	bool sustain_pressed;   // CC64 as a bool
@@ -83,7 +83,6 @@ static MidiString midi_string[NUM_STRINGS];
 static u8 channel_pressure;
 static u14 channel_pitchbend;
 static s32 channel_pitchbend_pitch;
-static bool mod_wheel_14bit = false;
 static MpeZone mpe_zone[2] = {};
 static u8 non_mpe_start_string = 0;
 static u8 high_mpe_start_string = NUM_STRINGS;
@@ -193,7 +192,7 @@ static void apply_sostenuto(bool new_sostenuto, u8 string_id) {
 static void reset_controls(u8 string_id) {
 	force_release_string(string_id);
 	MidiString* m_string = &midi_string[string_id];
-	m_string->mod_wheel.value = 0;
+	m_string->mod_wheel = 0;
 	m_string->pitchbend.value = UINT14_HALF;
 	update_string_pitchbend(string_id);
 	m_string->pressure = 0;
@@ -1044,12 +1043,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			// update string mod wheels
 			case CC_MOD_WHEEL:
 				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
-					midi_string[string_id].mod_wheel.msb = data2;
-				break;
-			case CC_MOD_WHEEL_LSB:
-				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
-					midi_string[string_id].mod_wheel.lsb = data2;
-				mod_wheel_14bit = true;
+					midi_string[string_id].mod_wheel = data2;
 				break;
 			// update string sustains
 			case CC_SUSTAIN: {
@@ -1098,12 +1092,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			// update string mod wheels
 			case CC_MOD_WHEEL:
 				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
-					midi_string[string_id].mod_wheel.msb = data2;
-				break;
-			case CC_MOD_WHEEL_LSB:
-				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
-					midi_string[string_id].mod_wheel.lsb = data2;
-				mod_wheel_14bit = true;
+					midi_string[string_id].mod_wheel = data2;
 				break;
 			// update string sustains
 			case CC_SUSTAIN: {
@@ -1164,11 +1153,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			break;
 		switch (data1) {
 		case CC_MOD_WHEEL:
-			m_string->mod_wheel.msb = data2;
-			break;
-		case CC_MOD_WHEEL_LSB:
-			m_string->mod_wheel.lsb = data2;
-			mod_wheel_14bit = true;
+			m_string->mod_wheel = data2;
 			break;
 		case CC_SUSTAIN:
 			apply_sustain(data2 >= 64, string_id);
@@ -1455,9 +1440,8 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 	else if (sys_params.midi_in_pres_type == MP_CHANNEL_PRESSURE)
 		midi_pressure14 = channel_pressure << 7;
 
-	// apply mod wheel as pressure, map 14-bit mod wheel to 127 << 7 to conform with 7 bit behavior
-	midi_pressure14 =
-	    maxi(midi_pressure14, mod_wheel_14bit ? m_string->mod_wheel.value * 127 >> 7 : m_string->mod_wheel.msb << 7);
+	// apply mod wheel as pressure
+	midi_pressure14 = maxi(midi_pressure14, MAP_7BIT_TO_14BIT(m_string->mod_wheel));
 
 	// synthesize internal pressure based on velocity/pressure balance
 	u8 velo_mult = sys_params.midi_in_vel_balance;
