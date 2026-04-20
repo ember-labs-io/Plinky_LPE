@@ -9,6 +9,7 @@
 u8 get_touch_frame(void);
 u16 get_strip_touched(void);
 const Touch* get_touch(u8 touch_id, u8 frames_back);
+void fill_latch(u8 touch_id, LatchTouch* latch_touch);
 
 // main
 

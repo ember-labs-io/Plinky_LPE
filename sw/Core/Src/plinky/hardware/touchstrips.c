@@ -80,6 +80,21 @@ const Touch* get_touch(u8 touch_id, u8 frames_back) {
 	return GET_TOUCH(touch_id, frames_back);
 }
 
+void fill_latch(u8 strip_id, LatchTouch* latch_touch) {
+	u16 min_pos = UINT16_MAX;
+	u16 max_pos = 0;
+	s16 min_pres = INT16_MAX;
+	s16 max_pres = INT16_MIN;
+	Touch* touch = touches[strip_id];
+	for (u8 frame = 0; frame < NUM_TOUCH_FRAMES; frame++, touch++) {
+		min_pos = mini(min_pos, touch->pos);
+		max_pos = maxi(max_pos, touch->pos);
+		min_pres = mini(min_pres, maxi(touch->pres, 0));
+		max_pres = maxi(max_pres, touch->pres);
+	}
+	*latch_touch = (LatchTouch){{min_pres, min_pos}, {max_pres, max_pos}};
+}
+
 // == MAIN == //
 
 static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {

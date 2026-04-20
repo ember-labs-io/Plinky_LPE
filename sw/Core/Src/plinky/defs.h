@@ -805,10 +805,9 @@ typedef struct Touch {
 
 const static Touch init_touch = {TOUCH_MIN_PRES, TOUCH_MIN_POS};
 
-// compressed to fit in u8s
 typedef struct LatchTouch {
-	u8 pos;
-	u8 pres;
+	Touch min;
+	Touch max;
 } LatchTouch;
 
 typedef struct SynthString {
