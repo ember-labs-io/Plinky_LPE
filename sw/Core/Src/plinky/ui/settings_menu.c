@@ -100,7 +100,8 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
 };
 
 const static char* section_name[NUM_SYS_PARAM_SECTS] = {
-    [S_SYSTEM] = "System", [S_MIDI_IN] = "Midi in", [S_MIDI_OUT] = "Midi out", [S_CV] = "CV", [S_ACTIONS] = "Actions",
+    [S_SYSTEM] = "System", [S_MIDI_IN] = "Midi in", [S_MIDI_OUT] = "Midi out",
+    [S_CV] = "CV in",      [S_ACTIONS] = "Actions",
 };
 
 const static char* item_name[NUM_MENU_ITEMS] = {
@@ -126,9 +127,9 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_MIDI_OUT_FILTER_2] = "Filter 2",
     [I_MIDI_TRS_OUT_OFF] = "TRS out",
     [I_CV_QUANT] = "Quant",
-    [I_CV_GATE_IN_IS_PRESSURE] = "Gate In",
-    [I_CV_PPQN_IN] = "PPQN in",
-    [I_CV_PPQN_OUT] = "PPQN out",
+    [I_CV_GATE_IN_IS_PRESSURE] = "Gate",
+    [I_CV_PPQN_IN] = "PPQN",
+    [I_CV_PPQN_OUT] = "PPQN",
     [I_REBOOT] = "Reboot",
     [I_TOUCH_CALIB] = "Touch Calib",
     [I_CV_CALIB] = "CV Calib",
@@ -363,10 +364,10 @@ void edit_settings_from_encoder(s8 enc_diff) {
 static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	switch (item) {
 	case I_ACCEL_SENS:
-		sprintf(val_buf, "%d", 2 * value - 200);
+		sprintf(val_buf, "%d%%", 2 * value - 200);
 		return val_buf;
 	case I_ENC_DIR:
-		return value ? "Rvrse" : "Normal";
+		return value ? "Invert" : "Normal";
 	case I_REFERENCE_PITCH:
 		sprintf(val_buf, "%dHz", 430 + value);
 		return val_buf;
@@ -423,7 +424,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_CV_QUANT:
 		return value == CVQ_OFF ? "Off" : value == CVQ_CHROMATIC ? "Chrom" : "Scale";
 	case I_CV_GATE_IN_IS_PRESSURE:
-		return value ? "Pres" : "Gate";
+		return value ? "Press" : "Gate";
 	// ppqns
 	case I_CV_PPQN_IN:
 	case I_CV_PPQN_OUT:
@@ -447,8 +448,15 @@ void draw_settings_menu(void) {
 	vline(OLED_WIDTH / 2, 0, 9, 1);
 	vline(OLED_WIDTH - 1, 0, 9, 1);
 	hline(OLED_WIDTH / 2, 9, OLED_WIDTH, 1);
-	// section
-	draw_str(1, 0, F_16_BOLD, section_name[display_section]);
+	// section name
+	switch (cur_item) {
+	case I_CV_PPQN_OUT:
+		draw_str(1, 0, F_16_BOLD, "CV out");
+		break;
+	default:
+		draw_str(1, 0, F_16_BOLD, section_name[display_section]);
+		break;
+	}
 	Font font = F_16;
 	// actions
 	if (display_section == S_ACTIONS) {
@@ -460,72 +468,80 @@ void draw_settings_menu(void) {
 		return;
 	}
 	// selection arrow
-	draw_str(value_selected ? 110 : 0, 16, font, value_selected ? I_LEFT : I_RIGHT);
+	const u8 arrow_width = 15;
+	draw_str(value_selected ? 113 : 0, 15, font, value_selected ? I_LEFT : I_RIGHT);
 	// name
-	draw_str(value_selected ? 0 : 18, 17, font, item_name[cur_item]);
+	draw_str(2 + (value_selected ? 0 : arrow_width), 16, font, item_name[cur_item]);
+
+	u8 right_offset = OLED_WIDTH - 1 - (value_selected ? arrow_width : 0);
+	switch (cur_item) {
 	// icons
-	u8 arrow_offset = OLED_WIDTH - (value_selected ? 21 : 2);
-	if (cur_item == I_MIDI_IN_FILTER) {
-		u8 x = arrow_offset - 48;
-		draw_str(x, 17, font, sys_params.midi_rcv_clock ? I_TEMPO : I_CROSS);
-		draw_str(x + 16, 17, font, sys_params.midi_rcv_transport ? I_PLAY : I_CROSS);
-		draw_str(x + 32, 17, font, sys_params.midi_rcv_param_ccs ? I_KNOB : I_CROSS);
+	case I_MIDI_IN_FILTER: {
+		u8 x = right_offset - 48;
+		draw_str(x, 16, font, sys_params.midi_rcv_clock ? I_TEMPO : I_CROSS);
+		draw_str(x + 16, 16, font, sys_params.midi_rcv_transport ? I_PLAY : I_CROSS);
+		draw_str(x + 32, 16, font, sys_params.midi_rcv_param_ccs ? I_KNOB : I_CROSS);
 		if (sys_params.midi_rcv_param_ccs == RP_CC14) {
 			x += 35;
-			fill_rectangle(x, 17, x + 9, 32);
-			inverted_rectangle(x, 17, x + 9, 32);
+			fill_rectangle(x, 16, x + 9, 32);
+			inverted_rectangle(x, 16, x + 9, 32);
 			x++;
-			draw_str(x, 18, F_8, "C");
-			draw_str(x, 25, F_8, "1");
+			draw_str(x, 17, F_8, "C");
+			draw_str(x, 24, F_8, "1");
 			x += 4;
-			draw_str(x, 18, F_8, "C");
-			draw_str(x, 25, F_8, "4");
+			draw_str(x, 17, F_8, "C");
+			draw_str(x, 24, F_8, "4");
 		}
+		break;
 	}
-	else if (cur_item == I_MIDI_OUT_FILTER_1) {
-		u8 x = arrow_offset - 48;
-		draw_str(x, 17, font, sys_params.midi_send_clock ? I_TEMPO : I_CROSS);
+	case I_MIDI_OUT_FILTER_1: {
+		u8 x = right_offset - 48;
+		draw_str(x, 16, font, sys_params.midi_send_clock ? I_TEMPO : I_CROSS);
 		x += 16;
-		draw_str(x, 17, font, sys_params.midi_send_transport ? I_PLAY : I_CROSS);
+		draw_str(x, 16, font, sys_params.midi_send_transport ? I_PLAY : I_CROSS);
 		x += 16;
-		draw_str(x, 17, font, sys_params.midi_send_param_ccs ? I_KNOB : I_CROSS);
+		draw_str(x, 16, font, sys_params.midi_send_param_ccs ? I_KNOB : I_CROSS);
 		if (sys_params.midi_send_param_ccs == 2) {
 			x += 2;
-			fill_rectangle(x, 17, x + 11, 32);
-			inverted_rectangle(x, 17, x + 11, 32);
+			fill_rectangle(x, 16, x + 11, 32);
+			inverted_rectangle(x, 16, x + 11, 32);
 			x++;
-			draw_str(x, 18, F_8, "N");
-			draw_str(x, 25, F_8, "P");
+			draw_str(x, 17, F_8, "N");
+			draw_str(x, 24, F_8, "P");
 			x += 5;
-			draw_str(x, 18, F_8, "R");
-			draw_str(x, 25, F_8, "N");
+			draw_str(x, 17, F_8, "R");
+			draw_str(x, 24, F_8, "N");
 		}
+		break;
 	}
-	else if (cur_item == I_MIDI_OUT_FILTER_2) {
-		u8 x = arrow_offset - 48;
-		draw_str(x, 17, font, sys_params.mpe_out_fine_tuning ? I_FORK : I_CROSS);
+	case I_MIDI_OUT_FILTER_2: {
+		u8 x = right_offset - 48;
+		draw_str(x, 16, font, sys_params.mpe_out_fine_tuning ? I_FORK : I_CROSS);
 		if (sys_params.mpe_out_fine_tuning) {
-			u8 y = 21;
+			u8 y = 20;
 			fill_rectangle(x, y + 1, x + 16, y + 7);
 			inverted_rectangle(x, y + 1, x + 16, y + 7);
 			draw_str(x, y, F_8, "mpe");
 		}
 		x += 16;
-		draw_str(x, 17, font, sys_params.midi_send_lfo_cc ? I_ALFO : I_CROSS);
+		draw_str(x, 16, font, sys_params.midi_send_lfo_cc ? I_ALFO : I_CROSS);
 		x += 16;
 		if (sys_params.midi_out_yz_control) {
-			draw_str(x + 1, 18, F_12, "Y");
-			draw_str(x + 8, 22, F_12, "Z");
+			draw_str(x + 1, 17, F_12, "Y");
+			draw_str(x + 8, 21, F_12, "Z");
 		}
 		else
-			draw_str(x, 17, font, I_CROSS);
+			draw_str(x, 16, font, I_CROSS);
+		break;
 	}
 	// value
-	else {
+	default: {
 		char val_buf[16];
 		const char* val_str = get_param_str(cur_item, cur_value, val_buf);
 		u8 width = str_width(font, val_str);
-		draw_str(arrow_offset - width, 17, font, val_str);
+		draw_str(right_offset - width, 16, font, val_str);
+		break;
+	}
 	}
 }
 
