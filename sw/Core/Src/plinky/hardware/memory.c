@@ -429,15 +429,41 @@ void init_memory(void) {
 		set_sys_param(SYS_VOLUME, clampi(((s8)sys_params.volume_lsb + 45) << 4, 0, RAW_SIZE));
 		// fall through for further updating
 	case 16:
-		// added system settings
+		// updated at LPE v0.5.0
+
+		// added system settings, set defaults
 		sys_params.cv_in_ppqn = 2;            // 4 ppqn
 		sys_params.cv_out_ppqn = 2;           // 4 ppqn
 		sys_params.midi_in_clock_mult = 1;    // x1
 		sys_params.midi_in_vel_balance = 64;  // 50/50
 		sys_params.midi_out_vel_balance = 64; // 50/50
 		sys_params.midi_in_pres_type = MP_CHANNEL_PRESSURE;
-		sys_params.midi_out_pres_type = MP_CHANNEL_PRESSURE;
-		sys_params.midi_out_yz_control = 0; // off
+		sys_params.midi_out_pres_type = MP_POLY_AFTERTOUCH;
+		sys_params.midi_out_yz_control = 0;        // off
+		sys_params.midi_channel_bend_range_in = 1; // 2 semis
+		sys_params.mpe_in = false;                 // off
+		sys_params.mpe_out = false;                // off
+		sys_params.midi_string_bend_range_in = 6;  // 48 semis
+		sys_params.midi_string_bend_range_out = 6; // 48 semis
+		sys_params.mpe_chans = 7;                  // 1 channel/string, zero-based
+		sys_params.midi_soft_thru = false;         // off
+		sys_params.local_ctrl_off = false;         // false means local control on
+		sys_params.midi_rcv_clock = true;          // on
+		sys_params.midi_rcv_transport = true;      // on
+		sys_params.midi_rcv_param_ccs = RP_CC;     // ccs
+		sys_params.midi_send_clock = true;         // on
+		sys_params.midi_send_transport = true;     // on
+		sys_params.midi_send_param_ccs = SP_CC;    // ccs
+		sys_params.midi_send_lfo_cc = false;       // off
+		sys_params.mpe_zone = 0;                   // lower
+		sys_params.midi_in_scale_quant = false;    // off
+		sys_params.midi_trs_out_off = false;       // false means trs out on
+		sys_params.midi_tuning = false;            // off
+		sys_params.edit_poly_params = false;       // off
+		sys_params.mpe_out_fine_tuning = false;    // off
+		sys_params.layout_global = false;          // off
+		sys_params.cv_gate_in_is_pressure = false; // off
+		sys_params.reference_pitch = 10;           // 440Hz
 
 		// finalize
 		sys_params.version = LPE_SYS_PARAMS_VERSION;
