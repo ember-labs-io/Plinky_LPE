@@ -19,7 +19,8 @@ typedef enum Section {
 
 typedef enum Item {
 	// system
-	I_ACCEL_SENS = S_SYSTEM * 8,
+	I_LAYOUT_GLOBAL = S_SYSTEM * 8,
+	I_ACCEL_SENS,
 	I_ENC_DIR,
 	I_REFERENCE_PITCH,
 	I_MIDI_TUNING,
@@ -68,6 +69,7 @@ typedef enum Item {
 } Item;
 
 const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
+    [I_LAYOUT_GLOBAL] = SYS_LAYOUT_GLOBAL,
     [I_ACCEL_SENS] = SYS_ACCEL_SENS,
     [I_ENC_DIR] = SYS_REVERSE_ENCODER,
     [I_REFERENCE_PITCH] = SYS_REFERENCE_PITCH,
@@ -105,6 +107,7 @@ const static char* section_name[NUM_SYS_PARAM_SECTS] = {
 };
 
 const static char* item_name[NUM_MENU_ITEMS] = {
+    [I_LAYOUT_GLOBAL] = "Layout",
     [I_ACCEL_SENS] = "Acc Sens",
     [I_ENC_DIR] = "Enc dir",
     [I_REFERENCE_PITCH] = "Ref A4 =",
@@ -363,6 +366,8 @@ void edit_settings_from_encoder(s8 enc_diff) {
 
 static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	switch (item) {
+	case I_LAYOUT_GLOBAL:
+		return value ? "Global" : "Preset";
 	case I_ACCEL_SENS:
 		sprintf(val_buf, "%d%%", 2 * value - 200);
 		return val_buf;

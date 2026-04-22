@@ -138,6 +138,10 @@ static inline void DebugLog(const char* fmt, ...) {
 	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
 	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT))
 
+#define IS_GLOBAL_LAYOUT(param_id)                                                                                     \
+	(sys_params.layout_global                                                                                          \
+	 && ((param_id) == P_ROOT || (param_id) == P_OCT || (param_id) == P_SCALE || (param_id) == P_COLUMN))
+
 static inline float deadzone(float f, float zone) {
 	if (f < zone && f > -zone)
 		return 0.f;

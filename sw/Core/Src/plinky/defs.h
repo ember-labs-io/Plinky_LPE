@@ -109,6 +109,14 @@ static u8 const bend_ranges[NUM_BEND_RANGES] = {1, 2, 7, 12, 14, 24, 48, 96};
 
 // MODULE ENUMS
 
+typedef enum LayoutParam {
+	LP_ROOT,
+	LP_OCT,
+	LP_SCALE,
+	LP_COLUMN,
+	NUM_LAYOUT_PARAMS,
+} LayoutParam;
+
 typedef enum TouchType {
 	PHYS_TOUCH,
 	MIDI_TOUCH,
@@ -268,6 +276,7 @@ typedef enum SysParam {
 	SYS_REFERENCE_PITCH,
 	SYS_CV_GATE_IN_IS_PRESSURE,
 	SYS_EDIT_POLY_PARAMS,
+	SYS_LAYOUT_GLOBAL,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -594,6 +603,10 @@ const static PolyParam poly_param_from_param[P_PLAY_SPD_JIT + 1] = {
     [P_SCRUB_JIT] = PP_SCRUB_JIT,   [P_GR_SIZE_JIT] = PP_GR_SIZE_JIT,   [P_PLAY_SPD_JIT] = PP_PLAY_SPD_JIT,    
 };
 
+const static LayoutParam layout_param_from_param[P_ROOT + 1] = {
+	[P_ROOT] = LP_ROOT, [P_OCT] = LP_OCT, [P_SCALE] = LP_SCALE, [P_COLUMN] = LP_COLUMN,
+};
+
 // clang-format on
 
 // == GRAPHICS == //
@@ -899,13 +912,13 @@ typedef struct SysParams {
 	bool midi_tuning : 1;
 	bool edit_poly_params : 1; // show eight edit strips for poly params
 	bool mpe_out_fine_tuning : 1;
-	u8 pad1 : 1;
+	bool layout_global : 1;
 	// 13 bytes
 	u8 cv_gate_in_is_pressure : 1;
 	u8 reference_pitch : 4;
-	u8 pad2 : 3;
+	u8 pad1 : 3;
 	// 14 bytes
-	u8 pad3;
+	u8 pad2;
 	// 15 bytes
 	u8 version;
 	// 16 bytes
@@ -951,6 +964,7 @@ typedef struct GlobalData {
 	u16 midi_tuning_pitch[NUM_NOTES];
 	u32 midi_tuning_active[(NUM_NOTES + 31) / 32];
 	char midi_tuning_name[17];
+	s16 layout_params[NUM_LAYOUT_PARAMS][NUM_STRINGS];
 	u8 padding[8];
 } GlobalData;
 static_assert((sizeof(GlobalData) & 15) == 0, "?");

@@ -138,6 +138,10 @@ static u16 get_edit_poly_params(void) {
 	return sys_params.edit_poly_params;
 }
 
+static u16 get_layout_global(void) {
+	return sys_params.layout_global;
+}
+
 typedef u16 (*SysParamGetter)(void);
 
 const SysParamGetter sys_param_getters[] = {
@@ -175,6 +179,7 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_REFERENCE_PITCH] = get_reference_pitch,
     [SYS_CV_GATE_IN_IS_PRESSURE] = get_cv_gate_in_is_pressure,
     [SYS_EDIT_POLY_PARAMS] = get_edit_poly_params,
+    [SYS_LAYOUT_GLOBAL] = get_layout_global,
 };
 
 // sys param setters
@@ -321,6 +326,10 @@ static void set_edit_poly_params(u16 value) {
 	sys_params.edit_poly_params = value;
 }
 
+static void set_layout_global(u16 value) {
+	sys_params.layout_global = value;
+}
+
 typedef void (*SysParamSetter)(u16);
 
 const SysParamSetter sys_param_setters[] = {
@@ -358,6 +367,7 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_REFERENCE_PITCH] = set_reference_pitch,
     [SYS_CV_GATE_IN_IS_PRESSURE] = set_cv_gate_in_is_pressure,
     [SYS_EDIT_POLY_PARAMS] = set_edit_poly_params,
+    [SYS_LAYOUT_GLOBAL] = set_layout_global,
 };
 
 const u8 sys_param_ranges[] = {
@@ -394,4 +404,5 @@ const u8 sys_param_ranges[] = {
     [SYS_MIDI_TUNING] = 2,
     [SYS_REFERENCE_PITCH] = 16,
     [SYS_CV_GATE_IN_IS_PRESSURE] = 2,
+    [SYS_LAYOUT_GLOBAL] = 2,
 };
