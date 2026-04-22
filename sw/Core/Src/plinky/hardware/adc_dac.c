@@ -168,16 +168,15 @@ void adc_dac_tick(void) {
 
 	// save touch data
 	if (cv_touch.touched) {
-		// quantize pitch
-		if (sys_params.cv_quant == CVQ_CHROMATIC)
-			cv_pitch = ROUND_PITCH_TO_SEMIS(cv_pitch);
-		else if (sys_params.cv_quant == CVQ_SCALE)
-			cv_pitch = quant_pitch_to_scale(cv_pitch, cv_touch.string_id);
 		// recalculate note number and string position
 		if (new_touch || !sys_params.mpe_out) {
-			cv_touch.note_number = PITCH_TO_NOTE_NR(cv_pitch);
-			cv_touch.position = string_position_from_pitch(cv_touch.string_id, cv_pitch);
+			u16 note_pitch = sys_params.cv_quant == CVQ_SCALE       ? quant_pitch_to_scale(cv_pitch, cv_touch.string_id)
+			                 : sys_params.cv_quant == CVQ_CHROMATIC ? ROUND_PITCH_TO_SEMIS(cv_pitch)
+			                                                        : cv_pitch;
+			cv_touch.note_number = PITCH_TO_NOTE_NR(note_pitch);
+			cv_touch.position = string_position_from_pitch(cv_touch.string_id, note_pitch);
 		}
+		// save exact pitch and pressure
 		cv_touch.note_offset_pitch = cv_pitch - NOTE_NR_TO_PITCH(cv_touch.note_number);
 		cv_touch.pressure = (sys_params.cv_gate_in_is_pressure ? adc_get_smooth(ADC_S_GATE) : 1) * TOUCH_FULL_PRES;
 	}

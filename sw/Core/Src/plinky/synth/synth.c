@@ -257,7 +257,7 @@ static u16 pitch_at_step(u8 step, Scale scale, u8 steps_in_scale) {
 	return OCTS_TO_PITCH(step / steps_in_scale) + scale_table[scale][step % steps_in_scale];
 }
 
-u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
+static u16 quant_pitch_to_scale_with_step(u16 pitch, u8 string_id, u8* out_step) {
 	Scale scale = string_scale(string_id);
 	u8 scale_steps = steps_in_scale[scale];
 
@@ -299,8 +299,16 @@ u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 		step++;
 	}
 
+	// return found step
+	*out_step = step;
+
 	// adjust back for root note
 	return pitch_at_step(step, scale, scale_steps) - root_pitch_offset;
+}
+
+u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
+	u8 dummy;
+	return quant_pitch_to_scale_with_step(pitch, string_id, &dummy);
 }
 
 static u16 string_center_pitch(u8 string_id) {
@@ -1132,7 +1140,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// precalc some parameters
 		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
 		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
-		s32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
+		u32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
 		TouchType touch_type = s_string->touch_type;
 
 		// the pitch of the base note
@@ -1145,26 +1153,85 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// these only get used by phys touch
 		Touch* s_touch_sort = &touch_sorted[voice_id][2]; // we use pitches 2-5, discarding extreme values
 		u16 root_pitch;
-		Scale scale = S_MAJOR;
-		u8 scale_steps = 0;
 		s16 string_step_offset = 0;
 		s32 arp_oct_pitch = 0;
 
-		if (touch_type == PHYS_TOUCH) {
+		// for phys and cv
+		Scale scale = string_scale(voice_id);
+		u8 scale_steps = steps_in_scale[scale];
+
+		switch (touch_type) {
+		case PHYS_TOUCH:
 			root_pitch = string_root_pitch(voice_id);
-			scale = string_scale(voice_id);
-			scale_steps = steps_in_scale[scale];
 			string_step_offset = string_start_step(voice_id) + param_index_poly(PP_DEGREE, voice_id);
 			arp_oct_pitch = OCTS_TO_PITCH(arp_oct_offset);
-		}
-		else
+			break;
+		case MIDI_TOUCH:
 			note_pitch = pitch_at_note_with_midi_tuning(s_string->note_number);
+			break;
+		case CV_TOUCH:
+			// microtune at 100% effectively turns off all quantization
+			CVQuantType cv_quant = micro_param == 65536 ? CVQ_OFF : sys_params.cv_quant;
+			u16 start_note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
+			switch (cv_quant) {
+			case CVQ_OFF:
+				note_pitch = start_note_pitch;
+				s_string->pitchbend_pitch = note_offset_pitch;
+				break;
+			case CVQ_CHROMATIC:
+			case CVQ_SCALE:
+				u16 cv_pitch = start_note_pitch + s_string->note_offset_pitch;
+				u8 note_step = 0;
+				note_pitch = cv_quant == CVQ_SCALE ? quant_pitch_to_scale_with_step(cv_pitch, voice_id, &note_step)
+				                                   : ROUND_PITCH_TO_SEMIS(cv_pitch);
+				bool quantized_up = note_pitch > cv_pitch;
+				u16 next_step_dist;
+
+				// To make cv pitch input work smoothly with midi tuning, we find the closest (quantized) note numbers
+				// and calculate how much cv_pitch is offset from the closest as a percentage. This becomes the pitch
+				// offset factor. Then we apply that factor to the actual pitches (either linear or midi tuning) to
+				// smoothly interpolate between the pitches that are actually heard
+
+				// how far are we away from the closest note?
+				u16 quant_offset_dist = abs(cv_pitch - note_pitch);
+				// how far is the closest note to the next-closest note?
+				if (cv_quant == CVQ_SCALE) {
+					u8 step_in_scale = note_step % scale_steps;
+					u8 next_step_in_scale = (step_in_scale + (quantized_up ? -1 : 1) + scale_steps) % scale_steps;
+					next_step_dist =
+					    (scale_table[scale][next_step_in_scale] - scale_table[scale][step_in_scale] + PITCH_PER_OCT)
+					    % PITCH_PER_OCT;
+				}
+				else
+					next_step_dist = PITCH_PER_SEMI;
+				// how far away are we as a u16 percentage?
+				u16 pitch_offset_factor = UINT16_MAX * quant_offset_dist / next_step_dist;
+
+				// find that same relative distance between the actual output pitches, also attenuate by micro_param
+				if (pitch_offset_factor) {
+					u8 note_number = PITCH_TO_NOTE_NR(note_pitch);
+					u8 next_note_number = note_number + PITCH_TO_SEMIS(next_step_dist) * (quantized_up ? -1 : 1);
+					u16 output_range = abs(pitch_at_note_with_midi_tuning(next_note_number)
+					                       - pitch_at_note_with_midi_tuning(note_number));
+					s_string->note_offset_pitch =
+					    ((u64)pitch_offset_factor * output_range * micro_param >> 32) * (quantized_up ? -1 : 1);
+				}
+
+				// pitchbend derived from new exact pitch and start note
+				s_string->pitchbend_pitch = note_pitch + s_string->note_offset_pitch - start_note_pitch;
+				break;
+			default:
+				break;
+			}
+			break;
+		}
 
 		// loop through oscillators
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
 			u16 osc_pitch = 0;
 
-			if (touch_type == PHYS_TOUCH) {
+			switch (touch_type) {
+			case PHYS_TOUCH: {
 				u16 position = s_touch_sort++->pos;
 				// steps from string + steps from pad
 				s16 pad_step = clampi(string_step_offset + (7 - (position >> 8)), 0, MAX_VALID_SCALE_STEP(scale));
@@ -1187,10 +1254,17 @@ static void run_voice(u8 voice_id, u32* dst) {
 					if (s_string->env_trigger)
 						write_strings[voice_id].note_number = note_number;
 				}
+				break;
 			}
-			// external touch: saved offset pitch + generate pitch spread
-			else
+			// midi touch: saved offset pitch + generate pitch spread
+			case MIDI_TOUCH:
 				note_offset_pitch = s_string->note_offset_pitch + ((osc_id - 2) * micro_param >> 10);
+				break;
+			// cv touch: saved offset pitch + fixed width pitch spread
+			case CV_TOUCH:
+				note_offset_pitch = s_string->note_offset_pitch + ((osc_id - 2) * 8192 >> 10);
+				break;
+			}
 
 			// save combined pitch, used for calculating pitchbend below
 			osc_pitch = note_pitch + note_offset_pitch;
@@ -1214,12 +1288,9 @@ static void run_voice(u8 voice_id, u32* dst) {
 			high_string_note = s_string->note_number;
 		}
 
-		// save outgoing pitchbend
-		s_string->pitchbend_pitch = touch_type == PHYS_TOUCH
-		                                // for physical touches, pitchbend is derived from the average oscillator pitch
-		                                ? clampi(pitch_4x >> 2, 0, MAX_PITCH) - SEMIS_TO_PITCH(s_string->note_number)
-		                                // for external touches, the offset pitch is precalculated in the module
-		                                : s_string->note_offset_pitch;
+		// for physical touches, pitchbend is derived from the average oscillator pitch
+		if (touch_type == PHYS_TOUCH)
+			s_string->pitchbend_pitch = clampi(pitch_4x >> 2, 0, MAX_PITCH) - SEMIS_TO_PITCH(s_string->note_number);
 	}
 
 	// == UPDATE ENVELOPE == //
