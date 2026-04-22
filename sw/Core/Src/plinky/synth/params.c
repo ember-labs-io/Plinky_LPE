@@ -110,12 +110,6 @@ static void select_param(Param param_id) {
 	selected_mod_src = SRC_BASE;
 }
 
-static void align_poly_param(PolyParam pp_id) {
-	s16* poly_param = cur_preset.poly_params[pp_id];
-	poly_param[6] = poly_param[5] = poly_param[4] = poly_param[3] = poly_param[2] = poly_param[1] = poly_param[0] =
-	    cur_preset.params[param_from_poly_param[pp_id]][SRC_BASE];
-}
-
 const Preset* init_params_ptr(void) {
 	return &init_params;
 }
@@ -505,7 +499,10 @@ s32 param_val_poly(PolyParam pp_id, u8 string_id) {
 	s16* param = cur_preset.params[param_id];
 
 	// add 16 precision bits to the raw value
-	s32 mod_val = (string_id > 0 ? cur_preset.poly_params[pp_id][string_id - 1] : param[SRC_BASE]) << 16;
+	s32 mod_val = (IS_GLOBAL_LAYOUT(param_id) ? global_data.layout_params[layout_param_from_param[param_id]][string_id]
+	               : string_id > 0            ? cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1]
+	                                          : cur_preset.params[param_id][SRC_BASE])
+	              << 16;
 
 	// apply envelope 2 modulation
 	mod_val += envelope2[string_id].level16 * param[SRC_ENV2];
@@ -599,39 +596,49 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 		set_sys_param(SYS_VOLUME, data);
 		return;
 	}
+
+	bool using_global_layout = IS_GLOBAL_LAYOUT(param_id) && mod_src == SRC_BASE;
+	s16* target = using_global_layout ? &global_data.layout_params[layout_param_from_param[param_id]][0]
+	                                  : &cur_preset.params[param_id][mod_src];
 	// don't save if no change
-	if (data == cur_preset.params[param_id][mod_src])
+	if (data == *target)
 		return;
-	// save
-	cur_preset.params[param_id][mod_src] = data;
-	// update poly param to new value
-	if (PARAM_IS_POLY(param_id))
-		align_poly_param(poly_param_from_param[param_id]);
+	// save base value
+	*target = data;
+	// save to all strings
+	if (PARAM_IS_POLY(param_id) && mod_src == SRC_BASE) {
+		if (using_global_layout) {
+			s16* val = global_data.layout_params[layout_param_from_param[param_id]];
+			val[7] = val[6] = val[5] = val[4] = val[3] = val[2] = val[1] = val[0];
+		}
+		else {
+			s16* val = cur_preset.poly_params[poly_param_from_param[param_id]];
+			val[6] = val[5] = val[4] = val[3] = val[2] = val[1] = val[0] = cur_preset.params[param_id][SRC_BASE];
+		}
+	}
 	// send to midi
 	if ((sys_params.midi_send_param_ccs == 1 && mod_src == SRC_BASE) || sys_params.midi_send_param_ccs == 2)
 		midi_send_param(param_id);
-	log_ram_edit(SEG_PRESET);
+	log_ram_edit(using_global_layout ? SEG_GLOBAL_DATA : SEG_PRESET);
 }
 
 void save_poly_param_raw(Param param_id, u8 string_id, s16 data) {
-	if (string_id == 0) {
-		// don't save if no change
-		if (data == cur_preset.params[param_id][SRC_BASE])
-			return;
-		// save
-		cur_preset.params[param_id][SRC_BASE] = data;
-	}
-	else {
-		// don't save if no change
-		if (data == cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1])
-			return;
-		// save
-		cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1] = data;
-	}
+	bool using_global_layout = IS_GLOBAL_LAYOUT(param_id);
+	s16* target = using_global_layout ? &global_data.layout_params[layout_param_from_param[param_id]][string_id]
+	              : string_id > 0     ? &cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1]
+	                                  : &cur_preset.params[param_id][SRC_BASE];
+
+	// don't save if no change
+	if (data == *target)
+		return;
+
+	// save
+	*target = data;
+
 	// send to midi
 	if (sys_params.midi_send_param_ccs)
 		midi_send_param(param_id);
-	log_ram_edit(SEG_PRESET);
+	log_ram_edit(using_global_layout ? SEG_GLOBAL_DATA : SEG_PRESET);
 }
 
 void save_param_index(Param param_id, s8 index) {
@@ -787,7 +794,10 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		pad_actions_keep_edit_mode_open();
 
 	bool edit_poly = sys_params.edit_poly_params && selected_mod_src == SRC_BASE && PARAM_IS_POLY(param_id);
-	s16 raw = edit_poly && selected_edit_strip > 0
+
+	s16 raw = IS_GLOBAL_LAYOUT(param_id) && selected_mod_src == SRC_BASE
+	              ? global_data.layout_params[layout_param_from_param[param_id]][selected_edit_strip]
+	          : edit_poly && selected_edit_strip > 0
 	              ? cur_preset.poly_params[poly_param_from_param[param_id]][selected_edit_strip - 1]
 	              : PARAM_VAL_RAW(param_id, selected_mod_src);
 	u8 range = PARAM_RANGE(param_id);
@@ -862,7 +872,9 @@ void params_toggle_default_value(void) {
 		param_hash = new_hash;
 	}
 
-	s16 cur_val = edit_poly && selected_edit_strip > 0
+	s16 cur_val = IS_GLOBAL_LAYOUT(param_id) && selected_mod_src == SRC_BASE
+	                  ? global_data.layout_params[layout_param_from_param[param_id]][selected_edit_strip]
+	              : edit_poly && selected_edit_strip > 0
 	                  ? cur_preset.poly_params[poly_param_from_param[param_id]][selected_edit_strip - 1]
 	                  : PARAM_VAL_RAW(param_id, selected_mod_src);
 	s16 init_val = selected_mod_src ? 0 : init_params.params[param_id][0];
@@ -1218,8 +1230,11 @@ void draw_cur_param(void) {
 	u8 width = 0;
 	u8 x_center = 0;
 	u8 x;
-	bool poly_editing = sys_params.edit_poly_params && selected_mod_src == SRC_BASE && PARAM_IS_POLY(draw_param);
-	s16 raw = poly_editing && selected_edit_strip > 0
+
+	bool edit_poly = sys_params.edit_poly_params && draw_src == SRC_BASE && PARAM_IS_POLY(draw_param);
+	s16 raw = IS_GLOBAL_LAYOUT(draw_param) && draw_src == SRC_BASE
+	              ? global_data.layout_params[layout_param_from_param[draw_param]][selected_edit_strip]
+	          : edit_poly && selected_edit_strip > 0
 	              ? cur_preset.poly_params[poly_param_from_param[draw_param]][selected_edit_strip - 1]
 	              : PARAM_VAL_RAW(draw_param, draw_src);
 
@@ -1284,9 +1299,9 @@ void draw_cur_param(void) {
 	// draw section icon
 	draw_str(0, sect_str[0] == I_NOTES[0] ? 1 : 0, F_12, (char[]){sect_str[0], '\0'});
 	// draw section name
-	u8 poly_id_x = draw_str(text_x, 3, F_12, sect_str + 1) + (poly_editing && draw_param == P_SCALE ? 0 : 1);
+	u8 poly_id_x = draw_str(text_x, 3, F_12, sect_str + 1) + (edit_poly && draw_param == P_SCALE ? 0 : 1);
 	// draw poly param string number
-	if (poly_editing) {
+	if (edit_poly) {
 		fdraw_str(poly_id_x
 		              + (selected_edit_strip == 0 || selected_edit_strip == 2 || selected_edit_strip == 3 ? 2 : 1),
 		          1, F_8, "%u", selected_edit_strip + 1);
@@ -1542,14 +1557,16 @@ u8 value_editor_column_led(u8 x, u8 y) {
 		return 0;
 
 	// non-zero strip when not poly editing
-	bool poly_editing = editing_poly_param();
-	if (x > 0 && !poly_editing)
+	bool edit_poly = editing_poly_param();
+	if (x > 0 && !edit_poly)
 		return 0;
 
-	bool selected = !poly_editing || x == selected_edit_strip;
+	bool selected = !edit_poly || x == selected_edit_strip;
 	bool is_signed = PARAM_SIGNED(param_snap) || src_snap != SRC_BASE;
-	s16 raw =
-	    x == 0 ? PARAM_VAL_RAW(param_snap, src_snap) : cur_preset.poly_params[poly_param_from_param[param_snap]][x - 1];
+	s16 raw = IS_GLOBAL_LAYOUT(param_snap) && src_snap == SRC_BASE
+	              ? global_data.layout_params[layout_param_from_param[param_snap]][x]
+	          : x == 0 ? PARAM_VAL_RAW(param_snap, src_snap)
+	                   : cur_preset.poly_params[poly_param_from_param[param_snap]][x - 1];
 	u8 pad_id = 7 - y;
 	u8 range = src_snap == SRC_BASE ? PARAM_RANGE(param_snap) : 0;
 	float pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
