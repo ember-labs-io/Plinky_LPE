@@ -99,9 +99,15 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 
 #define CC_TO_RAW(cc, param_id) (PARAM_SIGNED(param_id) ? ((cc) * 2049 >> 7) - RAW_SIZE : (cc) * 1025 >> 7)
 
-#define CC14_TO_RAW_BI(cc14) (((cc14) * 2049 >> 14) - RAW_SIZE)
+#define RAW_TO_CC(raw, param_id) clampi((PARAM_SIGNED(param_id) ? ((raw) + RAW_SIZE) >> 1 : (raw)) >> 3, 0, 127)
 
-#define CC14_TO_RAW(cc14, param_id) (PARAM_SIGNED(param_id) ? CC14_TO_RAW_BI(cc14) : (cc14) * 1025 >> 14)
+#define U14_TO_RAW_BI(cc14) (((cc14) * 2049 >> 14) - RAW_SIZE)
+
+#define U14_TO_RAW(cc14, param_id) (PARAM_SIGNED(param_id) ? U14_TO_RAW_BI(cc14) : (cc14) * 1025 >> 14)
+
+#define RAW_TO_U14(value, param_id, mod_src)                                                                           \
+	clampi((mod_src != SRC_BASE || PARAM_SIGNED(param_id) ? (((value) << 4) + (1 << 14)) >> 1 : ((value) << 4)), 0,    \
+	       UINT14_MAX)
 
 #define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
@@ -154,7 +160,7 @@ void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id) {
 		poly = false;
 
 	// scale 14 bit value to raw
-	s16 raw = CC14_TO_RAW(value.value, param_id);
+	s16 raw = U14_TO_RAW(value.value, param_id);
 
 	// save
 	if (poly)
@@ -165,7 +171,7 @@ void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id) {
 
 void set_mod_from_nrpn(Param param_id, u14 value, ModSource mod_src) {
 	if (PARAM_MODDABLE(param_id))
-		save_param_raw(param_id, mod_src, CC14_TO_RAW_BI(value.value));
+		save_param_raw(param_id, mod_src, U14_TO_RAW_BI(value.value));
 }
 
 void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
@@ -195,7 +201,7 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 			cc14->msb = data2;
 		else
 			cc14->lsb = data2;
-		raw = CC14_TO_RAW(cc14->value, param_id);
+		raw = U14_TO_RAW(cc14->value, param_id);
 	}
 	// 7 bit CCs
 	else
@@ -564,19 +570,13 @@ s8 param_index_unmod(Param param_id) {
 }
 
 u8 param_cc_value(Param param_id) {
-	s16 value = PARAM_VAL_RAW(param_id, SRC_BASE);
-	if (PARAM_SIGNED(param_id))
-		value = (value + RAW_SIZE) >> 1;
-	return clampi(value >> 3, 0, 127);
+	return RAW_TO_CC(PARAM_VAL_RAW(param_id, SRC_BASE), param_id);
 }
 
 bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
 	if (range_type[param_id] == R_UNUSED || param_id == P_VOLUME)
 		return false;
-	s16 value = PARAM_VAL_RAW(param_id, mod_src) << 4;
-	if (mod_src != SRC_BASE || PARAM_SIGNED(param_id))
-		value = (value + (1 << 14)) >> 1;
-	nrpn_value->value = clampi(value, 0, UINT14_MAX);
+	nrpn_value->value = RAW_TO_U14(PARAM_VAL_RAW(param_id, mod_src), param_id, mod_src);
 	return true;
 }
 
@@ -589,6 +589,16 @@ u14 param_nrpn_poly_value(Param param_id, u8 string_id) {
 }
 
 // == SAVING == //
+
+static void try_send_param_midi(Param param_id, ModSource mod_src, s16 raw_old, s16 raw_new) {
+	if (
+	    // conditions to send CC
+	    (sys_params.midi_send_param_ccs == SP_CC && RAW_TO_CC(raw_new, param_id) != RAW_TO_CC(raw_old, param_id))
+	    // conditions to send NRPN
+	    || (sys_params.midi_send_param_ccs == SP_NRPN
+	        && RAW_TO_U14(raw_new, param_id, mod_src) != RAW_TO_U14(raw_old, param_id, mod_src)))
+		midi_send_param(param_id);
+}
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	// special case
@@ -603,6 +613,10 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	// don't save if no change
 	if (data == *target)
 		return;
+
+	// send to midi
+	try_send_param_midi(param_id, mod_src, *target, data);
+
 	// save base value
 	*target = data;
 	// save to all strings
@@ -616,9 +630,7 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 			val[6] = val[5] = val[4] = val[3] = val[2] = val[1] = val[0] = cur_preset.params[param_id][SRC_BASE];
 		}
 	}
-	// send to midi
-	if ((sys_params.midi_send_param_ccs == 1 && mod_src == SRC_BASE) || sys_params.midi_send_param_ccs == 2)
-		midi_send_param(param_id);
+
 	log_ram_edit(using_global_layout ? SEG_GLOBAL_DATA : SEG_PRESET);
 }
 
@@ -632,12 +644,12 @@ void save_poly_param_raw(Param param_id, u8 string_id, s16 data) {
 	if (data == *target)
 		return;
 
+	// send to midi
+	try_send_param_midi(param_id, SRC_BASE, *target, data);
+
 	// save
 	*target = data;
 
-	// send to midi
-	if (sys_params.midi_send_param_ccs)
-		midi_send_param(param_id);
 	log_ram_edit(using_global_layout ? SEG_GLOBAL_DATA : SEG_PRESET);
 }
 

@@ -506,7 +506,7 @@ void draw_settings_menu(void) {
 		draw_str(x, 16, font, sys_params.midi_send_transport ? I_PLAY : I_CROSS);
 		x += 16;
 		draw_str(x, 16, font, sys_params.midi_send_param_ccs ? I_KNOB : I_CROSS);
-		if (sys_params.midi_send_param_ccs == 2) {
+		if (sys_params.midi_send_param_ccs == SP_NRPN) {
 			x += 2;
 			fill_rectangle(x, 16, x + 11, 32);
 			inverted_rectangle(x, 16, x + 11, 32);
