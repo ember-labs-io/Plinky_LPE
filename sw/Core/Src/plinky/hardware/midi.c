@@ -39,7 +39,6 @@ typedef struct MidiString {
 	bool sustain_pressed; // CC64 as a bool
 	s32 pitchbend_pitch;  // pitchbend expressed as a 512/semi pitch offset
 	u16 position;         // position on the string, tries to light up pad led at midi pitch
-	bool mpe;             // prevents global midi messages from mapping to mpe strings
 } MidiString;
 
 typedef struct LastSentString {
@@ -53,7 +52,9 @@ typedef struct LastSentString {
 typedef struct MpeZone {
 	u8 num_chans;
 	u8 num_strings;
-	u8 first_chan;
+	u8 pressure;
+	u14 pitchbend;
+	s32 pitchbend_pitch;
 } MpeZone;
 
 #define MIDI_BUFFER_SIZE 16
@@ -83,6 +84,8 @@ static u14 channel_pitchbend;
 static s32 channel_pitchbend_pitch;
 static bool mod_wheel_14bit = false;
 static MpeZone mpe_zone[2] = {};
+static u8 non_mpe_start_string = 0;
+static u8 high_mpe_start_string = NUM_STRINGS;
 static bool receiving_sysex = false;
 static u32 sysex_start_time = 0;
 static bool pushing_preset = false;
@@ -145,6 +148,11 @@ static void update_channel_pitchbend(void) {
 	channel_pitchbend_pitch = (channel_pitchbend.value - UINT14_HALF) * max_channel_bend_pitch_in >> 13;
 }
 
+static void update_zone_pitchbend(u8 zone) {
+	zone %= 2;
+	mpe_zone[zone].pitchbend_pitch = (mpe_zone[zone].pitchbend.value - UINT14_HALF) * max_channel_bend_pitch_in >> 13;
+}
+
 static void update_string_pitchbend(u8 string_id) {
 	midi_string[string_id].pitchbend_pitch =
 	    (midi_string[string_id].pitchbend.value - UINT14_HALF) * max_string_bend_pitch_in >> 13;
@@ -177,10 +185,9 @@ static void reset_controls(u8 string_id) {
 	received_n_rpn_data[string_id][0] = received_n_rpn_data[string_id][1] = false;
 }
 
-static void register_press(u8 string_id, bool mpe, u8 note, u8 velocity, u16 position) {
+static void register_press(u8 string_id, u8 note, u8 velocity, u16 position) {
 	MidiString* m_string = &midi_string[string_id];
 	m_string->state = MS_PRESSED;
-	m_string->mpe = mpe;
 	m_string->note_number = note;
 	m_string->start_velocity = velocity;
 	m_string->position = position;
@@ -195,7 +202,7 @@ static bool send_midi_msg(u8 status, u8 data1, u8 data2) {
 	// header packet
 	midi_code_index_number_t cin = status < MIDI_SYSTEM_EXCLUSIVE ? status >> 4 : MIDI_CIN_1BYTE_DATA;
 	// add midi channel
-	if (status < MIDI_SYSTEM_EXCLUSIVE)
+	if (status < MIDI_SYSTEM_EXCLUSIVE && (status & MIDI_CHANNEL_MASK) == 0)
 		status += midi_out_channel;
 	// usb midi packet
 	u8 buf[4] = {cin, status, data1, data2};
@@ -283,6 +290,8 @@ static void forward_midi_msg(u8 status, u8 data1, u8 data2) {
 void midi_precalc_bends(void) {
 	max_channel_bend_pitch_in = SEMIS_TO_PITCH(bend_ranges[sys_params.midi_channel_bend_range_in]);
 	update_channel_pitchbend();
+	update_zone_pitchbend(0);
+	update_zone_pitchbend(1);
 	max_string_bend_pitch_in = SEMIS_TO_PITCH(bend_ranges[sys_params.midi_string_bend_range_in]);
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		update_string_pitchbend(string_id);
@@ -296,7 +305,13 @@ void midi_clear_all(void) {
 	midi_send_tail = 0;
 	channel_pressure = 0;
 	channel_pitchbend.value = UINT14_HALF;
-	update_channel_pitchbend();
+	channel_pitchbend_pitch = 0;
+	mpe_zone[0].pressure = 0;
+	mpe_zone[0].pitchbend.value = UINT14_HALF;
+	mpe_zone[0].pitchbend_pitch = 0;
+	mpe_zone[1].pressure = 0;
+	mpe_zone[1].pitchbend.value = UINT14_HALF;
+	mpe_zone[1].pitchbend_pitch = 0;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
 		memcpy(&midi_string[string_id], &init_midi_string, sizeof(MidiString));
 		memcpy(&last_sent_string[string_id], &init_last_sent_string, sizeof(LastSentString));
@@ -338,14 +353,23 @@ static bool cue_midi_string_out(void) {
 	static u8 string_id = 0;
 	static MidiOutState msg_state = 0;
 
+	bool using_mpe = sys_params.mpe_out;
+	if (using_mpe) {
+		// early exit for non-mpe strings
+		if (string_id >= non_mpe_start_string && string_id < high_mpe_start_string)
+			return true;
+		midi_out_channel = string_id < non_mpe_start_string
+		                       ? string_id + 1
+		                       : 15 - mpe_zone[1].num_chans + (string_id - high_mpe_start_string);
+	}
+	else
+		midi_out_channel = sys_params.midi_out_chan;
+
 	const Touch* touch = get_touch(string_id, 0);
 	const SynthString* s_string = get_synth_string(string_id);
 	u16 string_pres = clampi(s_string->touch.pres, 0, TOUCH_FULL_PRES);
 	u8 string_vel = maxi(s_string->start_velocity, 1);
 	LastSentString* m_last = &last_sent_string[string_id];
-	bool using_mpe = sys_params.mpe_out;
-
-	midi_out_channel = using_mpe ? string_id + 1 : sys_params.midi_out_chan;
 
 	switch (msg_state) {
 	case MSG_CHAN_PRESSURE: {
@@ -473,21 +497,19 @@ static bool cue_midi_string_out(void) {
 	case MSG_LFOS: {
 		static u8 lfo_id = 0;
 		// only send lfos after the last string
-		if (string_id == 7) {
-			if (sys_params.midi_send_lfo_cc) {
-				// handle all four lfos
-				do {
-					u8 lfo_val = clampi((lfo_cur[lfo_id] + 65536) >> 10, 0, 127);
-					if (abs(lfo_val - last_sent_lfo[lfo_id])) {
-						if (!send_midi_msg(MIDI_CONTROL_CHANGE, 48 + lfo_id, lfo_val))
-							return false;
-						last_sent_lfo[lfo_id] = lfo_val;
-					}
-					lfo_id = (lfo_id + 1) % NUM_LFOS;
+		if (string_id == 7 && sys_params.midi_send_lfo_cc) {
+			// handle all four lfos
+			do {
+				u8 lfo_val = clampi((lfo_cur[lfo_id] + 65536) >> 10, 0, 127);
+				if (abs(lfo_val - last_sent_lfo[lfo_id])) {
+					if (!send_midi_msg(MIDI_CONTROL_CHANGE, 48 + lfo_id, lfo_val))
+						return false;
+					last_sent_lfo[lfo_id] = lfo_val;
 				}
-				// we break when lfo_id rolls over
-				while (lfo_id != 0);
+				lfo_id = (lfo_id + 1) % NUM_LFOS;
 			}
+			// we break when lfo_id rolls over
+			while (lfo_id != 0);
 		}
 
 		// done, set up for next string
@@ -532,16 +554,27 @@ static void cue_midi_out(void) {
 		clocks_to_send--;
 	}
 
-	// send channel pitchbend
+	// send channel pitchbends
 	static u14 last_channel_pitchbend = {};
+	static u14 last_zone_pitchbend[2] = {};
 	if (last_channel_pitchbend.value != channel_pitchbend.value) {
 		midi_out_channel = sys_params.midi_out_chan;
 		if (!send_midi_msg(MIDI_PITCH_BEND, channel_pitchbend.lsb, channel_pitchbend.msb))
 			return;
 		last_channel_pitchbend.value = channel_pitchbend.value;
 	}
-
-	midi_out_channel = sys_params.midi_out_chan;
+	if (last_zone_pitchbend[0].value != mpe_zone[0].pitchbend.value) {
+		midi_out_channel = 0;
+		if (!send_midi_msg(MIDI_PITCH_BEND, mpe_zone[0].pitchbend.lsb, mpe_zone[0].pitchbend.msb))
+			return;
+		last_zone_pitchbend[0].value = mpe_zone[0].pitchbend.value;
+	}
+	if (last_zone_pitchbend[1].value != mpe_zone[1].pitchbend.value) {
+		midi_out_channel = 15;
+		if (!send_midi_msg(MIDI_PITCH_BEND, mpe_zone[1].pitchbend.lsb, mpe_zone[1].pitchbend.msb))
+			return;
+		last_zone_pitchbend[1].value = mpe_zone[1].pitchbend.value;
+	}
 
 	// send values for one param
 	if (sys_params.midi_send_param_ccs) {
@@ -576,29 +609,40 @@ static void cue_midi_out(void) {
 		// we have a param to send
 		if (send_param != NUM_PARAMS) {
 			sending_param_id = send_param;
-			// send param value as cc
-			if (sys_params.midi_send_param_ccs == 1) {
-				if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
-					return;
-			}
-			// send nrpns
-			else {
-				// send param and modulation values
-				for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
-					u14 nrpn_value;
-					get_param_nrpn_value(send_param, mod_src, &nrpn_value);
-					u8 nrpn_msb = mod_src == 0 ? 0 : mod_src + 16;
-					if (!send_nrpn(nrpn_msb, send_param, nrpn_value))
-						return;
-					sending_param_progress++;
+			for (u8 zone = 0; zone < (sys_params.mpe_out ? 2 : 1); zone++) {
+				// set midi channel
+				if (sys_params.mpe_out) {
+					// zone without channels is invalid, early exit
+					if (mpe_zone[zone].num_chans == 0)
+						continue;
+					midi_out_channel = zone == 0 ? 0 : 15;
 				}
-				// send poly param values
-				if (PARAM_IS_POLY(send_param)) {
-					for (u8 i = sending_param_progress; i < 15; i++) {
-						u8 string_id = i - 7; // 1 - 7
-						if (!send_nrpn(string_id + 8, send_param, param_nrpn_poly_value(send_param, string_id)))
+				else
+					midi_out_channel = sys_params.midi_out_chan;
+
+				// send param value as cc
+				if (sys_params.midi_send_param_ccs == 1) {
+					if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
+						return;
+				}
+				// send nrpns
+				else {
+					// send param and modulation values
+					for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
+						u14 nrpn_value;
+						get_param_nrpn_value(send_param, mod_src, &nrpn_value);
+						if (!send_nrpn(mod_src, send_param, nrpn_value))
 							return;
 						sending_param_progress++;
+					}
+					// send poly param values
+					if (PARAM_IS_POLY(send_param)) {
+						for (u8 i = sending_param_progress; i < 16; i++) {
+							u8 string_id = i - 8;
+							if (!send_nrpn(string_id + 8, send_param, param_nrpn_poly_value(send_param, string_id)))
+								return;
+							sending_param_progress++;
+						}
 					}
 				}
 			}
@@ -621,7 +665,7 @@ static void cue_midi_out(void) {
 	} while (buffer_free && midi_send_head == initial_send_head && strings_checked < NUM_STRINGS);
 }
 
-static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
+static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 	typedef enum NRPN_Action {
 		NA_NONE,
 		NA_SET_PARAM,
@@ -648,7 +692,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
 			else if (n_rpn_string == 15) {
 				set_mpe_channels(1, num_chans);
 				// clear strings in mpe zone
-				for (u8 string_id = 8 - mpe_zone[1].num_strings; string_id < 8; string_id++)
+				for (u8 string_id = high_mpe_start_string; string_id < 8; string_id++)
 					reset_controls(string_id);
 			}
 		}
@@ -661,7 +705,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
 	u8 string_id;
 	bool poly;
 	// on a member channel
-	if (mpe) {
+	if (mpe_member) {
 		// poly param set through member channel
 		if (id_msb == 0) {
 			nrpn_action = NA_SET_PARAM;
@@ -680,21 +724,14 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
 			poly = false;
 			string_id = 0;
 		}
-		// 1-7 => invalid
+		// 1-7 => set modulation
 		else if (id_msb < 8)
-			return;
+			nrpn_action = NA_SET_MOD;
 		// 8-15 => poly param set through global channel
 		else if (id_msb < 16) {
 			nrpn_action = NA_SET_PARAM;
 			poly = true;
 			string_id = id_msb - 8;
-		}
-		// 16 => invalid
-		else if (id_msb == 16)
-			return;
-		// 17-23 => set modulation
-		else if (id_msb < 24) {
-			nrpn_action = NA_SET_MOD;
 		}
 		// msb invalid
 		else
@@ -714,12 +751,12 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe) {
 		set_param_from_nrpn(param_id, n_rpn_value[n_rpn_string], poly, string_id);
 		break;
 	case NA_SET_MOD:
-		set_mod_from_nrpn(param_id, n_rpn_value[n_rpn_string], id_msb - 16);
+		set_mod_from_nrpn(param_id, n_rpn_value[n_rpn_string], id_msb);
 		break;
 	}
 }
 
-static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe, u8 string_id) {
+static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe_member, u8 string_id) {
 	u14* n_id = &nrpn_id[string_id];
 	u14* r_id = &rpn_id[string_id];
 	u14* value = &n_rpn_value[string_id];
@@ -731,12 +768,12 @@ static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe, u8 string_id) 
 	case CC_DATA_MSB:
 		value->msb = cc_value;
 		received[0] = true;
-		try_apply_n_rpn(rpn_last, string_id, mpe);
+		try_apply_n_rpn(rpn_last, string_id, mpe_member);
 		return true;
 	case CC_DATA_LSB:
 		value->lsb = cc_value;
 		received[1] = true;
-		try_apply_n_rpn(rpn_last, string_id, mpe);
+		try_apply_n_rpn(rpn_last, string_id, mpe_member);
 		return true;
 	case CC_DATA_INC:
 		// no valid value
@@ -747,7 +784,7 @@ static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe, u8 string_id) 
 			return true;
 		// increase
 		value->value++;
-		try_apply_n_rpn(rpn_last, string_id, mpe);
+		try_apply_n_rpn(rpn_last, string_id, mpe_member);
 		return true;
 	case CC_DATA_DEC:
 		// no valid value
@@ -758,7 +795,7 @@ static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe, u8 string_id) 
 			return true;
 		// decrease
 		value->value--;
-		try_apply_n_rpn(rpn_last, string_id, mpe);
+		try_apply_n_rpn(rpn_last, string_id, mpe_member);
 		return true;
 	case CC_NRPN_LSB:
 		n_id->lsb = cc_value;
@@ -830,8 +867,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	bool mpe_zone_upper;
 	bool using_mpe = false;
 	if (sys_params.mpe_in) {
-		if ((channel == 0 && mpe_zone[0].num_chans > 0) || (channel == 15 && mpe_zone[1].num_chans > 0))
+		if ((channel == 0 && mpe_zone[0].num_chans > 0) || (channel == 15 && mpe_zone[1].num_chans > 0)) {
 			is_manager_msg = true;
+			mpe_zone_upper = channel == 15;
+		}
 		else if (channel > 0 && channel <= mpe_zone[0].num_chans) {
 			is_member_msg = true;
 			mpe_zone_upper = false;
@@ -845,17 +884,14 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 
 	// == unused channels: forward & exit == //
 
-	if (!using_mpe && channel != sys_params.midi_in_chan) {
-		u8 mpe_out = sys_params.mpe_out;
-		u8 mpe_zone = sys_params.mpe_zone;
-		u8 mpe_chans = sys_params.mpe_chans;
+	if ((sys_params.mpe_in && !using_mpe) || (!sys_params.mpe_in && channel != sys_params.midi_in_chan)) {
 		// we forward voice messages not on either our in or out channels
 		if (sys_params.midi_soft_thru
-		    // no mpe
-		    && ((!mpe_out && channel != sys_params.midi_out_chan)
-		        || (mpe_out
-		            // mpe lower zone | mpe upper zone
-		            && ((mpe_zone == 0 && channel > mpe_chans) || (mpe_zone == 1 && channel < 15 - mpe_chans)))))
+		    // no mpe, not on regular in channel
+		    && ((!sys_params.mpe_out && channel != sys_params.midi_out_chan)
+		        // mpe, not in either zone
+		        || (sys_params.mpe_out && (mpe_zone[0].num_chans == 0 || channel > mpe_zone[0].num_chans)
+		            && (mpe_zone[1].num_chans == 0 || channel < 15 - mpe_zone[1].num_chans))))
 			forward_midi_msg(status, data1, data2);
 		return;
 	}
@@ -864,21 +900,68 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	if (type == MIDI_NOTE_ON && data2 == 0)
 		type = MIDI_NOTE_OFF;
 
-	// == central channel == //
+	// == global messages == //
 
 	if (!using_mpe || is_manager_msg) {
 		switch (type) {
 		case MIDI_PROGRAM_CHANGE:
 			if (data1 < NUM_PRESETS)
 				cue_mem_item(data1);
+			return;
+		case MIDI_CONTROL_CHANGE:
+			switch (data1) {
+			case CC_ALL_SOUNDS_OFF:
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+					force_release_string(string_id);
+				clear_synth_strings();
+				delay_clear();
+				reverb_clear();
+				return;
+			case CC_RESET_ALL_CTR:
+				// global
+				channel_pressure = 0;
+				channel_pitchbend.value = UINT14_HALF;
+				channel_pitchbend_pitch = 0;
+				mpe_zone[0].pressure = 0;
+				mpe_zone[0].pitchbend.value = UINT14_HALF;
+				mpe_zone[0].pitchbend_pitch = 0;
+				mpe_zone[1].pressure = 0;
+				mpe_zone[1].pitchbend.value = UINT14_HALF;
+				mpe_zone[1].pitchbend_pitch = 0;
+				// per string
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+					reset_controls(string_id);
+				return;
+			case CC_LOCAL_CONTROL: {
+				bool off = data2 < 64;
+				if (set_sys_param(SYS_LOCAL_CTRL_OFF, off) && off)
+					clear_latch();
+				return;
+			}
+			case CC_ALL_NOTES_OFF:
+				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+					force_release_string(string_id);
+				return;
+			default:
+				break;
+			}
 			break;
+		default:
+			break;
+		}
+	}
+
+	// == non-mpe == //
+
+	if (!using_mpe) {
+		switch (type) {
 		case MIDI_NOTE_OFF: {
 			bool string_found = false;
 			MidiString* m_string;
 			// find string pressing this note
-			for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+			for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++) {
 				m_string = &midi_string[string_id];
-				if (!m_string->mpe && m_string->state == MS_PRESSED && m_string->note_number == data1) {
+				if (m_string->state == MS_PRESSED && m_string->note_number == data1) {
 					string_found = true;
 					break;
 				}
@@ -894,9 +977,9 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			u8 string_id = 255;
 
 			// find string pressing or sustaining this note
-			for (u8 i = 0; i < NUM_STRINGS; ++i) {
+			for (u8 i = non_mpe_start_string; i < high_mpe_start_string; ++i) {
 				MidiString* m_string = &midi_string[i];
-				if (!m_string->mpe && m_string->state != MS_UNPRESSED && m_string->note_number == data1) {
+				if (m_string->state != MS_UNPRESSED && m_string->note_number == data1) {
 					string_id = i;
 					break;
 				}
@@ -905,7 +988,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			// no existing string found => find new string
 			s32 midi_pitch = NOTE_NR_TO_PITCH(data1);
 			if (string_id == 255)
-				string_id = find_string_for_pitch(midi_pitch);
+				string_id = find_string_for_pitch(midi_pitch, non_mpe_start_string, high_mpe_start_string);
 
 			// no space to register a new midi press => exit
 			if (string_id == 255)
@@ -918,13 +1001,13 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			}
 
 			// save results
-			register_press(string_id, false, data1, data2, string_position_from_pitch(string_id, midi_pitch));
+			register_press(string_id, data1, data2, string_position_from_pitch(string_id, midi_pitch));
 		} break;
 		case MIDI_POLY_KEY_PRESSURE:
-			// apply to all non-mpe strings holding this note
-			for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+			// apply to all strings holding this note
+			for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++) {
 				MidiString* m_string = &midi_string[string_id];
-				if (!m_string->mpe && m_string->note_number == data1)
+				if (m_string->note_number == data1)
 					m_string->pressure = data2;
 			}
 			break;
@@ -940,47 +1023,21 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			if (try_handle_n_rpn(data1, data2, false, 0))
 				break;
 			switch (data1) {
-			// update all string mod wheels
+			// update string mod wheels
 			case CC_MOD_WHEEL:
-				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
 					midi_string[string_id].mod_wheel.msb = data2;
 				break;
 			case CC_MOD_WHEEL_LSB:
-				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
 					midi_string[string_id].mod_wheel.lsb = data2;
 				mod_wheel_14bit = true;
 				break;
-			// update all string sustains
+			// update string sustains
 			case CC_SUSTAIN:
 				bool new_sustain = data2 >= 64;
-				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
 					apply_sustain(new_sustain, string_id);
-				break;
-			// clears all strings and clears effects buffers
-			case CC_ALL_SOUNDS_OFF:
-				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-					force_release_string(string_id);
-				clear_synth_strings();
-				delay_clear();
-				reverb_clear();
-				break;
-			case CC_RESET_ALL_CTR:
-				// global
-				channel_pressure = 0;
-				channel_pitchbend.value = UINT14_HALF;
-				update_channel_pitchbend();
-				// per string
-				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-					reset_controls(string_id);
-				break;
-			case CC_LOCAL_CONTROL:
-				bool off = data2 < 64;
-				if (set_sys_param(SYS_LOCAL_CTRL_OFF, off) && off)
-					clear_latch();
-				break;
-			case CC_ALL_NOTES_OFF:
-				for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-					force_release_string(string_id);
 				break;
 			default:
 				// update parameters from ccs
@@ -992,71 +1049,109 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		default:
 			break;
 		}
+		return;
 	}
 
-	// == mpe member channels == //
+	// == mpe manager channel == //
 
-	if (is_member_msg) {
-		MpeZone* zone = &mpe_zone[(u8)mpe_zone_upper];
-		u8 string_id = mpe_zone_upper ? ((channel - zone->first_chan) % zone->num_strings) + (8 - zone->num_strings)
-		                              : (channel - 1) % zone->num_strings;
-
-		MidiString* m_string = &midi_string[string_id];
+	if (is_manager_msg) {
+		u8 zone_start_string = mpe_zone_upper ? high_mpe_start_string : 0;
+		u8 zone_end_string = mpe_zone_upper ? NUM_STRINGS : mpe_zone[0].num_strings;
 		switch (type) {
-		case MIDI_NOTE_OFF:
-			if (m_string->state == MS_PRESSED)
-				m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
-			break;
-		case MIDI_NOTE_ON:
-			// we can't play this note => ignore
-			if (data1 >= NUM_NOTES)
-				break;
-
-			register_press(string_id, true, data1, data2,
-			               string_position_from_pitch(string_id, NOTE_NR_TO_PITCH(data1)));
-			break;
 		case MIDI_PITCH_BEND:
-			m_string->pitchbend.lsb = data1;
-			m_string->pitchbend.msb = data2;
-			update_string_pitchbend(string_id);
+			mpe_zone[(u8)mpe_zone_upper].pitchbend.lsb = data1;
+			mpe_zone[(u8)mpe_zone_upper].pitchbend.msb = data2;
+			update_zone_pitchbend(mpe_zone_upper);
 			break;
 		case MIDI_CHANNEL_PRESSURE:
-			m_string->pressure = data1;
+			mpe_zone[(u8)mpe_zone_upper].pressure = data1;
 			break;
-		case MIDI_CONTROL_CHANGE:
-			if (try_handle_n_rpn(data1, data2, true, string_id))
-				break;
+		case MIDI_CONTROL_CHANGE: {
+			// (n)rpn handling
+			if (try_handle_n_rpn(data1, data2, false, 0))
+				return;
 			switch (data1) {
+			// update string mod wheels
 			case CC_MOD_WHEEL:
-				m_string->mod_wheel.msb = data2;
+				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
+					midi_string[string_id].mod_wheel.msb = data2;
 				break;
 			case CC_MOD_WHEEL_LSB:
-				m_string->mod_wheel.lsb = data2;
+				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
+					midi_string[string_id].mod_wheel.lsb = data2;
 				mod_wheel_14bit = true;
 				break;
+			// update string sustains
 			case CC_SUSTAIN:
-				apply_sustain(data2 >= 64, string_id);
-				break;
-			case CC_ALL_SOUNDS_OFF:
-				force_release_string(string_id);
-				clear_synth_string(string_id);
-				break;
-			case CC_RESET_ALL_CTR:
-				reset_controls(string_id);
-				break;
-			case CC_ALL_NOTES_OFF:
-				force_release_string(string_id);
+				bool new_sustain = data2 >= 64;
+				for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
+					apply_sustain(new_sustain, string_id);
 				break;
 			default:
 				// update parameters from ccs
-				if (sys_params.midi_rcv_param_ccs)
-					params_rcv_cc(data1, data2, true, string_id);
+				if (sys_params.midi_rcv_param_ccs) {
+					for (u8 string_id = zone_start_string; string_id < zone_end_string; string_id++)
+						params_rcv_cc(data1, data2, true, string_id);
+				}
 				break;
 			}
 			break;
+		}
 		default:
 			break;
 		}
+		return;
+	}
+
+	// == mpe member channel == //
+
+	MpeZone* zone = &mpe_zone[(u8)mpe_zone_upper];
+	u8 string_id = mpe_zone_upper ? ((channel - (15 - zone->num_chans)) % zone->num_strings) + (8 - zone->num_strings)
+	                              : (channel - 1) % zone->num_strings;
+	MidiString* m_string = &midi_string[string_id];
+	switch (type) {
+	case MIDI_NOTE_OFF:
+		if (m_string->state == MS_PRESSED)
+			m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
+		break;
+	case MIDI_NOTE_ON:
+		// we can't play this note => ignore
+		if (data1 >= NUM_NOTES)
+			break;
+
+		register_press(string_id, data1, data2, string_position_from_pitch(string_id, NOTE_NR_TO_PITCH(data1)));
+		break;
+	case MIDI_PITCH_BEND:
+		m_string->pitchbend.lsb = data1;
+		m_string->pitchbend.msb = data2;
+		update_string_pitchbend(string_id);
+		break;
+	case MIDI_CHANNEL_PRESSURE:
+		m_string->pressure = data1;
+		break;
+	case MIDI_CONTROL_CHANGE:
+		if (try_handle_n_rpn(data1, data2, true, string_id))
+			break;
+		switch (data1) {
+		case CC_MOD_WHEEL:
+			m_string->mod_wheel.msb = data2;
+			break;
+		case CC_MOD_WHEEL_LSB:
+			m_string->mod_wheel.lsb = data2;
+			mod_wheel_14bit = true;
+			break;
+		case CC_SUSTAIN:
+			apply_sustain(data2 >= 64, string_id);
+			break;
+		default:
+			// update parameters from ccs
+			if (sys_params.midi_rcv_param_ccs)
+				params_rcv_cc(data1, data2, true, string_id);
+			break;
+		}
+		break;
+	default:
+		break;
 	}
 }
 
@@ -1214,16 +1309,21 @@ void midi_tick(void) {
 	}
 }
 
+void midi_update_zone_boundaries(void) {
+	non_mpe_start_string = sys_params.mpe_in ? mpe_zone[0].num_strings : 0;
+	high_mpe_start_string = sys_params.mpe_in ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
+}
+
 void set_mpe_channels(u8 zone, u8 num_chans) {
 	// set channels
 	mpe_zone[zone].num_chans = num_chans;
 	mpe_zone[(u8)!zone].num_chans = mini(mpe_zone[(u8)!zone].num_chans, 15 - num_chans);
-	mpe_zone[1].first_chan = 15 - mpe_zone[1].num_chans;
 	// recalculate num_strings
 	bool one_chan_per_string = mpe_zone[0].num_chans + mpe_zone[1].num_chans <= 8;
 	mpe_zone[zone].num_strings = one_chan_per_string ? mpe_zone[zone].num_chans : (mpe_zone[zone].num_chans + 1) >> 1;
 	mpe_zone[(u8)!zone].num_strings =
 	    one_chan_per_string ? mpe_zone[(u8)!zone].num_chans : (mpe_zone[(u8)!zone].num_chans + 1) >> 1;
+	midi_update_zone_boundaries();
 	// save to sys_params
 	set_sys_param(SYS_MPE_ZONE, zone);
 	set_sys_param(SYS_MPE_CHANS, num_chans);
@@ -1270,7 +1370,7 @@ void midi_push_preset(void) {
 		// loop through mod sources
 		for (ModSource mod_src = SRC_BASE; mod_src <= SRC_RND; mod_src++) {
 			// send nrpn msb (selects main parameter or mod source)
-			midi_push_cc(CC_NRPN_MSB, mod_src == SRC_BASE ? 0 : mod_src + 16);
+			midi_push_cc(CC_NRPN_MSB, mod_src);
 
 			// loop through parameters
 			for (Param param_id = 0; param_id < NUM_PARAMS; param_id++) {
@@ -1310,9 +1410,14 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 	if (m_string->state == MS_UNPRESSED)
 		return false;
 
+	bool using_mpe = sys_params.mpe_in && (string_id < non_mpe_start_string || string_id >= high_mpe_start_string);
+	u8 zone = string_id < non_mpe_start_string ? 0 : 1;
+
 	// synthesize internal pressure from midi velocity and midi pressure
 	u16 midi_pressure14 = 0;
-	if (sys_params.mpe_in || sys_params.midi_in_pres_type == MP_POLY_AFTERTOUCH)
+	if (using_mpe)
+		midi_pressure14 = maxi(m_string->pressure << 7, mpe_zone[zone].pressure);
+	else if (sys_params.midi_in_pres_type == MP_POLY_AFTERTOUCH)
 		midi_pressure14 = maxi(m_string->pressure << 7, channel_pressure);
 	else if (sys_params.midi_in_pres_type == MP_CHANNEL_PRESSURE)
 		midi_pressure14 = channel_pressure << 7;
@@ -1335,7 +1440,10 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 	*position = m_string->position;
 	*note_number = m_string->note_number;
 	*start_velocity = m_string->start_velocity;
-	*note_offset_pitch = channel_pitchbend_pitch + (m_string->mpe ? m_string->pitchbend_pitch : 0);
+	if (using_mpe)
+		*note_offset_pitch = mpe_zone[zone].pitchbend_pitch + m_string->pitchbend_pitch;
+	else
+		*note_offset_pitch = channel_pitchbend_pitch + m_string->pitchbend_pitch;
 	return true;
 }
 

@@ -321,11 +321,11 @@ static u16 string_center_pitch(u8 string_id) {
 	return OCTS_TO_PITCH(oct) + string_root_pitch(string_id) + ((pitch3 + pitch4) >> 1);
 }
 
-u8 find_string_for_pitch(u16 pitch) {
+u8 find_string_for_pitch(u16 pitch, u8 from_string, u8 to_string) {
 	// find desired string: center pitch closest to pitch
-	u8 desired_string = 0;
+	u8 desired_string = from_string;
 	u16 prev_pitch_dist = UINT16_MAX;
-	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+	for (u8 string_id = from_string; string_id < to_string; string_id++) {
 		u16 pitch_dist = abs(string_center_pitch(string_id) - pitch);
 		if (pitch_dist >= prev_pitch_dist)
 			break;
@@ -336,7 +336,7 @@ u8 find_string_for_pitch(u16 pitch) {
 	// find closest non-sounding string
 	u8 best_string = 255;
 	u8 prev_dist = 255;
-	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+	for (u8 string_id = from_string; string_id < to_string; string_id++) {
 		u8 dist = abs(string_id - desired_string);
 		if (dist >= prev_dist)
 			break;
@@ -352,7 +352,7 @@ u8 find_string_for_pitch(u16 pitch) {
 
 	// find quietest non-touched string
 	float min_vol = __FLT_MAX__;
-	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+	for (u8 string_id = from_string; string_id < to_string; string_id++) {
 		float vol = voices[string_id].env1_lvl;
 		if (!play_strings[string_id].touched && vol < min_vol) {
 			min_vol = vol;

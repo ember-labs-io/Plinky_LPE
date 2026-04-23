@@ -9,7 +9,7 @@ const SynthString* get_synth_string(u8 string_id);
 
 // utils
 u16 quant_pitch_to_scale(u16 pitch, u8 string_id);
-u8 find_string_for_pitch(u16 pitch);
+u8 find_string_for_pitch(u16 pitch, u8 from_string, u8 to_string);
 u16 string_position_from_pitch(u8 string_id, u16 pitch);
 void clear_latch(void);
 void clear_synth_string(u8 string_id);
