@@ -149,7 +149,7 @@ void adc_dac_tick(void) {
 	static u8 prev_map_string = 255;
 	// new touch
 	if (!cv_touch.touched && gate_high) {
-		u8 map_string = find_string_for_pitch(cv_pitch);
+		u8 map_string = find_string_for_pitch(cv_pitch, 0, NUM_STRINGS);
 		// found a string to map to => valid new touch
 		if (map_string != 255 && map_string == prev_map_string) {
 			cv_touch.string_id = map_string;

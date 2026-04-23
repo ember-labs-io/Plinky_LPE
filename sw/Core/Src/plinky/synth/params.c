@@ -584,7 +584,8 @@ bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
 }
 
 u14 param_nrpn_poly_value(Param param_id, u8 string_id) {
-	s16 value = cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1];
+	s16 value = string_id == 0 ? cur_preset.params[param_id][0]
+	                           : cur_preset.poly_params[poly_param_from_param[param_id]][string_id - 1];
 	if (PARAM_SIGNED(param_id))
 		value = (value + (1 << 14)) >> 1;
 	return (u14){clampi(value, 0, UINT14_MAX)};

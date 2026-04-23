@@ -200,6 +200,10 @@ static void save_value(s16 value) {
 		if (set_sys_param(param, value))
 			midi_clear_all();
 		break;
+	case I_MPE_IN:
+		if (set_sys_param(param, value))
+			midi_update_zone_boundaries();
+		break;
 	case I_MIDI_CHANNEL_BEND_RANGE_IN:
 	case I_MIDI_STRING_BEND_RANGE_IN:
 	case I_MIDI_STRING_BEND_RANGE_OUT:
