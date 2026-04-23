@@ -97,17 +97,29 @@ static u8 param_is_index(Param param_id, ModSource mod_src, s16 raw) {
 
 #define PARAM_SIGNED(param_id) (param_info[range_type[param_id]] & SIGNED)
 
-#define CC_TO_RAW(cc, param_id) (PARAM_SIGNED(param_id) ? ((cc) * 2049 >> 7) - RAW_SIZE : (cc) * 1025 >> 7)
+static inline s16 cc_to_raw(u8 cc, Param param_id) {
+	bool bipolar = PARAM_SIGNED(param_id);
+	return (bipolar ? 0 : 512) + (cc - 64) * (bipolar ? 1024 : 512) / (cc < 64 ? 64 : 63);
+}
 
-#define RAW_TO_CC(raw, param_id) clampi((PARAM_SIGNED(param_id) ? ((raw) + RAW_SIZE) >> 1 : (raw)) >> 3, 0, 127)
+static inline u8 raw_to_cc(s16 raw, Param param_id) {
+	bool bipolar = PARAM_SIGNED(param_id);
+	u16 center = bipolar ? 0 : 512;
+	bool upper = raw > center;
+	return 64 + ((raw - center) * (63 + !upper) + upper * (bipolar ? 512 : 256)) / (bipolar ? 1024 : 512);
+}
 
-#define U14_TO_RAW_BI(cc14) (((cc14) * 2049 >> 14) - RAW_SIZE)
+static inline s16 u14_to_raw(u16 val, Param param_id, ModSource mod_src) {
+	bool bipolar = mod_src != SRC_BASE || PARAM_SIGNED(param_id);
+	bool upper = val > 8192;
+	return (bipolar ? 0 : 512) + ((val - 8192) * (bipolar ? 1024 : 512) + upper * 4095) / (upper ? 8191 : 8192);
+}
 
-#define U14_TO_RAW(cc14, param_id) (PARAM_SIGNED(param_id) ? U14_TO_RAW_BI(cc14) : (cc14) * 1025 >> 14)
-
-#define RAW_TO_U14(value, param_id, mod_src)                                                                           \
-	clampi((mod_src != SRC_BASE || PARAM_SIGNED(param_id) ? (((value) << 4) + (1 << 14)) >> 1 : ((value) << 4)), 0,    \
-	       UINT14_MAX)
+static inline u16 raw_to_u14(s16 raw, Param param_id, ModSource mod_src) {
+	bool bipolar = mod_src != SRC_BASE || PARAM_SIGNED(param_id);
+	s16 center = bipolar ? 0 : 512;
+	return 8192 + (raw - center) * (raw < center ? 8192 : 8191) / (bipolar ? 1024 : 512);
+}
 
 #define RECENT_PARAM (EDITING_PARAM ? selected_param : mem_param)
 
@@ -160,7 +172,7 @@ void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id) {
 		poly = false;
 
 	// scale 14 bit value to raw
-	s16 raw = U14_TO_RAW(value.value, param_id);
+	s16 raw = u14_to_raw(value.value, param_id, SRC_BASE);
 
 	// save
 	if (poly)
@@ -171,7 +183,7 @@ void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id) {
 
 void set_mod_from_nrpn(Param param_id, u14 value, ModSource mod_src) {
 	if (PARAM_MODDABLE(param_id))
-		save_param_raw(param_id, mod_src, U14_TO_RAW_BI(value.value));
+		save_param_raw(param_id, mod_src, u14_to_raw(value.value, param_id, mod_src));
 }
 
 void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
@@ -201,11 +213,11 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 			cc14->msb = data2;
 		else
 			cc14->lsb = data2;
-		raw = U14_TO_RAW(cc14->value, param_id);
+		raw = u14_to_raw(cc14->value, param_id, SRC_BASE);
 	}
 	// 7 bit CCs
 	else
-		raw = CC_TO_RAW(data2, param_id);
+		raw = cc_to_raw(data2, param_id);
 
 	// save
 	if (mpe)
@@ -570,13 +582,13 @@ s8 param_index_unmod(Param param_id) {
 }
 
 u8 param_cc_value(Param param_id) {
-	return RAW_TO_CC(PARAM_VAL_RAW(param_id, SRC_BASE), param_id);
+	return raw_to_cc(PARAM_VAL_RAW(param_id, SRC_BASE), param_id);
 }
 
 bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
 	if (range_type[param_id] == R_UNUSED || param_id == P_VOLUME)
 		return false;
-	nrpn_value->value = RAW_TO_U14(PARAM_VAL_RAW(param_id, mod_src), param_id, mod_src);
+	nrpn_value->value = raw_to_u14(cur_preset.params[param_id][mod_src], param_id, mod_src);
 	return true;
 }
 
@@ -593,10 +605,10 @@ u14 param_nrpn_poly_value(Param param_id, u8 string_id) {
 static void try_send_param_midi(Param param_id, ModSource mod_src, s16 raw_old, s16 raw_new) {
 	if (
 	    // conditions to send CC
-	    (sys_params.midi_send_param_ccs == SP_CC && RAW_TO_CC(raw_new, param_id) != RAW_TO_CC(raw_old, param_id))
+	    (sys_params.midi_send_param_ccs == SP_CC && raw_to_cc(raw_new, param_id) != raw_to_cc(raw_old, param_id))
 	    // conditions to send NRPN
 	    || (sys_params.midi_send_param_ccs == SP_NRPN
-	        && RAW_TO_U14(raw_new, param_id, mod_src) != RAW_TO_U14(raw_old, param_id, mod_src)))
+	        && raw_to_u14(raw_new, param_id, mod_src) != raw_to_u14(raw_old, param_id, mod_src)))
 		midi_send_param(param_id);
 }
 
