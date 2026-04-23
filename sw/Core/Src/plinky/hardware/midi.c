@@ -441,8 +441,14 @@ static bool cue_midi_string_out(void) {
 	}
 	case MSG_PITCHBEND: {
 		if (using_mpe) {
-			u14 s_pitchbend = {
-			    clampi(((s_string->pitchbend_pitch << 13) / max_string_bend_pitch_out) + UINT14_HALF, 0, UINT14_MAX)};
+			u14 s_pitchbend = {UINT14_HALF};
+			if (max_string_bend_pitch_out == 0) {
+				gfx_debug(0, "Error:");
+				gfx_debug(1, "Max pb out = 0");
+			}
+			else
+				s_pitchbend.value = clampi(
+				    ((s_string->pitchbend_pitch << 13) / max_string_bend_pitch_out) + UINT14_HALF, 0, UINT14_MAX);
 			// require a difference of 5, unless this is an extreme value
 			u8 min_diff = (s_pitchbend.value == -UINT14_HALF || s_pitchbend.value == 8191) ? 1 : 5;
 			// send if changed
