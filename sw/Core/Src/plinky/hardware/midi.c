@@ -606,6 +606,7 @@ static void cue_midi_out(void) {
 			u8 bank = start_param >> 5;
 			// mask bits of lower-numbered params
 			u32 bank_bits = send_param_val[bank] & ~((1 << (start_param & 31)) - 1);
+			u32 skipped_bits = send_param_val[bank] & ((1 << (start_param & 31)) - 1);
 			if (bank_bits)
 				send_param = (bank << 5) + __builtin_ctz(bank_bits);
 			// look for set bits in the other two banks
@@ -617,6 +618,9 @@ static void cue_midi_out(void) {
 				bank = (bank + 2) % 3;
 				send_param = (bank << 5) + __builtin_ctz(send_param_val[bank]);
 			}
+			// check the skipped bits in the first bank
+			else if (skipped_bits)
+				send_param = (bank << 5) + __builtin_ctz(skipped_bits);
 			// found a param, kick off sending
 			if (send_param != NUM_PARAMS)
 				sending_param_progress = 0;
@@ -637,7 +641,7 @@ static void cue_midi_out(void) {
 					midi_out_channel = sys_params.midi_out_chan;
 
 				// send param value as cc
-				if (sys_params.midi_send_param_ccs == 1) {
+				if (sys_params.midi_send_param_ccs == SP_CC) {
 					if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
 						return;
 				}
@@ -1372,7 +1376,7 @@ static void midi_push_cc(u8 data1, u8 data2) {
 void midi_push_preset(void) {
 	pushing_preset = true;
 	// send params set to "off" or ccs => send ccs
-	if (sys_params.midi_send_param_ccs < 2) {
+	if (sys_params.midi_send_param_ccs != SP_NRPN) {
 		// loop through parameters
 		for (Param param_id = 0; param_id < NUM_PARAMS; param_id++) {
 			u8 param_cc = midi_cc_table_rvs[param_id];

@@ -293,6 +293,12 @@ typedef enum RcvParamType {
 	RP_CC14,
 } RcvParamType;
 
+typedef enum SendParamType {
+	SP_NONE,
+	SP_CC,
+	SP_NRPN,
+} SendParamType;
+
 // PITCH
 
 typedef enum Scale {
@@ -903,7 +909,7 @@ typedef struct SysParams {
 	RcvParamType midi_rcv_param_ccs : 2;
 	bool midi_send_clock : 1;
 	bool midi_send_transport : 1;
-	bool midi_send_param_ccs : 2; // 0 = off, 1 = CCs, 2 = 14bit CCs
+	SendParamType midi_send_param_ccs : 2;
 	// 12 bytes
 	bool midi_send_lfo_cc : 1;
 	u8 mpe_zone : 1; // 0 = lower, 1 = upper
