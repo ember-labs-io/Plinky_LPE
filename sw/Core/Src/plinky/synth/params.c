@@ -1033,7 +1033,7 @@ static const char* get_param_str(Param param_id, ModSource mod_src, s16 raw, cha
 			return seq_mode_name[index];
 		case P_SEQ_CLK_DIV:
 			if (index == NUM_SYNC_DIVS) {
-				sprintf(val_buf, "(CV Gate)");
+				sprintf(val_buf, "Gate cv");
 				return val_buf;
 			}
 			break;
