@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinky - Lucky Phoenix Edition</title>
+    <link rel="icon" type="image/svg+xml" href="img/params/P_A_SHAPE.svg">
+    <link rel="stylesheet" href="pico.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="topbar">
+        <a href="index.html"><img src="img/ember-labs-logo-100x100.png" alt="Ember Labs"></a>
+        <a href="index.html" id="topbar-title"><h1>Plinky - Lucky Phoenix Edition</h1></a>
+    </div>
+    <div id="body">
+        <div id="sidebar">
+            <nav>
+                <div class="section-title">Release Notes</div>
+                <ul>
+                    <li><a href="v0.5.0.html">v0.5.0</a></li>
+                </ul>
+                <div class="section-title">References</div>
+                <ul>
+                    <li><a href="midi_implementation.html">Midi implementation</a></li>
+                    <li><a href="nrpn_implementation.html" class="active">NRPN implementation</a></li>
+                    <li><a href="settings_menu.html">Settings Menu</a></li>
+                </ul>
+            </nav>
+        </div>
+        <div id="content">
+            <div id="content-inner">
+<h2 id="nrpn-implementation">NRPN implementation</h2>
+<h3 id="usage">Usage</h3>
+<p>Plinky can send and receive 14bit values for all parameters and modulations. Receiving NRPNs is always enabled. Sending NRPNs can be enabled in the <a href="settings_menu.html#filter-1">Midi out Filter 1</a> option of the Settings Menu. When sending NRPNs is enabled, <a href="settings_menu.html#push-preset">pushing parameter values</a> over midi also uses NRPNs instead of CCs.</p>
+<h6 id="a-default-nrpn-message-consists-of-four-ccs">A default NRPN message consists of four CCs:</h6>
+<table>
+
+<tbody>
+<tr>
+<td><strong>CC 99 N</strong></td>
+<td>NRPN MSB</td>
+<td>N = <a href="#nrpn-page-index">Page index</a></td>
+</tr>
+<tr>
+<td><strong>CC 98 M</strong></td>
+<td>NRPN LSB</td>
+<td>M = <a href="#nrpn-parameter-index">Parameter index</a></td>
+</tr>
+<tr>
+<td><strong>CC 6 P</strong></td>
+<td>Data Entry MSB</td>
+<td>P = Value upper 7 bits</td>
+</tr>
+<tr>
+<td><strong>CC 38 Q</strong></td>
+<td>Data Entry LSB</td>
+<td>Q = Value lower 7 bits</td>
+</tr>
+</tbody>
+</table>
+<h6 id="some-of-these-can-be-omitted">Some of these can be omitted:</h6>
+<p>CC98/99 and CC6/38 form two 14bit values. When sending a 14bit value, each of the CCs in the pair need to be sent at least once. After having sent each at least once, the 14bit value can be updated by sending one of the CCs of the pair while omitting the other.</p>
+<p>When the 14bit NRPN value changes, the 14bit DATA value is cleared. This means CC6/38 always need to both be sent at least once after a change of CC98/99.</p>
+<p>CCs 96 (data increment) and 97 (data decrement) are supported.</p>
+<hr />
+<h4 id="nrpn-page-ids">NRPN Page ids</h4>
+<table>
+<thead>
+<tr>
+<th>MSB</th>
+<th>Page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>0</strong></td>
+<td>Set parameter value for all strings (same behavior as mono-timbral editing mode on Plinky)</td>
+</tr>
+<tr>
+<td><strong>1</strong></td>
+<td>Set Envelope 2 modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td>Set Pressure modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td>Set LFO A modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td>Set LFO B modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>5</strong></td>
+<td>Set LFO X modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>6</strong></td>
+<td>Set LFO Y modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>7</strong></td>
+<td>Set Random modulation to this parameter</td>
+</tr>
+<tr>
+<td><strong>8-15</strong></td>
+<td>Set multi-timbral value of this parameter on string 1-8<br>If the parameter is not multi-timbral, the parameter will be set for all strings<br>(same behavior as multi-timbral editing mode on Plinky)</td>
+</tr>
+<tr>
+<td><strong>16-23</strong></td>
+<td>Request parameters from pages 0-7</td>
+</tr>
+</tbody>
+</table>
+<h6 id="nrpns-and-mpe">NRPNs and MPE</h6>
+<p>On manager channels, all pages are recognized.<br />
+On member channels, only page 0 is recognized. The behavior is the same as pages 8-15 on a manager channel</p>
+<hr />
+<h4 id="nrpn-parameter-ids">NRPN Parameter ids</h4>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th></th>
+<th>0</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sound 1</strong></td>
+<td><strong>0</strong></td>
+<td>Shape</td>
+<td>Distortion</td>
+<td>Pitch</td>
+<td>Octave</td>
+<td>Glide</td>
+<td>Interval</td>
+</tr>
+<tr>
+<td><strong>Sound 2</strong></td>
+<td><strong>6</strong></td>
+<td>Noise</td>
+<td>Resonance</td>
+<td>Degree</td>
+<td>Scale</td>
+<td>Microtone</td>
+<td>Column</td>
+</tr>
+<tr>
+<td><strong>Envelope 1</strong></td>
+<td><strong>12</strong></td>
+<td>Sensitivity</td>
+<td>Attack 1</td>
+<td>Decay 1</td>
+<td>Sustain 1</td>
+<td>Release 1</td>
+<td>Root</td>
+</tr>
+<tr>
+<td><strong>Envelope 2</strong></td>
+<td><strong>18</strong></td>
+<td>Env 2 Level</td>
+<td>Attack 2</td>
+<td>Decay 2</td>
+<td>Sustain 2</td>
+<td>Release 2</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Delay</strong></td>
+<td><strong>24</strong></td>
+<td>Delay Send</td>
+<td>Delay Time</td>
+<td>Delay Ping Pong</td>
+<td>Delay Wobble</td>
+<td>Delay Feedback</td>
+<td>Tempo</td>
+</tr>
+<tr>
+<td><strong>Reverb</strong></td>
+<td><strong>30</strong></td>
+<td>Reverb Send</td>
+<td>Reverb Time</td>
+<td>Reverb Shimmer</td>
+<td>Reverb Wobble</td>
+<td>-</td>
+<td>Swing</td>
+</tr>
+<tr>
+<td><strong>Arp</strong></td>
+<td><strong>36</strong></td>
+<td>Arp Toggle</td>
+<td>Arp Order</td>
+<td>Arp Clock Div</td>
+<td>Arp Chance</td>
+<td>Arp Euclid Length</td>
+<td>Arp Octaves</td>
+</tr>
+<tr>
+<td><strong>Sequencer</strong></td>
+<td><strong>42</strong></td>
+<td>Latch Toggle</td>
+<td>Seq Order</td>
+<td>Seq Clock Div</td>
+<td>Seq Chance</td>
+<td>Seq Euclid Length</td>
+<td>Gate Length</td>
+</tr>
+<tr>
+<td><strong>Sampler 1</strong></td>
+<td><strong>48</strong></td>
+<td>Scrub</td>
+<td>Grain Size</td>
+<td>Play Speed</td>
+<td>Timestretch</td>
+<td>Sample ID</td>
+<td>Pattern ID</td>
+</tr>
+<tr>
+<td><strong>Sampler 2</strong></td>
+<td><strong>54</strong></td>
+<td>Scrub Jitter</td>
+<td>Size Jitter</td>
+<td>Speed Jitter</td>
+<td>-</td>
+<td>-</td>
+<td>Step Offset</td>
+</tr>
+<tr>
+<td><strong>LFO A</strong></td>
+<td><strong>60</strong></td>
+<td>LFO A CV Depth</td>
+<td>LFO A Offset</td>
+<td>LFO A Depth</td>
+<td>LFO A Rate</td>
+<td>LFO A Shape</td>
+<td>LFO A Symmetry</td>
+</tr>
+<tr>
+<td><strong>LFO B</strong></td>
+<td><strong>66</strong></td>
+<td>LFO B CV Depth</td>
+<td>LFO B Offset</td>
+<td>LFO B Depth</td>
+<td>LFO B Rate</td>
+<td>LFO B Shape</td>
+<td>LFO B Symmetry</td>
+</tr>
+<tr>
+<td><strong>LFO X</strong></td>
+<td><strong>72</strong></td>
+<td>LFO X CV Depth</td>
+<td>LFO X Offset</td>
+<td>LFO X Depth</td>
+<td>LFO X Rate</td>
+<td>LFO X Shape</td>
+<td>LFO X Symmetry</td>
+</tr>
+<tr>
+<td><strong>LFO Y</strong></td>
+<td><strong>78</strong></td>
+<td>LFO Y CV Depth</td>
+<td>LFO Y Offset</td>
+<td>LFO Y Depth</td>
+<td>LFO Y Rate</td>
+<td>LFO Y Shape</td>
+<td>LFO Y Symmetry</td>
+</tr>
+<tr>
+<td><strong>Mixer 1</strong></td>
+<td><strong>84</strong></td>
+<td>Synth Level</td>
+<td>Synth Wet/Dry</td>
+<td>HPF</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Mixer 2</strong></td>
+<td><strong>90</strong></td>
+<td>Input Level</td>
+<td>In Wet/Dry</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>Mix Width</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><em>Add row and column to get the parameter index</em></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

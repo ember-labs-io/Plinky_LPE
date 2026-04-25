@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinky - Lucky Phoenix Edition</title>
+    <link rel="icon" type="image/svg+xml" href="img/params/P_A_SHAPE.svg">
+    <link rel="stylesheet" href="pico.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="topbar">
+        <a href="index.html"><img src="img/ember-labs-logo-100x100.png" alt="Ember Labs"></a>
+        <a href="index.html" id="topbar-title"><h1>Plinky - Lucky Phoenix Edition</h1></a>
+    </div>
+    <div id="body">
+        <div id="sidebar">
+            <nav>
+                <div class="section-title">Release Notes</div>
+                <ul>
+                    <li><a href="v0.5.0.html" class="active">v0.5.0</a></li>
+                </ul>
+                <div class="section-title">References</div>
+                <ul>
+                    <li><a href="midi_implementation.html">Midi implementation</a></li>
+                    <li><a href="nrpn_implementation.html">NRPN implementation</a></li>
+                    <li><a href="settings_menu.html">Settings Menu</a></li>
+                </ul>
+            </nav>
+        </div>
+        <div id="content">
+            <div id="content-inner">
+<h2 id="lpe-v050-the-one-with-the-multi-timbral-mpe">LPE v0.5.0 - The one with the multi-timbral MPE</h2>
+<ul>
+<li><a href="#breaking-changes">Breaking changes</a></li>
+<li><a href="#new-features">New Features</a><ul>
+<li><a href="#multi-timbral-parameters">Multi-timbral parameters</a></li>
+<li><a href="#midi">Midi</a></li>
+<li><a href="#cv">CV</a></li>
+<li><a href="#playing-surface">Playing Surface</a></li>
+<li><a href="#settings-menu">Settings Menu</a></li>
+</ul>
+</li>
+<li><a href="#upgrades">Upgrades</a><ul>
+<li><a href="#pitch-restriction">Pitch restriction</a></li>
+<li><a href="#external-gear">External gear</a></li>
+<li><a href="#ui">UI</a></li>
+<li><a href="#various">Various</a></li>
+</ul>
+</li>
+<li><a href="#fixes">Fixes</a></li>
+</ul>
+<hr />
+<h3 id="breaking-changes">Breaking changes</h3>
+<ul>
+<li>The "relative" CV input functionality has been removed to make place for a more common way of processing CV input</li>
+<li>The midi CC number for Latch Toggle was moved from 101 (which is reserved for RPN MSB) to CC 69</li>
+</ul>
+<hr />
+<h3 id="new-features">New Features</h3>
+<h4 id="multi-timbral-parameters">Multi-timbral parameters</h4>
+<p>Plinky now has 33 per-string multi-timbral parameters. They are:</p>
+<ul>
+<li>The 23 parameters on the upper two rows of pads</li>
+<li>Arp Toggle</li>
+<li>Latch Toggle</li>
+<li>Gate length</li>
+<li>The seven sample parameters: <ul>
+<li>Scrub(+ Jitter)</li>
+<li>Grain Size(+ Jitter)</li>
+<li>Play Speed(+ Jitter)</li>
+<li>Timestretch</li>
+</ul>
+</li>
+</ul>
+<h5 id="usage">Usage</h5>
+<ul>
+<li>While holding <img src="img/function/FN_SHIFT_A.svg" class="inline-icon" style="position:relative;top:2px"> or <img src="img/function/FN_SHIFT_B.svg" class="inline-icon" style="position:relative;top:2px">, a small 'M' next to the parameter name indicates whether this parameter is multi-timbral</li>
+<li>Hold <img src="img/function/FN_SHIFT_A.svg" class="inline-icon" style="position:relative;top:2px"> or <img src="img/function/FN_SHIFT_B.svg" class="inline-icon" style="position:relative;top:2px"> plus one of these parameters to toggle between mono-timbral and multi-timbral parameter editing</li>
+<li>When multi-timbral editing is active:<ul>
+<li>A small number on screen indicates which string is selected</li>
+<li>All eight touchstrips will show edit-strips on their leds, the selected strip is brighter than the others</li>
+<li>Touching an edit-strip or pressing <img src="img/function/FN_LEFT.svg" class="inline-icon" style="position:relative;top:2px"> and <img src="img/function/FN_RIGHT.svg" class="inline-icon" style="position:relative;top:2px"> will change which string is selected</li>
+<li>Each per-string value can be modified as usual by sliding on the edit strip and rotation/pressing the encoder</li>
+</ul>
+</li>
+</ul>
+<p>To reset all strings to the same value, toggle back to mono-timbral editing and change the parameter value. This will update the parameter on all strings</p>
+<p><em>The multi-timbral parameters always operate in multi-timbral mode behind the scenes. Changing the value of a multi-timbral parameter's value in mono-timbral editing mode just sets the parameter to the same value on all strings</em></p>
+<h4 id="midi">Midi</h4>
+<ul>
+<li>Full <a href="midi_implementation.html#mpe-implementation">MPE support</a></li>
+<li>Full 14bit control over all parameters and modulation (<a href="nrpn_implementation.html">NRPN</a>)</li>
+<li><a href="midi_implementation.html#midi-tuning-standard">Midi Tuning Standard</a> support for microtonal scales</li>
+<li>Global <a href="midi_implementation.html#receiving-pressure-and-modwheel-data">pressure control</a> with the modwheel</li>
+<li>Sostenuto support (<a href="midi_implementation.html#cc-lookup-table">CC66</a>)</li>
+<li>A range of system settings which give users granular control over what to send and receive:<ul>
+<li><a href="settings_menu.html#velocity-pressure-in-balance">Velocity/pressure balance</a></li>
+<li><a href="settings_menu.html#aftertouch-type-voice-bend-range">Aftertouch type</a></li>
+<li><a href="settings_menu.html#channel-bend-range">Channel and voice bend range</a></li>
+<li><a href="settings_menu.html#map-to-scale">Map Midi to scale</a></li>
+<li><a href="settings_menu.html#clock-multiplier">Incoming clock multiplier</a></li>
+<li><a href="settings_menu.html#filter">Filter clock, transport, CC, NRPN, LFO, Y/Z controller messages</a></li>
+<li><a href="midi_implementation.html#channel-mode-messages">System Common messages 120-123</a></li>
+<li><a href="settings_menu.html#enable-soft-thru">Soft thru</a></li>
+<li><a href="settings_menu.html#enable-trs-out">Disable TRS midi out</a></li>
+</ul>
+</li>
+<li>New Settings Menu actions:<ul>
+<li><a href="settings_menu.html#push-preset">Push preset parameters over midi</a></li>
+<li><a href="settings_menu.html#midi-panic">Midi Panic</a></li>
+</ul>
+</li>
+</ul>
+<p>Plinky now has perfect roundtrip-support for notes (pressure, pitch) and parameters. This means a performance on the Plinky can be recorded in a DAW and will sound exactly the same when playing it back on the Plinky, especially when using high resolution values. (Loss of accuracy due to the low resolution of Midi CCs sadly can't be accounted for.)</p>
+<p>Consult the <a href="midi_implementation.html">Midi implementation</a>, <a href="nrpn_implementation.html">NRPN implementation</a> and <a href="settings_menu.html">Settings Menu</a> reference guides for more details.</p>
+<h4 id="cv">CV</h4>
+<ul>
+<li>Plinky now generates a new touch on a rising CV Gate, using the CV Pitch voltage as its pitch, as is common in eurorack</li>
+<li>When <a href="settings_menu.html#cv-in-quantization">CV quantize</a> is active, the strength of the quantization can now be tweaked with the <span class="param-label-down" style="margin-right:2px">MICRO<br>TONE</span><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:1px"> parameter</li>
+<li>The CV Gate can be configured as a binary input (Gate) or a continuous value (Pressure) in the <a href="settings_menu.html#gate-in-pressuregate">Settings Menu</a></li>
+<li>The PPQN for both incoming and outgoing clock can be configured in the <a href="settings_menu.html#clock-in-ppqn">Settings Menu</a></li>
+<li>CV Gate output is now a true binary +5V/0V gate (it previously generated a continuous voltage based on the max pressure)</li>
+<li>When playing an arp which plays one note at a time, the Pitch Lo CV output will continuously output the pitch of the lowest touched string (pedal tone) </li>
+</ul>
+<h4 id="playing-surface">Playing Surface</h4>
+<p>Some small but important changes have been made to the playing surface:</p>
+<ul>
+<li>A <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_ROOT.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">ROOT</span></span> parameter has been added on the empty pad to the right of the <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_RELEASE1.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:1px;position:relative;top:4px">ENV 1<br>RELEASE</span></span> pad. This allows for intuitive transposition with a range of 0 (C) to +11 (B) semitones</li>
+<li>The value of the <span class="param-label-down" style="margin-right:-2px">DEGREE</span><img src="img/params/P_DEGREE.svg" class="inline-icon" style="position:relative;top:1px"> parameter no longer affects the mapping of root LEDs on the pads. The bottom-left pad is now always lit up as a root note, making the layout more stable and easier to navigate</li>
+<li>In some cases, root notes on the higher strings are mapped in a way that is a clearer repetition of the root notes pattern on the lower strings</li>
+<li>There is now a <a href="settings_menu.html#global-pad-layout">setting</a> which makes the pad layout persist across presets</li>
+</ul>
+<h4 id="settings-menu">Settings Menu</h4>
+<p>New options in the Settings Menu:</p>
+<ul>
+<li><a href="settings_menu.html#a4-reference-pitch">A4 reference pitch</a>: 430-445Hz</li>
+<li><a href="settings_menu.html#enable-local-control">Local control on/off</a></li>
+</ul>
+<p>Find a full overview of all items in the Settings Menu in its <a href="settings_menu.html">reference guide</a></p>
+<hr />
+<h3 id="upgrades">Upgrades</h3>
+<h4 id="pitch-restriction">Pitch restriction</h4>
+<ul>
+<li>Internal pitch mapping now has a clearly defined valid range (C-1 through C7) and is well implemented within this range. This fixes a bunch of bugs where note names wouldn't show on screen, high/low touches would result in an incorrect pitch, or strings would even stop playing altogether</li>
+<li>Pitches outside the valid range are muted or rounded to fall within the valid range</li>
+<li>Pads outside the valid range show a dim led and do not produce sound at all</li>
+</ul>
+<div style="margin-left: 96px">
+<h5 id="pitch-overview">Pitch overview</h5>
+<table>
+<thead>
+<tr>
+<th>Note name</th>
+<th>Midi note</th>
+<th>CV voltage</th>
+<th>Frequency</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-1</td>
+<td>0</td>
+<td>-3V</td>
+<td>8.18 Hz</td>
+<td>Bottom Boundary</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>36</td>
+<td>0V</td>
+<td>65.41 Hz</td>
+<td>CV Pitch Center</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>69</td>
+<td>+2.75V</td>
+<td>440 Hz</td>
+<td><a href="settings_menu.html#a4-reference-pitch">Reference Pitch</a></td>
+</tr>
+<tr>
+<td>C7</td>
+<td>96</td>
+<td>+5V</td>
+<td>2093 Hz</td>
+<td>Top Boundary</td>
+</tr>
+</tbody>
+</table>
+<p><em>Pitch CV in/outputs reach from just over +5V down to roughly -2.7V (inputs) or -3V (outputs)</em></p>
+</div>
+<hr />
+<h4 id="external-gear">External gear</h4>
+<p>Internal and external touches (physical versus Midi/CV touches) are now processed in a much more centralized way. In practice this means internal and external signals are much easier to combine, especially when using additional external gear. For example:</p>
+<ul>
+<li>Triggering an internal envelope happens at the exact same frame as generating the Midi Note On message and turning CV Gate high</li>
+<li>Touch, Midi and CV all generate MPE Pitchbend values</li>
+<li>The internal pitch, outgoing Midi Note + Pitchbend and outgoing CV pitch are identical at all times (with one exception, see below)</li>
+<li>The <span class="param-label-down" style="margin-right:2px">MICRO<br>TONE</span><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:1px"> parameter consistently defines the level of detuning for physical touches and quantized CV touches (Midi's detuning is defined by Midi Pitchbend)</li>
+<li>When controlling external gear with Plinky, there is a chance that pitch and glide modulation is better applied on the external device itself. For that reason, <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_PITCH.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">PITCH</span></span> and <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">GLIDE</span></span> are ignored by default when generating MPE Pitchbend messages. Enabling MPE Fine Tuning in the <a href="settings_menu.html#filter-2">Settings Menu</a> adds <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_PITCH.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">PITCH</span></span> and <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">GLIDE</span></span> modulation back in. CV Pitch output always includes <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_PITCH.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">PITCH</span></span> and <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">GLIDE</span></span> modulation</li>
+</ul>
+<h4 id="ui">UI</h4>
+<ul>
+<li>Clearing a preset or sequence in the Load UI now only clears the floating preset/sequence, without overwriting any of the preset/sequence slots. </li>
+<li>When clearing a preset or sequence, it no longer matters which pad you press exactly. Holding <img src="img/function/FN_CLEAR.svg" class="inline-icon" style="position:relative;top:2px"> plus any preset pad will clear the floating preset, holding <img src="img/function/FN_CLEAR.svg" class="inline-icon" style="position:relative;top:2px"> plus any sequence pad will clear the floating sequence</li>
+<li>Loading a sample now happens instantly</li>
+<li>If no changes have been made to the currently loaded Preset/Sequence, loading a new Preset/Sequence now happens instantly</li>
+<li>The A/B knobs now have a small deadzone in the center, making it easier to set them to exactly zero</li>
+<li>Non-synth presses, especially on function-pads, have had responsiveness issues since the Loopop review. The noise filtering process for non-synth presses has been refined to both be more responsive and have identical responsiveness on all pads</li>
+<li>A <code>#</code> sign has been added. Yes, you read that right: we have an actual sharp sign now!</li>
+<li>Small cleanups in the layout of the Settings Menu</li>
+</ul>
+<h4 id="various">Various</h4>
+<ul>
+<li>The "Max Pressure" mod source, meter on screen and CV output now follow Envelope 1</li>
+<li>CV Gate is how high during the CV calibration process, making it easier to tune with a eurorack oscillator</li>
+<li>Midi out over USB is no longer throttled</li>
+<li>Removed yet another source of undesired pitch sliding at the start of new notes</li>
+<li>Generally a bunch of work has been done on making code more efficient and organized</li>
+</ul>
+<hr />
+<h3 id="fixes">Fixes</h3>
+<ul>
+<li>The <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_SYN_LVL.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:1px;position:relative;top:4px">SYNTH<br>LEVEL</span></span>, <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_SYN_WET_DRY.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:1px;position:relative;top:4px">SYNTH<br>WET/DRY</span></span>, <span class="param-label-down" style="margin-right:2px">INPUT<br>LEVEL</span><img src="img/params/P_IN_LVL.svg" class="inline-icon" style="position:relative;top:1px"> and <span class="param-label-down" style="margin-right:-2px">INPUT<br>WET/DRY</span><img src="img/params/P_SYN_WET_DRY.svg" class="inline-icon" style="position:relative;top:1px"> parameters now work as expected. Previously there were several undesired interactions between the Synth Level parameter and how the external signal and effects were mixed</li>
+<li>The scope now always shows the correct amplitude of the outgoing audio</li>
+</ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

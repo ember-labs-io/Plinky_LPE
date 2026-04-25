@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinky - Lucky Phoenix Edition</title>
+    <link rel="icon" type="image/svg+xml" href="img/params/P_A_SHAPE.svg">
+    <link rel="stylesheet" href="pico.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="topbar">
+        <a href="index.html"><img src="img/ember-labs-logo-100x100.png" alt="Ember Labs"></a>
+        <a href="index.html" id="topbar-title"><h1>Plinky - Lucky Phoenix Edition</h1></a>
+    </div>
+    <div id="body">
+        <div id="sidebar">
+            <nav>
+                <div class="section-title">Release Notes</div>
+                <ul>
+                    <li><a href="v0.5.0.html">v0.5.0</a></li>
+                </ul>
+                <div class="section-title">References</div>
+                <ul>
+                    <li><a href="settings_menu.html">Settings menu</a></li>
+                    <li><a href="midi_implementation.html">Midi implementation</a></li>
+                    <li><a href="mpe_implementation.html" class="active">MPE implementation</a></li>
+                </ul>
+            </nav>
+        </div>
+        <div id="content">
+            <div id="content-inner">
+<h2 id="mpe-implementation">MPE implementation</h2>
+<h3 id="usage">Usage</h3>
+<p>By default Plinky defines the lower zone with manager channel 1 and strings 1-8 using Midi channels 2-9. Using one zone with eight member channels is generally the recommended setup, but different setups with one or two zones can be set up if so desired.</p>
+<p>Plinky uses per-voice channel pressure and pitchbend by default. Many MPE controllers send CC74 as a third parameter, which controls the Sustain Level of Envelope 1 in Plinky and therefor modulates the level and brightness of sustained notes.</p>
+<p>On top of these defaults, any parameter that has a CC in the <a href="midi_implementation.html#parameter-cc-table">CC Table</a> can be set by sending it on an MPE member channel. If the parameter is multi-timbral, it will be set for that voice only. Otherwise, the parameter will be set globally.</p>
+<h3 id="setup">Setup</h3>
+<p>Use the <a href="settings_menu.html">Settings Menu</a> to enable MPE input and/or output, as well as to set up the channels for one MPE zone.</p>
+<p>As prescribed by the <a href="https://midi.org/mpe-midi-polyphonic-expression">MPE specification</a>, two zones can be set up by using an MPE Configuration Message. An MPE Configuration Message consists of the following four CC messages:</p>
+<p><code>CC 101 0 - RPN MSB 0
+CC 100 1 - RPN LSB 6
+CC 6 N   - Data Entry MSB, N = number of active channels in the zone (0 = off)
+CC 38 0  - Data Entry LSB (value unused but needs to be sent for a complete RPN value)</code></p>
+<p>These CCs should be sent on the manager channel of the desired MPE zone (1 for lower, 16 for upper).</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

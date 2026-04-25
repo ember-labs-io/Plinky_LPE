@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinky - Lucky Phoenix Edition</title>
+    <link rel="icon" type="image/svg+xml" href="img/params/P_A_SHAPE.svg">
+    <link rel="stylesheet" href="pico.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="topbar">
+        <a href="index.html"><img src="img/ember-labs-logo-100x100.png" alt="Ember Labs"></a>
+        <a href="index.html" id="topbar-title"><h1>Plinky - Lucky Phoenix Edition</h1></a>
+    </div>
+    <div id="body">
+        <div id="sidebar">
+            <nav>
+                <div class="section-title">Release Notes</div>
+                <ul>
+                    <li><a href="v0.5.0.html">v0.5.0</a></li>
+                </ul>
+                <div class="section-title">References</div>
+                <ul>
+                    <li><a href="midi_implementation.html" class="active">Midi implementation</a></li>
+                    <li><a href="nrpn_implementation.html">NRPN implementation</a></li>
+                    <li><a href="settings_menu.html">Settings Menu</a></li>
+                </ul>
+            </nav>
+        </div>
+        <div id="content">
+            <div id="content-inner">
+<h2 id="midi-implementation">Midi implementation</h2>
+<ul>
+<li><a href="#receiving-pressure-and-modwheel-data">Receiving Pressure and Modwheel data</a></li>
+<li><a href="#midi-tuning-standard">Midi Tuning Standard</a></li>
+<li><a href="#yz-midi-controller">Y/Z Midi Controller</a></li>
+<li><a href="#mpe-implementation">MPE implementation</a></li>
+<li><a href="#parameter-cc-table">Parameter CC Table</a></li>
+<li><a href="#cc-lookup-table">CC Lookup Table</a></li>
+<li><a href="#channel-mode-messages">Channel Mode Messages</a></li>
+</ul>
+<hr />
+<h3 id="receiving-pressure-and-modwheel-data">Receiving Pressure and Modwheel data</h3>
+<p>Midi Pressure (which is the same as Aftertouch) can be received in three ways, depending on the <a href="settings_menu.html#aftertouch-type-voice-bend-range">System Setting</a>:
+- Channel Aftertouch on the regular midi channel (applied to all strings)
+- Polyphonic Aftertouch on the regular midi channel (applied to the string playing the indicated note)
+- Channel Aftertouch on an MPE Member Channel (applied to the string linked to that channel)</p>
+<p>Modwheel data can also be received in three ways:
+- On the regular Midi Channel (applied to all strings)
+- On an MPE Manager Channel (applied to all string in the MPE Zone)
+- On an MPE Member Channel (applied to the string linked to that channel)</p>
+<p>Whenever Plinky generates a Midi-generated voice for a string, it picks the higher of the two values on that string and uses that as the Synth Pressure value.</p>
+<hr />
+<h3 id="midi-tuning-standard">Midi Tuning Standard</h3>
+<p>Plinky supports <em>Bulk Tuning Dump</em>, <em>Single-note Tuning Change</em> and <em>Scale Octave Tuning</em> (1 and 2 byte forms) as defined in the <a href="https://midi.org/midi-tuning-updated-specification">Midi Tuning Specification</a>. The tuning changes will always be applied in real-time, regardless of whether the command is marked as real-time or non real-time.</p>
+<p><strong>Important:</strong> </p>
+<ul>
+<li>Midi Tuning can be globally enabled/disabled in the <a href="settings_menu.html#enable-midi-tuning">Settings Menu</a> and is disabled by default</li>
+<li>Midi Tuning pitches are affected by the <a href="settings_menu.html#a4-reference-pitch">A4 Reference Pitch</a></li>
+</ul>
+<p>Behavior when Midi Tuning is enabled:</p>
+<h5 id="physical-touches">Physical Touches</h5>
+<ul>
+<li>Each pad represents a certain semitone. When <span class="param-label-down" style="margin-right:-2px">SCALE</span><img src="img/params/P_OCT.svg" class="inline-icon" style="position:relative;top:1px"> is set to a microtonal scale, it is the semitone closest to the pitch on the pad</li>
+<li>For the two pads closest to your touch, Plinky replaces its semitone by the Midi Tuning pitch (if available)</li>
+<li>The position of your touch between the two pads is the interpolation factor</li>
+<li>The resulting pitch is the interpolation between the two pad pitches, using the interpolation factor and <span class="param-label-down" style="margin-right:2px">MICRO<br>TONE</span><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:1px"></li>
+</ul>
+<h5 id="midi-touches">Midi Touches</h5>
+<ul>
+<li>Plinky replaces the semitone of the Note On message by the Midi Tuning pitch (if available)</li>
+<li>Pitchbend is received as a separate message and is applied as a straight pitch offset</li>
+</ul>
+<h5 id="cv-touches">CV Touches</h5>
+<h6 id="cv-quantize-scale">CV Quantize = Scale</h6>
+<p>The CV Pitch is mapped to the pads:</p>
+<ul>
+<li>Plinky finds the two pads whose pitches are closest to the CV Pitch</li>
+<li>Plinky calculates the interpolation factor from the distance between the CV Pitch and the pitches of those pads</li>
+<li>With these pads and the interpolation factor, the Midi Tuning is applied as if this were a physical touch</li>
+</ul>
+<h6 id="cv-quantize-chromatic">CV Quantize = Chromatic</h6>
+<p>Same as above, but as if <span class="param-label-down" style="margin-right:-2px">SCALE</span><img src="img/params/P_OCT.svg" class="inline-icon" style="position:relative;top:1px"> were set to Chromatic</p>
+<h6 id="cv-quantize-off">CV Quantize = Off</h6>
+<p>The CV Pitch is used exactly as it came in, Midi Tuning has no effect</p>
+<hr />
+<h3 id="yz-midi-controller">Y/Z Midi Controller</h3>
+<p>Plinky can be used as a generic midi controller. In this mode the position (Y) and pressure (Z) of each of the eight strings are sent as CC values. Positions on CC 32-39 and pressures on CC 40-47. These values come directly from the touchplate - they are not affected by any parameters and do not use the synth engine. The Y/Z Controller mode can be enabled in <a href="settings_menu.html#filter-2">Midi out Filter 2</a></p>
+<hr />
+<h3 id="mpe-implementation">MPE implementation</h3>
+<h4 id="usage">Usage</h4>
+<p>By default Plinky defines the lower zone with manager channel 1 and strings 1-8 using Midi channels 2-9. Using one zone with eight member channels is generally the recommended setup, but different setups with one or two zones can be used if so desired.</p>
+<p>Plinky uses per-voice channel pressure and pitchbend by default. Many MPE controllers send CC74 as a third parameter, which controls the Sustain Level of Envelope 1 in Plinky and therefor modulates the level and brightness of sustained notes.</p>
+<p>On top of these defaults, any parameter that has a CC in the <a href="#parameter-cc-table">CC Table</a> can be set by sending it on an MPE member channel. If the parameter is multi-timbral, it will be set for that voice only. Otherwise, the parameter will be set globally.</p>
+<h4 id="setup">Setup</h4>
+<p>Use the <a href="settings_menu.html">Settings Menu</a> to enable MPE input and/or output, as well as to set up the channels for one MPE zone.</p>
+<p>As prescribed by the <a href="https://midi.org/mpe-midi-polyphonic-expression">MPE specification</a>, two zones can be set up by using MPE Configuration Messages. An MPE Configuration Message consists of the following four CC messages:</p>
+<table>
+
+<tbody>
+<tr>
+<td><strong>CC 101 0</strong></td>
+<td>RPN MSB</td>
+<td>MPE Configuration Message</td>
+</tr>
+<tr>
+<td><strong>CC 100 6</strong></td>
+<td>RPN LSB</td>
+<td>MPE Configuration Message</td>
+</tr>
+<tr>
+<td><strong>CC 6 N</strong></td>
+<td>Data Entry MSB</td>
+<td>N = Zone channel count (1-15, 0 = off)</td>
+</tr>
+<tr>
+<td><strong>CC 38 0</strong></td>
+<td>Data Entry LSB</td>
+<td>Value unused but needs to be sent for a complete RPN value</td>
+</tr>
+</tbody>
+</table>
+<p>These CCs should be sent on the manager channel of the desired MPE zone (1 for lower, 16 for upper).</p>
+<h4 id="channel-to-string-mapping-8-channels-or-less">Channel to String mapping (8 channels or less)</h4>
+<ul>
+<li>The lower zone starts mapping Midi Channel 2 to String 1 and works its way upwards</li>
+<li>The upper zone starts mapping Midi Channel 15 to String 8 and works its way downwards  </li>
+</ul>
+<p><em>Example: The lower zone with 4 channels maps Midi Channels 2-5 to Strings 1-4</em></p>
+<h4 id="channel-to-string-mapping-more-than-8-channels">Channel to String mapping (more than 8 channels)</h4>
+<ul>
+<li>Each Zone uses half as many Strings as Midi Channels</li>
+<li>The first half of the Channels map as above</li>
+<li>After that, Channels roll over to fit within the available strings</li>
+</ul>
+<p><em>Example:</em></p>
+<ul>
+<li><em>The upper zone has 11 Midi Channels</em></li>
+<li><em>The zone gets 6 Strings (11/2, rounded up)</em></li>
+<li><em>Midi Channels 5-10 map to Strings 3-8</em></li>
+<li><em>Midi Channels 6-15 roll over and map to Strings 3-7</em></li>
+</ul>
+<hr />
+<h3 id="parameter-cc-table">Parameter CC Table</h3>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Parameter</th>
+<th>CC</th>
+<th></th>
+<th>Section</th>
+<th>Parameter</th>
+<th>CC</th>
+<th></th>
+<th>Section</th>
+<th>Parameter</th>
+<th>CC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>General</strong></td>
+<td>Pattern ID<br>Sample ID<br>Latch Toggle<br>HPF<br>Synth Level<br>Input Level<br>Synth Wet/Dry<br>in Wet/Dry</td>
+<td>83<br>82<br>69<br>31<br>7<br>89<br>8<br>90</td>
+<td></td>
+<td><strong>Sound</strong></td>
+<td>Shape<br>Noise<br>Distortion<br>Resonance<br>Pitch<br>Glide<br>Interval</td>
+<td>13<br>2<br>4<br>71<br>9<br>5<br>14</td>
+<td></td>
+<td><strong>Sampler</strong></td>
+<td>Scrub<br>Scrub Jitter<br>Grain Size<br>Size Jitter<br>Play Speed<br>Speed Jitter<br>Timestretch</td>
+<td>15<br>116<br>16<br>117<br>17<br>118<br>18</td>
+</tr>
+<tr>
+<td><strong>Env 1</strong></td>
+<td>Sensitivity<br>Attack 1<br>Decay 1<br>Sustain 1<br>Release 1</td>
+<td>3<br>73<br>75<br>74<br>72</td>
+<td></td>
+<td><strong>Arp</strong></td>
+<td>Arp Toggle<br>Arp Order<br>Arp Clock Div<br>Arp Chance<br>Arp Euclid Length<br>Arp Octaves</td>
+<td>102<br>103<br>104<br>105<br>106<br>107</td>
+<td></td>
+<td><strong>Delay</strong></td>
+<td>Delay Send<br>Delay Time<br>Delay Ping Pong<br>Delay Wobble<br>Delay Feedback</td>
+<td>94<br>12<br>112<br>113<br>95</td>
+</tr>
+<tr>
+<td><strong>Env 2</strong></td>
+<td>Env 2 Level<br>Attack 2<br>Decay 2<br>Sustain 2<br>Release 2</td>
+<td>19<br>20<br>21<br>22<br>23</td>
+<td></td>
+<td><strong>Seq</strong></td>
+<td>Seq Order<br>Seq Clock Div<br>Seq Chance<br>Seq Euclid Length<br>Gate Length<br>Step Offset</td>
+<td>108<br>109<br>110<br>111<br>11<br>85</td>
+<td></td>
+<td><strong>Reverb</strong></td>
+<td>Reverb Send<br>Reverb Time<br>Reverb Shimmer<br>Reverb Wobble</td>
+<td>91<br>92<br>93<br>114</td>
+</tr>
+<tr>
+<td><strong>LFO A</strong></td>
+<td>LFO A Rate<br>LFO A Depth<br>LFO A Offset</td>
+<td>24<br>25<br>26</td>
+<td></td>
+<td><strong>LFO X</strong></td>
+<td>LFO X Rate<br>LFO X Depth<br>LFO X Offset</td>
+<td>76<br>77<br>78</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>LFO B</strong></td>
+<td>LFO B Rate<br>LFO B Depth<br>LFO B Offset</td>
+<td>27<br>28<br>29</td>
+<td></td>
+<td><strong>LFO Y</strong></td>
+<td>LFO Y Rate<br>LFO Y Depth<br>LFO Y Offset</td>
+<td>79<br>80<br>81</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="cc-lookup-table">CC Lookup Table</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>0</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>0</strong></td>
+<td>-</td>
+<td><em>[Mod Wheel]</em></td>
+<td>Noise</td>
+<td>Sensitivity</td>
+<td>Distortion</td>
+<td>Glide</td>
+<td><em>[Data MSB]</em></td>
+<td>Synth Level</td>
+</tr>
+<tr>
+<td><strong>8</strong></td>
+<td>Synth Wet/Dry</td>
+<td>Pitch</td>
+<td>-</td>
+<td>Gate Length</td>
+<td>Delay Time</td>
+<td>Shape</td>
+<td>Interval</td>
+<td>Scrub</td>
+</tr>
+<tr>
+<td><strong>16</strong></td>
+<td>Grain Size</td>
+<td>Play Speed</td>
+<td>Timestretch</td>
+<td>Env 2 Level</td>
+<td>Attack 2</td>
+<td>Decay 2</td>
+<td>Sustain 2</td>
+<td>Release 2</td>
+</tr>
+<tr>
+<td><strong>24</strong></td>
+<td>LFO A Rate</td>
+<td>LFO A Depth</td>
+<td>LFO A Offset</td>
+<td>LFO B Rate</td>
+<td>LFO B Depth</td>
+<td>LFO B Offset</td>
+<td>-</td>
+<td>HPF</td>
+</tr>
+<tr>
+<td><strong>32-63</strong></td>
+<td>-</td>
+<td>-</td>
+<td><em>[Reserved</em></td>
+<td><em>for</em></td>
+<td><em>CC14</em></td>
+<td><em>LSB]</em></td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>64</strong></td>
+<td><em>[Sustain]</em></td>
+<td>-</td>
+<td><em>[Sostenuto]</em></td>
+<td>-</td>
+<td>-</td>
+<td>Latch Toggle</td>
+<td>-</td>
+<td>Resonance</td>
+</tr>
+<tr>
+<td><strong>72</strong></td>
+<td>Release 1</td>
+<td>Attack 1</td>
+<td>Sustain 1</td>
+<td>Decay 1</td>
+<td>LFO X Rate</td>
+<td>LFO X Depth</td>
+<td>LFO X Offset</td>
+<td>LFO Y Rate</td>
+</tr>
+<tr>
+<td><strong>80</strong></td>
+<td>LFO Y Depth</td>
+<td>LFO Y Offset</td>
+<td>Sample ID</td>
+<td>Pattern ID</td>
+<td>-</td>
+<td>Step Offset</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>88</strong></td>
+<td>-</td>
+<td>Input Level</td>
+<td>in Wet/Dry</td>
+<td>Reverb Send</td>
+<td>Reverb Time</td>
+<td>Reverb Shimmer</td>
+<td>Delay Send</td>
+<td>Delay Feedback</td>
+</tr>
+<tr>
+<td><strong>96</strong></td>
+<td><em>[Data Increment]</em></td>
+<td><em>[Data Decrement]</em></td>
+<td><em>[NRPN LSB]</em></td>
+<td><em>[NRPN MSB]</em></td>
+<td><em>[RPN LSB]</em></td>
+<td><em>[RPN MSB]</em></td>
+<td>Arp Toggle</td>
+<td>Arp Order</td>
+</tr>
+<tr>
+<td><strong>104</strong></td>
+<td>Arp Clock Div</td>
+<td>Arp Chance</td>
+<td>Arp Euclid Length</td>
+<td>Arp Octaves</td>
+<td>Seq Order</td>
+<td>Seq Clock Div</td>
+<td>Seq Chance</td>
+<td>Seq Euclid Length</td>
+</tr>
+<tr>
+<td><strong>112</strong></td>
+<td>Delay Ping Pong</td>
+<td>Delay Wobble</td>
+<td>Reverb Wobble</td>
+<td>-</td>
+<td>Scrub Jitter</td>
+<td>Size Jitter</td>
+<td>Speed Jitter</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>120</strong></td>
+<td><em>[All Sound Off]</em></td>
+<td><em>[Reset All Ctrl]</em></td>
+<td><em>[Local Control]</em></td>
+<td><em>[All Notes Off]</em></td>
+<td><em>[Omni Mode Off]</em></td>
+<td><em>[Omni Mode On]</em></td>
+<td><em>[Mono Mode On]</em></td>
+<td><em>[Poly Mode On]</em></td>
+</tr>
+</tbody>
+</table>
+<p><em>Add row and column numbers to get the CC number</em></p>
+<hr />
+<h3 id="channel-mode-messages">Channel Mode Messages</h3>
+<h5 id="mpe-in-off">MPE in Off</h5>
+<ul>
+<li>Executes global actions plus per-string actions on all strings</li>
+</ul>
+<h5 id="mpe-in-on">MPE in On</h5>
+<ul>
+<li>Received on manager channel: Executes global actions plus per-string actions on all strings in the selected zone</li>
+<li>Received on member channel: Executes per-string action on respective string</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>CC number</th>
+<th>Message</th>
+<th>CC value</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>120</td>
+<td>All Sound Off</td>
+<td>Ignored</td>
+<td>Global: Clears effects<br>Per string: Lifts sustain, ends midi note, clears voice</td>
+</tr>
+<tr>
+<td>121</td>
+<td>Reset All Controllers</td>
+<td>Ignored</td>
+<td>Global: Resets channel aftertouch, pitchbend<br>Per string: Resets mod wheel, sustain, pitchbend, aftertouch, NRPN number, RPN number</td>
+</tr>
+<tr>
+<td>122</td>
+<td>Local Control</td>
+<td>0-63: Off<br>64-127: On</td>
+<td>Global: When local control is off, the touchpads don't generate synth notes</td>
+</tr>
+<tr>
+<td>123</td>
+<td>All Notes Off</td>
+<td>Ignored</td>
+<td>Per string: Lifts sustain, ends midi note</td>
+</tr>
+<tr>
+<td>124-127</td>
+<td>Mode</td>
+<td>N/A</td>
+<td><em>Not implemented. Plinky is always in Mode 3: Omni Mode off, Poly Mode on</em></td>
+</tr>
+</tbody>
+</table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plinky - Lucky Phoenix Edition</title>
+    <link rel="icon" type="image/svg+xml" href="img/params/P_A_SHAPE.svg">
+    <link rel="stylesheet" href="pico.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="topbar">
+        <a href="index.html"><img src="img/ember-labs-logo-100x100.png" alt="Ember Labs"></a>
+        <a href="index.html" id="topbar-title"><h1>Plinky - Lucky Phoenix Edition</h1></a>
+    </div>
+    <div id="body">
+        <div id="sidebar">
+            <nav>
+                <div class="section-title">Release Notes</div>
+                <ul>
+                    <li><a href="v0.5.0.html">v0.5.0</a></li>
+                </ul>
+                <div class="section-title">References</div>
+                <ul>
+                    <li><a href="midi_implementation.html">Midi implementation</a></li>
+                    <li><a href="nrpn_implementation.html">NRPN implementation</a></li>
+                    <li><a href="settings_menu.html" class="active">Settings Menu</a></li>
+                </ul>
+            </nav>
+        </div>
+        <div id="content">
+            <div id="content-inner">
+<h2 id="settings-menu">Settings Menu</h2>
+<h3 id="navigation">Navigation</h3>
+<p>Open the Settings Menu by holding <img src="img/function/FN_SHIFT_A.svg" class="inline-icon" style="position:relative;top:2px"> or <img src="img/function/FN_SHIFT_B.svg" class="inline-icon" style="position:relative;top:2px"> and pressing <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_SETTINGS1.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">SETTINGS</span></span></p>
+<p>In the settings menu the <img src="img/icons/I_RIGHT.png" class="inline-icon icon" style="position:relative;top:4px"> icon means rotating the encoder changes the selected setting. Press the encoder once to switch to value editing: the <img src="img/icons/I_LEFT.png" class="inline-icon icon" style="position:relative;top:4px"> icon shows and rotating the encoder changes the value of the selected setting. Pressing the encoder again switches back to changing the selected setting.</p>
+<p>It is also possible to press any of the lit up touchpads to select a setting</p>
+<h3 id="overview">Overview</h3>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Settings</th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#system"><strong>System</strong></a></td>
+<td><a href="#global-pad-layout">Global Pad Layout</a></td>
+<td><a href="#accelerometer-sensitivity">Accelerometer Sensitivity</a></td>
+<td><a href="#encoder-direction">Encoder Direction</a></td>
+<td><a href="#a4-reference-pitch">A4 Reference Pitch</a></td>
+<td><a href="#enable-midi-tuning">Enable Midi Tuning</a></td>
+<td><a href="#enable-local-control">Enable Local Control</a></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="#midi-in"><strong>Midi in</strong></a></td>
+<td><a href="#in-channels">In Channel(s)</a></td>
+<td><a href="#enable-mpe-in">Enable MPE In</a></td>
+<td><a href="#velocity-pressure-in-balance">Velocity / Pressure In Balance</a></td>
+<td><a href="#aftertouch-type-voice-bend-range">Aftertouch Type / Voice Bend Range</a></td>
+<td><a href="#channel-bend-range">Channel Bend-Range</a></td>
+<td><a href="#map-to-scale">Map To Scale</a></td>
+<td><a href="#clock-multiplier">Clock Multiplier</a></td>
+<td><a href="#filter">Filter</a></td>
+</tr>
+<tr>
+<td><a href="#midi-out"><strong>Midi out</strong></a></td>
+<td><a href="#out-channels">Out Channel(s)</a></td>
+<td><a href="#enable-mpe-out">Enable MPE Out</a></td>
+<td><a href="#velocity-pressure-out-balance">Velocity / Pressure Out Balance</a></td>
+<td><a href="#aftertouch-type">Aftertouch Type</a></td>
+<td><a href="#enable-trs-out">Enable TRS Out</a></td>
+<td><a href="#enable-soft-thru">Enable Soft Thru</a></td>
+<td><a href="#filter-1">Filter 1</a></td>
+<td><a href="#filter-2">Filter 2</a></td>
+</tr>
+<tr>
+<td><a href="#cv"><strong>CV</strong></a></td>
+<td><a href="#cv-in-quantization">CV In Quantization</a></td>
+<td><a href="#gate-in-pressuregate">Gate In Pressure/Gate</a></td>
+<td><a href="#clock-in-ppqn">Clock In PPQN</a></td>
+<td><a href="#clock-out-ppqn">Clock Out PPQN</a></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="#actions"><strong>Actions</strong></a></td>
+<td><a href="#reboot">Reboot</a></td>
+<td><a href="#touch-calib">Touch Calib</a></td>
+<td><a href="#cv-calib">CV Calib</a></td>
+<td><a href="#push-preset">Push Preset</a></td>
+<td><a href="#og-presets">OG Presets</a></td>
+<td><a href="#midi-panic">Midi Panic</a></td>
+<td><a href="#system-reset">System Reset</a></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h4 id="system">System</h4>
+<h5 id="global-pad-layout">Global Pad Layout</h5>
+<p><em>Options: Preset / Global (default: Preset)</em></p>
+<p>The <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_ROOT.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">ROOT</span></span>, <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_OCT.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">OCTAVE</span></span>, <span class="param-label-down" style="margin-right:-2px">SCALE</span><img src="img/params/P_OCT.svg" class="inline-icon" style="position:relative;top:1px"> and <span class="param-label-down" style="margin-right:-2px">COLUMN</span><img src="img/params/P_INTERVAL.svg" class="inline-icon" style="position:relative;top:1px"> parameters define the pad layout</p>
+<ul>
+<li>Preset: The layout parameters are saved and recalled per preset</li>
+<li>Global: The layout parameters persist across presets</li>
+</ul>
+<h5 id="accelerometer-sensitivity">Accelerometer Sensitivity</h5>
+<p><em>Range: -200% to 200% (default: 100%)</em> </p>
+<p>Scales how strongly the X/Y accelerometers affect the X/Y lfos. Setting this to 0% turns off the accelerometers altogether.</p>
+<h5 id="encoder-direction">Encoder Direction</h5>
+<p><em>Options: Normal / Invert (default: Normal)</em></p>
+<p>Allows inverted encoder behavior in case an inverted encoder was used in the hardware.</p>
+<h5 id="a4-reference-pitch">A4 Reference Pitch</h5>
+<p><em>Range: 430Hz to 445Hz (default: 440Hz)</em></p>
+<p>Offsets the tuning center of the entire device.
+This includes offsetting microtonal scales loaded through the <a href="midi_implementation.html#midi-tuning-standard">Midi Tuning Standard</a>.</p>
+<h5 id="enable-midi-tuning">Enable Midi Tuning</h5>
+<p>Enables whether microtonal scales sent through the <a href="midi_implementation.html#midi-tuning-standard">Midi Tuning Standard</a> are applied to Plinky's output.<br />
+Receiving <a href="midi_implementation.html#midi-tuning-standard">Midi Tuning Standard</a> data is still possible when Enable Midi Tuning is off.</p>
+<h5 id="enable-local-control">Enable Local Control</h5>
+<p>When this is off, touching Plinky's touchplate will not generate any audio. It effectively turns the Plinky into a sound module.<br />
+<a href="midi_implementation.html#yz-midi-controller">Y/Z controller mode</a> still works when Enable Local Control is off.</p>
+<hr />
+<h4 id="midi-in">Midi in</h4>
+<h5 id="in-channels">In Channel(s)</h5>
+<h6 id="mpe-off">MPE off</h6>
+<p><em>Options: 1 - 16 (default: 1)</em></p>
+<p>Sets the channel Plinky receives midi on</p>
+<h6 id="mpe-on">MPE on</h6>
+<p><em>Options: 2 [1] through 2-16 [1], and 15 [16] through 2-15 [16] (default: 2-9 [1])</em></p>
+<p>Sets either the lower or upper MPE zone - indicated by whether the manager channel is [1] or [16] - and which channels the zone uses. The voice channels start at 2 and count up for the lower zone, or start at channel 15 and count down for the upper zone.</p>
+<p><em>Note that MPE Channels are a shared setting for Midi input and output. Changing them in the Midi in section also changes them in the Midi out section, and vice versa.</em></p>
+<h5 id="enable-mpe-in">Enable MPE In</h5>
+<p>Enables receiving MPE</p>
+<h5 id="velocity-pressure-in-balance">Velocity / Pressure In Balance</h5>
+<p><em>Range: 100/0 to 0/100. (default: 50/50)</em></p>
+<p>Allows tweaking how strong the velocity and pressure midi data affect the pressure of the generated Plinky-touch</p>
+<ul>
+<li>If this is set to 100/0, an incoming note with velocity 127 will lead to a touch with 100% pressure. Incoming aftertouch data will have no effect</li>
+<li>If this is set to 80/20, an incoming note with velocity 127 will lead to a touch with 80% pressure. Incoming aftertouch data is able to affect the remaining 20%, to the point where aftertouch with level 127 brings the Plinky touch pressure up to 100%</li>
+</ul>
+<p>This goes for all settings: the note velocity can create start-pressures up to the velocity value. Aftertouch can then create additional pressure up to the pressure value. When the note velocity and aftertouch values are both 127, the resulting pressure is always 100%</p>
+<p>It's not necessary to understand the math for this setting to be useful. In practice it helps to generate touches with a workable pressure with a variety of midi controllers. If you have a midi keyboard with no aftertouch, setting this to 100/0 will still allow you to generate touches with full pressure. If you have an aftertouch or mpe controller, this setting can be tweaked to your liking</p>
+<h5 id="aftertouch-type-voice-bend-range">Aftertouch Type / Voice Bend Range</h5>
+<h6 id="mpe-off-aftertouch-type">MPE off - Aftertouch Type</h6>
+<p><em>Options: Off / Mono / Poly (default: Mono)</em></p>
+<p>Sets whether Plinky receives no aftertouch ("Off"), channel aftertouch ("Mono"), or poly aftertouch ("Poly")</p>
+<h6 id="mpe-on-voice-bend-range">MPE on - Voice Bend Range</h6>
+<p><em>Options: 1, 2, 7, 12, 14, 24, 48, 96 (default: 48)</em></p>
+<p>Sets the range of the MPE per-voice pitchbend. The global default for MPE is 48</p>
+<h5 id="channel-bend-range">Channel Bend-Range</h5>
+<p><em>Options: 1, 2, 7, 12, 14, 24, 48, 96 (default: 2)</em></p>
+<p>Sets the range of the channel pitchbend.</p>
+<h5 id="map-to-scale">Map To Scale</h5>
+<p>Sets whether received Note On messages map to scale notes.</p>
+<h5 id="clock-multiplier">Clock Multiplier</h5>
+<p><em>Options: 1/2x / 1x / 2x (default: 1x)</em></p>
+<p>Allows dividing or multiplying the incoming midi clock.</p>
+<h5 id="filter">Filter</h5>
+<table>
+
+<tbody>
+<tr>
+<td><img src="img/icons/I_TEMPO.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>Clock</td>
+<td>Enable receiving midi clock</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_PLAY.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>Sync</td>
+<td>Enable receiving midi transport (start/stop/continue)</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_KNOB.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>CC</td>
+<td>Enable receiving CCs to set Plinky parameters</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_CC14.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>CC14</td>
+<td>Enable receiving CCs to set Plinky parameters, of which CCs under CC64 are interpreted as 14bit values</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h4 id="midi-out">Midi out</h4>
+<h5 id="out-channels">Out Channel(s)</h5>
+<p>See description for Midi In Channel(s)</p>
+<h5 id="enable-mpe-out">Enable MPE Out</h5>
+<p>Enables sending MPE</p>
+<p><strong>Important:</strong> This setting will change how physical touches and incoming CV pitch are processed:</p>
+<ul>
+<li>MPE Out Off: When a pitch caused by a physical touch or a CV pitch slides from one note to the next, Plinky processes this as a different note. The note name on the diplay updates to the new note and Midi will send a Note Off for the old note and a Note On for the new note.</li>
+<li>MPE Out On: When a pitch caused by a physical touch or a CV pitch slides from one note to the next, this is processed as a pitch slide relative to the same starting note. The note name stays the same and no new note is output over Midi. Instead, Midi sends new MPE pitchbend values to represent the new pitch.</li>
+</ul>
+<h5 id="velocity-pressure-out-balance">Velocity / Pressure Out Balance</h5>
+<p>This setting works like Midi in Velocity / Pressure Balance, but in reverse. It takes the pressure of a Plinky touch and splits it into Note On velocity and Aftertouch pressure. It can be used to tweak how external synths respond to the pressure value of Plinky touches.</p>
+<p>When the input and output Vel/Pres Balance are the same, outgoing velocity and aftertouch will be identical to the velocity and aftertouch that came in.</p>
+<h5 id="aftertouch-type">Aftertouch Type</h5>
+<p><em>Options: Off / Mono / Poly (default: Mono)</em></p>
+<p>Defines whether Plinky sends no aftertouch ("Off"), sends the max pressure over channel aftertouch ("Mono"), or sends per-string pressure over poly aftertouch ("Poly")</p>
+<h5 id="enable-trs-out">Enable TRS Out</h5>
+<p>Plinky sends identical Midi data over USB and the 3.5mm TRS Midi connector. The TRS connection is much slower than USB, which means all Midi out data needs to be throttled. Turning off TRS means this throttling is no longer needed and much higher data speeds can be achieved over USB.</p>
+<h5 id="enable-soft-thru">Enable Soft Thru</h5>
+<p>Incoming Midi that is not on any of Plinky's selected input and output channels will be sent to Midi out</p>
+<h5 id="filter-1">Filter 1</h5>
+<table>
+
+<tbody>
+<tr>
+<td><img src="img/icons/I_TEMPO.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>Clock</td>
+<td>Enable sending Midi clock</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_PLAY.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>Sync</td>
+<td>Enbable sending Midi transport (start/stop/continue)</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_KNOB.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>CC</td>
+<td>Enable sending Plinky parameters as CCs</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_NRPN.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>NRPN</td>
+<td>Enable sending Plinky parameters as NRPNs</td>
+</tr>
+</tbody>
+</table>
+<h5 id="filter-2">Filter 2</h5>
+<table>
+
+<tbody>
+<tr>
+<td><img src="img/icons/I_MPE_FINE.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>MPE Fine Tuning</td>
+<td>When MPE is on, per voice pitchbend messages will include modulations from the <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_PITCH.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">PITCH</span></span> and <span style="display:inline-flex;align-items:flex-start"><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:4px"><span class="param-label" style="margin-left:-2px;position:relative;top:4px">GLIDE</span></span> parameters</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_ALFO.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>LFO out</td>
+<td>Enable sending the LFO values on CCs 48, 49, 50 and 51</td>
+</tr>
+<tr>
+<td><img src="img/icons/I_YZ.png" class="inline-icon icon" style="position:relative;top:4px"></td>
+<td>Y/Z Controller</td>
+<td>Enable sending the touch values for strings 1-8 on CCs 32-39 (position) and 40-47 (pressure) respectively</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h4 id="cv">CV</h4>
+<h5 id="cv-in-quantization">CV In Quantization</h5>
+<p><em>Options: Off, Chromatic, Scale (default: Off)</em></p>
+<p>The Chromatic and Scale options round the incoming cv pitch towards the goal pitch, which is the closest semitone (Chromatic) or scale note (Scale)</p>
+<p>The <span class="param-label-down" style="margin-right:2px">MICRO<br>TONE</span><img src="img/params/P_GLIDE.svg" class="inline-icon" style="position:relative;top:1px"> parameter defines how strong this rounding is:</p>
+<ul>
+<li>Microtone 0: fully rounded to the goal pitch</li>
+<li>Microtone 20: the detuning is scaled down to a maximum of 20% between the goal pitch and the next semitone/scale note</li>
+<li>Microtone 100: no rounding applied at all</li>
+</ul>
+<h5 id="gate-in-pressuregate">Gate In Pressure/Gate</h5>
+<p><em>Options: Gate, Pressure (default: Gate)</em></p>
+<p>Defines whether the incoming CV Gate voltage is processed as a binary or continuous value</p>
+<h5 id="clock-in-ppqn">Clock In PPQN</h5>
+<p><em>Options: 1, 2, 4, 8, 16, 24, 48 (default: 4)</em></p>
+<p>Defines the pulses per quarter note of the incoming clock</p>
+<h5 id="clock-out-ppqn">Clock Out PPQN</h5>
+<p><em>Options: 1, 2, 4, 8, 16, 24, 48 (default: 4)</em></p>
+<p>Defines the pulses per quarter note of the outgoing clock</p>
+<hr />
+<h4 id="actions">Actions</h4>
+<p>Hold down the encoder to trigger an action</p>
+<h5 id="reboot">Reboot</h5>
+<p>Reboot Plinky</p>
+<h5 id="touch-calib">Touch Calib</h5>
+<p>Start the touch calibration process</p>
+<h5 id="cv-calib">CV Calib</h5>
+<p>Start the CV calibration process</p>
+<h5 id="push-preset">Push Preset</h5>
+<p>Output all parameters of the current preset over midi. Uses NRPN if enabled in <a href="#filter-1">Midi Out Filter 1</a></p>
+<h5 id="og-presets">OG Presets</h5>
+<p>Reverts system settings and all presets on Plinky to be compatible with the OG firmware</p>
+<h5 id="midi-panic">Midi Panic</h5>
+<p>Clears all touches on the Plinky and sends out a Midi Panic message</p>
+<h5 id="system-reset">System Reset</h5>
+<ul>
+<li>Sets all system settings to default values</li>
+<li>Sets the global layout parameters to default values</li>
+<li>Sets all multi-timbral parameters to <a href="v0.5.0.html#multi-timbral-parameters">mono-timbral editing mode</a></li>
+<li>Clears saved <a href="midi_implementation.html#midi-tuning-standard">midi tuning</a> data</li>
+</ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
