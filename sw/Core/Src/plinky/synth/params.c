@@ -326,6 +326,17 @@ bool update_preset(Preset* preset) {
 			}
 			preset->params[param_id][SRC_BASE] = lpe_raw;
 		} // param loop
+		preset->version = 16;
+		// fall through for further upgrading
+	case 16:
+		// new parameter
+		memset(preset->params[P_ROOT], 0, NUM_MOD_SOURCES * sizeof(s16));
+		// align polyphonic params
+		for (PolyParam pp_id = 0; pp_id < NUM_POLY_PARAMS; pp_id++) {
+			s16* val = preset->poly_params[pp_id];
+			val[6] = val[5] = val[4] = val[3] = val[2] = val[1] = val[0] =
+			    preset->params[param_from_poly_param[pp_id]][SRC_BASE];
+		}
 		preset->version = LPE_PRESET_VERSION;
 		return true;
 	}
