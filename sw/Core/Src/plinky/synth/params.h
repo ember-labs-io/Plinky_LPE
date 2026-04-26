@@ -6,14 +6,14 @@
 // utils
 const Preset* init_params_ptr(void);
 bool editing_param(void);
-bool editing_poly_param(void);
+bool editing_multi_param(void);
 void dec_selected_edit_strip(void);
 void inc_selected_edit_strip(void);
 void reset_selected_edit_strip(void);
 bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
-void set_param_from_nrpn(Param param_id, u14 value, bool poly, u8 string_id);
+void set_param_from_nrpn(Param param_id, u14 value, bool multi, u8 string_id);
 void set_mod_from_nrpn(Param param_id, u14 value, ModSource mod_src);
 void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 member_string);
 
@@ -24,17 +24,17 @@ void params_tick(void);
 
 // param retrieval
 s32 param_val(Param param_id);
-s32 param_val_poly(PolyParam pp_id, u8 string_id);
+s32 param_val_multi(MultiParam mp_id, u8 string_id);
 s8 param_index(Param param_id);
-s8 param_index_poly(PolyParam pp_id, u8 string_id);
+s8 param_index_multi(MultiParam mp_id, u8 string_id);
 s8 param_index_unmod(Param param_id);
 u8 param_cc_value(Param param_id);
 bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value);
-u14 param_nrpn_poly_value(Param param_id, u8 string_id);
+u14 param_nrpn_multi_value(Param param_id, u8 string_id);
 
 // param saving
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);
-void save_poly_param_raw(Param param_id, u8 string_id, s16 data);
+void save_multi_param_raw(Param param_id, u8 string_id, s16 data);
 void save_param_index(Param param_id, s8 index);
 
 // pad action calls

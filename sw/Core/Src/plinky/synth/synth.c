@@ -114,7 +114,7 @@ static s8 string_oct(u8 string_id) {
 	static s8 oct[NUM_STRINGS] = {};
 	u8 mask = 1 << string_id;
 	if (!(string_oct_valid & mask)) {
-		oct[string_id] = param_index_poly(PP_OCT, string_id);
+		oct[string_id] = param_index_multi(MP_OCT, string_id);
 		string_oct_valid |= mask;
 	}
 	return oct[string_id];
@@ -124,7 +124,7 @@ static Scale string_scale(u8 string_id) {
 	static Scale scale[NUM_STRINGS] = {};
 	u8 mask = 1 << string_id;
 	if (!(string_scale_valid & mask)) {
-		scale[string_id] = param_index_poly(PP_SCALE, string_id);
+		scale[string_id] = param_index_multi(MP_SCALE, string_id);
 		string_scale_valid |= mask;
 	}
 	return scale[string_id];
@@ -134,13 +134,13 @@ static u16 string_root_pitch(u8 string_id) {
 	static u16 root_pitch[NUM_STRINGS] = {};
 	u8 mask = 1 << string_id;
 	if (!(string_root_pitch_valid & mask)) {
-		root_pitch[string_id] = SEMIS_TO_PITCH(param_index_poly(PP_ROOT, string_id));
+		root_pitch[string_id] = SEMIS_TO_PITCH(param_index_multi(MP_ROOT, string_id));
 		string_root_pitch_valid |= mask;
 	}
 	return root_pitch[string_id];
 }
 
-// absolute number of steps at the bottom-pad of string_id - includes PP_OCT, does not include PP_DEGREE
+// absolute number of steps at the bottom-pad of string_id - includes MP_OCT, does not include MP_DEGREE
 static s16 string_start_step(u8 string_id) {
 	static u16 string_hash[NUM_STRINGS] = {};
 	static s16 start_step[NUM_STRINGS] = {};
@@ -167,7 +167,7 @@ static s16 string_start_step(u8 string_id) {
 
 	// loop downwards from our string to string 1 until we find the first up-to-date string
 	for (u8 s_id = string_id; s_id >= 1; s_id--) {
-		column_param[s_id] = param_index_poly(PP_COLUMN, s_id);
+		column_param[s_id] = param_index_multi(MP_COLUMN, s_id);
 		scale_param[s_id] = string_scale(s_id);
 		new_string_hash[s_id] = column_param[s_id] + (scale_param[s_id] << 4);
 		if (new_string_hash[s_id] == string_hash[s_id])
@@ -484,13 +484,13 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 	float gratejit = 0.f;
 	int smppos = 0;
 	if (ui_mode != UI_SAMPLE_EDIT) {
-		timestretch = param_val_poly(PP_SMP_STRETCH, voice_id) * (2.f / 65536.f);
-		gsize = param_val_poly(PP_GR_SIZE, voice_id) * (1.414f / 65536.f);
-		grate = param_val_poly(PP_PLAY_SPD, voice_id) * (2.f / 65536.f);
-		smppos = (param_val_poly(PP_SCRUB, voice_id) * cur_sample_info.samplelen) >> 16;
-		posjit = param_val_poly(PP_SCRUB_JIT, voice_id) * (1.f / 65536.f);
-		sizejit = param_val_poly(PP_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
-		gratejit = param_val_poly(PP_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
+		timestretch = param_val_multi(MP_SMP_STRETCH, voice_id) * (2.f / 65536.f);
+		gsize = param_val_multi(MP_GR_SIZE, voice_id) * (1.414f / 65536.f);
+		grate = param_val_multi(MP_PLAY_SPD, voice_id) * (2.f / 65536.f);
+		smppos = (param_val_multi(MP_SCRUB, voice_id) * cur_sample_info.samplelen) >> 16;
+		posjit = param_val_multi(MP_SCRUB_JIT, voice_id) * (1.f / 65536.f);
+		sizejit = param_val_multi(MP_GR_SIZE_JIT, voice_id) * (1.f / 65536.f);
+		gratejit = param_val_multi(MP_PLAY_SPD_JIT, voice_id) * (1.f / 65536.f);
 	}
 	const SynthString* s_string = &play_strings[voice_id];
 	int trig = s_string->env_trigger;
@@ -760,7 +760,7 @@ static void generate_string_touch(u8 string_id) {
 	    // we have local control
 	    !sys_params.local_ctrl_off
 	    // default ui, exception for the edit-strips
-	    && ((ui_mode == UI_DEFAULT && !editing_poly_param() && !(string_id == 0 && editing_param()))
+	    && ((ui_mode == UI_DEFAULT && !editing_multi_param() && !(string_id == 0 && editing_param()))
 	        // sampler in preview mode when a sample is loaded
 	        || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER))) {
 		bool touching = get_strip_touched() & mask;
@@ -962,9 +962,9 @@ void generate_string_touches(void) {
 static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, float noise_diff, float drive,
                                   float resonance, u32* dst) {
 	// two loops handling two oscillators each
-	u32 glide_param = param_val_poly(PP_GLIDE, voice_id);
+	u32 glide_param = param_val_multi(MP_GLIDE, voice_id);
 	float glide = lpf_k(glide_param >> 2) * (0.5f / SAMPLES_PER_TICK);
-	s32 osc_shape = param_val_poly(PP_SHAPE, voice_id);
+	s32 osc_shape = param_val_multi(MP_SHAPE, voice_id);
 	float noise;
 	for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE / 2; osc_id++) {
 		s16* osc_dst = ((s16*)dst) + (osc_id & 1);
@@ -1138,9 +1138,9 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 	if (s_string->touched || voice_audible) {
 		// precalc some parameters
-		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
-		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
-		u32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
+		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_multi(MP_PITCH, voice_id));
+		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_multi(MP_INTERVAL, voice_id));
+		u32 micro_param = param_val_multi(MP_MICROTONE, voice_id);
 		TouchType touch_type = s_string->touch_type;
 
 		// the pitch of the base note
@@ -1163,7 +1163,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		switch (touch_type) {
 		case PHYS_TOUCH:
 			root_pitch = string_root_pitch(voice_id);
-			string_step_offset = string_start_step(voice_id) + param_index_poly(PP_DEGREE, voice_id);
+			string_step_offset = string_start_step(voice_id) + param_index_multi(MP_DEGREE, voice_id);
 			arp_oct_pitch = OCTS_TO_PITCH(arp_oct_offset);
 			break;
 		case MIDI_TOUCH:
@@ -1299,7 +1299,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 	// calc goal lpg
 	if (s_string->touched) {
-		float sens = param_val_poly(PP_ENV_LVL1, voice_id) * (2.f / 65536.f);
+		float sens = param_val_multi(MP_ENV_LVL1, voice_id) * (2.f / 65536.f);
 		env_goal = pressure * 1.f / TOUCH_FULL_PRES * sens * sens;
 		if (env_goal < 0.f)
 			env_goal = 0.f;
@@ -1310,10 +1310,10 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 	// retrieve envelope params
 	bool is_sample_preview = ui_mode == UI_SAMPLE_EDIT;
-	const float attack = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_ATTACK1, voice_id)));
-	const float decay = is_sample_preview ? 1.f : lpf_k((param_val_poly(PP_DECAY1, voice_id)));
-	const float sustain = is_sample_preview ? 1.f : squaref(param_val_poly(PP_SUSTAIN1, voice_id) * (1.f / 65536.f));
-	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_poly(PP_RELEASE1, voice_id)));
+	const float attack = is_sample_preview ? 0.5f : lpf_k((param_val_multi(MP_ATTACK1, voice_id)));
+	const float decay = is_sample_preview ? 1.f : lpf_k((param_val_multi(MP_DECAY1, voice_id)));
+	const float sustain = is_sample_preview ? 1.f : squaref(param_val_multi(MP_SUSTAIN1, voice_id) * (1.f / 65536.f));
+	const float release = is_sample_preview ? 0.5f : lpf_k((param_val_multi(MP_RELEASE1, voice_id)));
 
 	// retrigger envelope
 	if (s_string->env_trigger) {
@@ -1364,17 +1364,17 @@ static void run_voice(u8 voice_id, u32* dst) {
 	// == NOISE, DRIVE, LPG == //
 
 	// pre-calc noise, drive, resonance
-	int drive_lvl = param_val_poly(PP_DISTORTION, voice_id) * 2 - 65536;
+	int drive_lvl = param_val_multi(MP_DISTORTION, voice_id) * 2 - 65536;
 	float fdrive = table_interp(pitches, ((32768 - 2048) + drive_lvl / 2));
 	if (drive_lvl < -65536 + 2048)
 		fdrive *= (drive_lvl + 65536) * (1.f / 2048.f); // ensure drive goes right to 0 when full minimum
 	float drive = fdrive * (0.75f / 65536.f);
-	float goal_noise = param_val_poly(PP_NOISE, voice_id) * (1.f / 65536.f);
+	float goal_noise = param_val_multi(MP_NOISE, voice_id) * (1.f / 65536.f);
 	goal_noise *= goal_noise;
 	if (drive_lvl > 0)
 		goal_noise *= fdrive;
 	float noise_diff = (goal_noise - voice->noise_lvl) * (1.f / SAMPLES_PER_TICK);
-	int resonancei = 65536 - param_val_poly(PP_RESO, voice_id);
+	int resonancei = 65536 - param_val_multi(MP_RESO, voice_id);
 	float resonance = 2.1f - (table_interp(pitches, resonancei) * (2.1f / pitches[1024]));
 	drive *= 2.f / (resonance + 2.f);
 

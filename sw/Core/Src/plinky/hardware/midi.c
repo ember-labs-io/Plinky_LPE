@@ -655,11 +655,11 @@ static void cue_midi_out(void) {
 							return;
 						sending_param_progress++;
 					}
-					// send poly param values
-					if (PARAM_IS_POLY(send_param)) {
+					// send multi param values
+					if (PARAM_IS_MULTI_TIMBRAL(send_param)) {
 						for (u8 i = sending_param_progress; i < 16; i++) {
 							u8 string_id = i - 8;
-							if (!send_nrpn(string_id + 8, send_param, param_nrpn_poly_value(send_param, string_id)))
+							if (!send_nrpn(string_id + 8, send_param, param_nrpn_multi_value(send_param, string_id)))
 								return;
 							sending_param_progress++;
 						}
@@ -723,13 +723,13 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 	NRPN_Action nrpn_action = NA_NONE;
 	u8 id_msb = nrpn_id[n_rpn_string].msb;
 	u8 string_id;
-	bool poly;
+	bool multi;
 	// on a member channel
 	if (mpe_member) {
-		// poly param set through member channel
+		// multi param set through member channel
 		if (id_msb == 0) {
 			nrpn_action = NA_SET_PARAM;
-			poly = true;
+			multi = true;
 			string_id = n_rpn_string;
 		}
 		// msb invalid
@@ -741,16 +741,16 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 		// 0 => global param set through global channel
 		if (id_msb == 0) {
 			nrpn_action = NA_SET_PARAM;
-			poly = false;
+			multi = false;
 			string_id = 0;
 		}
 		// 1-7 => set modulation
 		else if (id_msb < 8)
 			nrpn_action = NA_SET_MOD;
-		// 8-15 => poly param set through global channel
+		// 8-15 => multi param set through global channel
 		else if (id_msb < 16) {
 			nrpn_action = NA_SET_PARAM;
-			poly = true;
+			multi = true;
 			string_id = id_msb - 8;
 		}
 		// msb invalid
@@ -768,7 +768,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 	case NA_NONE:
 		break;
 	case NA_SET_PARAM:
-		set_param_from_nrpn(param_id, n_rpn_value[n_rpn_string], poly, string_id);
+		set_param_from_nrpn(param_id, n_rpn_value[n_rpn_string], multi, string_id);
 		break;
 	case NA_SET_MOD:
 		set_mod_from_nrpn(param_id, n_rpn_value[n_rpn_string], id_msb);

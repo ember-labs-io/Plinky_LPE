@@ -134,7 +134,7 @@ static inline void DebugLog(const char* fmt, ...) {
 #define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5) // scales +/- 65536 to +/- 1 octave
 #define MAP_7BIT_TO_14BIT(val7) (((val7) << 7) | (val7))
 
-#define PARAM_IS_POLY(param_id)                                                                                        \
+#define PARAM_IS_MULTI_TIMBRAL(param_id)                                                                               \
 	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
 	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT))
 

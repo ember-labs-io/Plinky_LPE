@@ -459,7 +459,7 @@ void init_memory(void) {
 		sys_params.midi_in_scale_quant = false;    // off
 		sys_params.midi_trs_out_off = false;       // false means trs out on
 		sys_params.midi_tuning = false;            // off
-		sys_params.edit_poly_params = false;       // off
+		sys_params.edit_multi_params = false;      // off
 		sys_params.mpe_out_fine_tuning = false;    // off
 		sys_params.layout_global = false;          // off
 		sys_params.cv_gate_in_is_pressure = false; // off
