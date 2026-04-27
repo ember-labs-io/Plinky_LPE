@@ -77,8 +77,8 @@ const static RangeType range_type[NUM_PARAMS] = {
    [P_B_SCALE] = R_SVALUE,     [P_B_OFFSET] = R_SVALUE,     [P_B_DEPTH] = R_SVALUE,       [P_B_RATE] = R_DUACLK,      [P_B_SHAPE] = R_LFOSHP,       [P_B_SYM] = R_SVALUE,         // LFO B
    [P_X_SCALE] = R_SVALUE,     [P_X_OFFSET] = R_SVALUE,     [P_X_DEPTH] = R_SVALUE,       [P_X_RATE] = R_DUACLK,      [P_X_SHAPE] = R_LFOSHP,       [P_X_SYM] = R_SVALUE,         // LFO X
    [P_Y_SCALE] = R_SVALUE,     [P_Y_OFFSET] = R_SVALUE,     [P_Y_DEPTH] = R_SVALUE,       [P_Y_RATE] = R_DUACLK,      [P_Y_SHAPE] = R_LFOSHP,       [P_Y_SYM] = R_SVALUE,         // LFO Y
-   [P_SYN_LVL] = R_UVALUE,     [P_SYN_WET_DRY] = R_UVALUE,  [P_HPF] = R_UVALUE,           [P_MIX_UNUSED1] = R_UNUSED, [P_MIX_UNUSED4] = R_UNUSED,   [P_VOLUME] = R_UVALUE,        // Mixer 1
-   [P_IN_LVL] = R_UVALUE,      [P_IN_WET_DRY] = R_UVALUE,   [P_SYS_UNUSED1] = R_UNUSED,   [P_MIX_UNUSED2] = R_UNUSED, [P_MIX_UNUSED3] = R_UNUSED,   [P_MIX_WIDTH] = R_UVALUE,     // Mixer 2
+   [P_SYN_LVL] = R_UVALUE,     [P_SYN_WET_DRY] = R_UVALUE,  [P_HPF] = R_UVALUE,           [P_MIX_UNUSED1] = R_UNUSED, [P_SETTINGS1] = R_UNUSED,     [P_VOLUME] = R_UVALUE,        // Mixer 1
+   [P_IN_LVL] = R_UVALUE,      [P_IN_WET_DRY] = R_UVALUE,   [P_SYS_UNUSED1] = R_UNUSED,   [P_MIX_UNUSED2] = R_UNUSED, [P_SETTINGS2] = R_UNUSED,     [P_MIX_WIDTH] = R_UVALUE,     // Mixer 2
 };
 
 const static Preset init_params = {
@@ -100,8 +100,8 @@ const static Preset init_params = {
         [P_B_SCALE] = {RAW_HALF},   [P_B_OFFSET] = {0},                                         [P_B_DEPTH] = {0},                                  [P_B_RATE] = {-562},            [P_B_SHAPE] = {0},                          [P_B_SYM] = {0},                    // LFO B
         [P_X_SCALE] = {RAW_HALF},   [P_X_OFFSET] = {0},                                         [P_X_DEPTH] = {0},                                  [P_X_RATE] = {-451},            [P_X_SHAPE] = {0},                          [P_X_SYM] = {0},                    // LFO X
         [P_Y_SCALE] = {RAW_HALF},   [P_Y_OFFSET] = {0},                                         [P_Y_DEPTH] = {0},                                  [P_Y_RATE] = {-355},            [P_Y_SHAPE] = {0},                          [P_Y_SYM] = {0},                    // LFO Y
-        [P_SYN_LVL] = {RAW_HALF},   [P_SYN_WET_DRY] = {RAW_HALF},                               [P_HPF] = {0},                                      [P_MIX_UNUSED1] = {},           [P_MIX_UNUSED4] = {},                       [P_VOLUME] = {0},                   // Mixer 1
-        [P_IN_LVL] = {RAW_HALF},    [P_IN_WET_DRY] = {RAW_HALF},                                [P_SYS_UNUSED1] = {},                               [P_MIX_UNUSED2] = {},           [P_MIX_UNUSED3] = {},                       [P_MIX_WIDTH] = {RAW_SIZE * 7 / 8}, // Mixer 2
+        [P_SYN_LVL] = {RAW_HALF},   [P_SYN_WET_DRY] = {RAW_HALF},                               [P_HPF] = {0},                                      [P_MIX_UNUSED1] = {},           [P_SETTINGS1] = {},                         [P_VOLUME] = {0},                   // Mixer 1
+        [P_IN_LVL] = {RAW_HALF},    [P_IN_WET_DRY] = {RAW_HALF},                                [P_SYS_UNUSED1] = {},                               [P_MIX_UNUSED2] = {},           [P_SETTINGS2] = {},                         [P_MIX_WIDTH] = {RAW_SIZE * 7 / 8}, // Mixer 2
     },
     .multi_params = {
         [MP_SHAPE]       = {0, 0, 0, 0, 0, 0, 0},
