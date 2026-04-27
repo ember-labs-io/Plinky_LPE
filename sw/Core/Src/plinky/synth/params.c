@@ -261,8 +261,8 @@ bool update_preset(Preset* preset) {
 		// add mix width, switch value with (what used to be) accel sensitivity
 		for (u8 mod_id = SRC_BASE; mod_id < NUM_MOD_SOURCES; ++mod_id) {
 			s16 temp = preset->params[P_MIX_WIDTH][mod_id];
-			preset->params[P_MIX_WIDTH][mod_id] = preset->params[P_MIX_UNUSED3][mod_id];
-			preset->params[P_MIX_UNUSED3][mod_id] = temp;
+			preset->params[P_MIX_WIDTH][mod_id] = preset->params[P_SETTINGS2][mod_id];
+			preset->params[P_SETTINGS2][mod_id] = temp;
 		}
 		// set default
 		preset->params[P_MIX_WIDTH][SRC_BASE] = RAW_HALF;

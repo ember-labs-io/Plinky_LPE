@@ -411,8 +411,8 @@ typedef enum Param {
 	P_B_SCALE = R_B * 6,        P_B_OFFSET,     P_B_DEPTH,      P_B_RATE,	    P_B_SHAPE,	    P_B_SYM,        // LFO B
 	P_X_SCALE = R_X * 6,        P_X_OFFSET,     P_X_DEPTH,      P_X_RATE,	    P_X_SHAPE,	    P_X_SYM,        // LFO X
 	P_Y_SCALE = R_Y * 6,        P_Y_OFFSET,     P_Y_DEPTH,      P_Y_RATE,	    P_Y_SHAPE,	    P_Y_SYM,        // LFO Y
-	P_SYN_LVL = R_MIX1 * 6,     P_SYN_WET_DRY,  P_HPF,          P_MIX_UNUSED1,	P_MIX_UNUSED4,	P_VOLUME,       // Mixer 1
-	P_IN_LVL = R_MIX2 * 6,      P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIX_UNUSED2,	P_MIX_UNUSED3,	P_MIX_WIDTH,    // Mixer 2
+	P_SYN_LVL = R_MIX1 * 6,     P_SYN_WET_DRY,  P_HPF,          P_MIX_UNUSED1,	P_SETTINGS1,	P_VOLUME,       // Mixer 1
+	P_IN_LVL = R_MIX2 * 6,      P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIX_UNUSED2,	P_SETTINGS2,	P_MIX_WIDTH,    // Mixer 2
 
     NUM_PARAMS = R_NUM_ROWS * 6,
 } Param;
@@ -556,8 +556,8 @@ const static u8 midi_cc_table_rvs[NUM_PARAMS] = {
 	[P_B_SCALE] = 255,    [P_B_OFFSET] = 29,     [P_B_DEPTH] = 28,       [P_B_RATE] = 27,        [P_B_SHAPE] = 255,      [P_B_SYM] = 255,         // LFO B
 	[P_X_SCALE] = 255,    [P_X_OFFSET] = 78,     [P_X_DEPTH] = 77,       [P_X_RATE] = 76,        [P_X_SHAPE] = 255,      [P_X_SYM] = 255,         // LFO X
 	[P_Y_SCALE] = 255,    [P_Y_OFFSET] = 81,     [P_Y_DEPTH] = 80,       [P_Y_RATE] = 79,        [P_Y_SHAPE] = 255,      [P_Y_SYM] = 255,         // LFO Y
-	[P_SYN_LVL] = 7,      [P_SYN_WET_DRY] = 8,   [P_HPF] = 31,           [P_MIX_UNUSED1] = 255,  [P_MIX_UNUSED4] = 255,  [P_VOLUME] = 255,        // Mixer 1
-	[P_IN_LVL] = 89,      [P_IN_WET_DRY] = 90,   [P_SYS_UNUSED1] = 255,  [P_MIX_UNUSED2] = 255,  [P_MIX_UNUSED3] = 255,  [P_MIX_WIDTH] = 255,     // Mixer 2
+	[P_SYN_LVL] = 7,      [P_SYN_WET_DRY] = 8,   [P_HPF] = 31,           [P_MIX_UNUSED1] = 255,  [P_SETTINGS1] = 255,	 [P_VOLUME] = 255,        // Mixer 1
+	[P_IN_LVL] = 89,      [P_IN_WET_DRY] = 90,   [P_SYS_UNUSED1] = 255,  [P_MIX_UNUSED2] = 255,  [P_SETTINGS2] = 255,	 [P_MIX_WIDTH] = 255,     // Mixer 2
 };
 
 const static u8 midi_nrpn_table[NUM_PARAMS] = {
@@ -576,8 +576,8 @@ const static u8 midi_nrpn_table[NUM_PARAMS] = {
 	/*  66 */	P_B_SCALE,      P_B_OFFSET,     P_B_DEPTH,      P_B_RATE,       P_B_SHAPE,      P_B_SYM,         // LFO B
 	/*  72 */	P_X_SCALE,      P_X_OFFSET,     P_X_DEPTH,      P_X_RATE,       P_X_SHAPE,      P_X_SYM,         // LFO X
 	/*  78 */	P_Y_SCALE,      P_Y_OFFSET,     P_Y_DEPTH,      P_Y_RATE,       P_Y_SHAPE,      P_Y_SYM,         // LFO Y
-	/*  84 */	P_SYN_LVL,      P_SYN_WET_DRY,  P_HPF,          P_MIX_UNUSED1,  P_MIX_UNUSED4,  P_VOLUME,        // Mixer 1
-	/*  90 */	P_IN_LVL,       P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIX_UNUSED2,  P_MIX_UNUSED3,  P_MIX_WIDTH,     // Mixer 2
+	/*  84 */	P_SYN_LVL,      P_SYN_WET_DRY,  P_HPF,          P_MIX_UNUSED1,  P_SETTINGS1,	P_VOLUME,        // Mixer 1
+	/*  90 */	P_IN_LVL,       P_IN_WET_DRY,   P_SYS_UNUSED1,  P_MIX_UNUSED2,  P_SETTINGS2,	P_MIX_WIDTH,     // Mixer 2
 };
 
 typedef enum MultiParam {
@@ -721,8 +721,8 @@ const static char* const param_name[NUM_PARAMS] = {
    [P_B_SCALE] = I_AMPLITUDE "CV Depth",    [P_B_OFFSET] = I_OFFSET "Offset",     		[P_B_DEPTH] = I_AMPLITUDE "Depth",			[P_B_RATE] = I_TEMPO "Clock Div",      	[P_B_SHAPE] = I_SHAPE "Shape",       		[P_B_SYM] = I_WARP "Symmetry",         		// LFO B
    [P_X_SCALE] = I_AMPLITUDE "CV Depth",    [P_X_OFFSET] = I_OFFSET "Offset",     		[P_X_DEPTH] = I_AMPLITUDE "Depth",			[P_X_RATE] = I_TEMPO "Clock Div",      	[P_X_SHAPE] = I_SHAPE "Shape",       		[P_X_SYM] = I_WARP "Symmetry",         		// LFO X
    [P_Y_SCALE] = I_AMPLITUDE "CV Depth",    [P_Y_OFFSET] = I_OFFSET "Offset",     		[P_Y_DEPTH] = I_AMPLITUDE "Depth",			[P_Y_RATE] = I_TEMPO "Clock Div",      	[P_Y_SHAPE] = I_SHAPE "Shape",       		[P_Y_SYM] = I_WARP "Symmetry",         		// LFO Y
-   [P_SYN_LVL] = I_WAVE "Synth Lvl",    	[P_SYN_WET_DRY] = I_REVERB "Wet/Dry",		[P_HPF] = I_HPF "High Pass",           		[P_MIX_UNUSED1] = I_CROSS "<unused>",  	[P_MIX_UNUSED4] = I_CROSS "<unused>",       [P_VOLUME] = I_PHONES "Volume",        		// Mixer 1
-   [P_IN_LVL] = I_JACK "Input Lvl",     	[P_IN_WET_DRY] = I_JACK "In Wet/Dry",   	[P_SYS_UNUSED1] = I_CROSS "<unused>",   	[P_MIX_UNUSED2] = I_CROSS "<unused>",	[P_MIX_UNUSED3] = I_CROSS "<unused>",		[P_MIX_WIDTH] = I_PHONES "Width",			// Mixer 2
+   [P_SYN_LVL] = I_WAVE "Synth Lvl",    	[P_SYN_WET_DRY] = I_REVERB "Wet/Dry",		[P_HPF] = I_HPF "High Pass",           		[P_MIX_UNUSED1] = I_CROSS "<unused>",  	[P_SETTINGS1] = I_CROSS "<unused>",     	[P_VOLUME] = I_PHONES "Volume",        		// Mixer 1
+   [P_IN_LVL] = I_JACK "Input Lvl",     	[P_IN_WET_DRY] = I_JACK "In Wet/Dry",   	[P_SYS_UNUSED1] = I_CROSS "<unused>",   	[P_MIX_UNUSED2] = I_CROSS "<unused>",	[P_SETTINGS2] = I_CROSS "<unused>",			[P_MIX_WIDTH] = I_PHONES "Width",			// Mixer 2
 };
 
 // clang-format on
