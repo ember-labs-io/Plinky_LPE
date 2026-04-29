@@ -17,7 +17,7 @@ typedef struct Osc {
 	u32 prev_sample;
 	s32 phase_diff;
 	s32 goal_phase_diff;
-	s32 pitch;
+	u16 pitch;
 } Osc;
 
 typedef struct GrainPair {
@@ -52,17 +52,20 @@ typedef struct Voice {
 	ValueSmoother touch_pos;
 } Voice;
 
-// Alex notes:
-//
-// pitch table is (64*8) steps per semitone, ie 512 per semitone
-// so heres my maths, this comes out at 435
-// 8887421 comes from the value of pitch when playing a C
-// the pitch of middle c in plinky as written is (4.0/(65536.0*65536.0/8887421.0/31250.0f))
-// which is 1.0114729530400526 too low
-// which is 0.19749290999 semitones flat
-// *512 = 101. so I need to add 101 to pitch_base
+// the pitches[1025] table is centered around approx B1: pitches[512] leads to a 61.035Hz tone
+// to scale this to a true B1 = 61.735Hz / 61.035Hz = scale by 1.0115
+// in semitones: 12 × log₂(1.0115) = 0.198 semis
+// in pitch value: 0.198 * 512 = 101
+// we add 101 to go from the center pitch value (1 << 15) to a true B1
+// then we subtract 11 semitones to arrive at C1
 
-#define PITCH_BASE ((32768 - (12 << 9)) + 512 + 101) // pitch value for C4
+// offset from bottom of the sound engine (G-4) to the first valid note (C-1) is 29 semis
+//
+#define TUNING_OFFSET (SEMIS_TO_PITCH(29) + 101)
+#define MAX_PITCH SEMIS_TO_PITCH(NUM_NOTES - 1)
+#define BOTTOM_PAD_OCTS 2 // Octaves from C-1
+#define BOTTOM_PAD_SEMIS (12 * BOTTOM_PAD_OCTS)
+#define BOTTOM_PAD_PITCH SEMIS_TO_PITCH(BOTTOM_PAD_SEMIS)
 
 static Voice voices[NUM_VOICES];
 static SynthString synth_string[NUM_STRINGS];
@@ -76,11 +79,15 @@ static u8 phys_touch_mask = 0;
 static bool cv_trig_high = false;    // should cv trigger be high?
 static s32 cv_gate_value;            // cv gate value
 static bool got_high_pitch = false;  // did we save a high pitch?
-static s32 high_string_pitch_4x = 0; // pitch on highest touched string
+static u32 high_string_pitch_4x = 0; // pitch on highest touched string
 static s16 high_string_note = 0;     // note on highest touched string
 static bool got_low_pitch = false;   // did we save a low pitch?
-static s32 low_string_pitch_4x = 0;  // pitch on lowest touched string
+static u32 low_string_pitch_4x = 0;  // pitch on lowest touched string
 static u16 synth_max_pres = 0;       // highest pressure seen
+
+// Midi Tuning Standard
+static u16 midi_tuning_pitch[NUM_NOTES] = {};
+static u32 midi_tuning_active[(NUM_NOTES + 31) / 32] = {};
 
 const SynthString* get_synth_string(u8 string_id) {
 	return &synth_string[string_id];
@@ -88,37 +95,52 @@ const SynthString* get_synth_string(u8 string_id) {
 
 // === UTILS === //
 
-static s32 pitch_at_step(s8 step, Scale scale) {
-	u8 steps_in_scale = scale_table[scale][0];
-	s16 oct = step / steps_in_scale;
-	step -= oct * steps_in_scale;
-	if (step < 0) {
-		step += steps_in_scale;
-		oct--;
-	}
-	return OCTS_TO_PITCH(oct) + scale_table[scale][step + 1];
+#define MIDI_TUNING_IS_ACTIVE(note_nr) (midi_tuning_active[(note_nr) >> 5] & (1u << ((note_nr) & 31)))
+#define MIDI_TUNING_SET_ACTIVE(note_nr) (midi_tuning_active[(note_nr) >> 5] |= (1u << ((note_nr) & 31)))
+#define USING_MIDI_TUNING(note_number) (sys_params.midi_tuning && MIDI_TUNING_IS_ACTIVE(note_number))
+
+static u16 pitch_at_step_with_midi_tuning(u8 step, Scale scale, u8 steps_in_scale) {
+	u8 octs = step / steps_in_scale;
+	u16 pitch_in_oct = scale_table[scale][step % steps_in_scale];
+	u8 note_number = 12 * octs + PITCH_TO_NOTE_NR(pitch_in_oct);
+	return USING_MIDI_TUNING(note_number) ? midi_tuning_pitch[note_number] : OCTS_TO_PITCH(octs) + pitch_in_oct;
 }
 
-s32 quant_pitch_to_scale(s32 pitch, Scale scale) {
-	// estimate step by multiplying the octaves (float) by the steps per octave
-	s16 step = (float)pitch / PITCH_PER_OCT * scale_table[scale][0];
-	u32 best_distance = UINT32_MAX;
+static u16 pitch_at_step(u8 step, Scale scale, u8 steps_in_scale) {
+	return OCTS_TO_PITCH(step / steps_in_scale) + scale_table[scale][step % steps_in_scale];
+}
+
+#define ROUND_PITCH_TO_SEMIS(pitch) (((pitch) + 256) & ~511)
+
+u16 quant_pitch_to_scale(u16 pitch, Scale scale) {
+	u8 scale_steps = steps_in_scale[scale];
+	// estimate closest by linear mapping
+	u8 step = pitch * scale_steps / PITCH_PER_OCT;
+	u16 best_distance = abs(pitch - pitch_at_step(step, scale, scale_steps));
 
 	// find step in scale closest to pitch
-	if (pitch - pitch_at_step(step, scale) > 0) {
+	if (pitch - pitch_at_step(step, scale, scale_steps) > 0) {
+		// search up
 		while (true) {
 			step++;
-			u32 distance = abs(pitch - pitch_at_step(step, scale));
+			u16 step_pitch = pitch_at_step(step, scale, scale_steps);
+			if (step_pitch > MAX_PITCH)
+				break;
+			u16 distance = abs(pitch - step_pitch);
 			if (distance >= best_distance)
 				break;
 			best_distance = distance;
 		}
 		step--;
 	}
-	else {
+	else if (pitch - pitch_at_step(step, scale, scale_steps) < 0) {
+		// search down
 		while (true) {
 			step--;
-			u32 distance = abs(pitch - pitch_at_step(step, scale));
+			s32 step_pitch = pitch_at_step(step, scale, scale_steps);
+			if (step_pitch < 0)
+				break;
+			u16 distance = abs(pitch - step_pitch);
 			if (distance >= best_distance)
 				break;
 			best_distance = distance;
@@ -126,132 +148,118 @@ s32 quant_pitch_to_scale(s32 pitch, Scale scale) {
 		step++;
 	}
 
-	return pitch_at_step(step, scale);
+	return pitch_at_step(step, scale, scale_steps);
 }
 
-s16 step_at_string(u8 string_id, Scale scale) {
-	static u16 string_hash[NUM_STRINGS - 1];
-	static u16 string_start_step[NUM_STRINGS - 1];
-	static u8 string_start_semis[NUM_STRINGS - 1];
+u8 step_at_string(u8 string_id, Scale scale) {
+	static u16 string_hash[NUM_STRINGS] = {};
+	static u16 string_start_step[NUM_STRINGS] = {};
+	static u8 string_start_semis[NUM_STRINGS] = {};
 
-	if (string_id == 0)
-		return param_index_poly(PP_DEGREE, string_id);
+	if (string_id == 0) {
+		string_start_semis[0] = BOTTOM_PAD_SEMIS;
+		return steps_in_scale[param_index_poly(PP_SCALE, 0)] * BOTTOM_PAD_OCTS + param_index_poly(PP_DEGREE, string_id);
+	}
 
-	u8 first_stale_string = 0;
-	u16 new_string_hash[NUM_STRINGS - 1];
-	u8 string_column[NUM_STRINGS - 1];
-	u8 string_scale[NUM_STRINGS - 1];
+	u16 new_string_hash[NUM_STRINGS];
+	u8 column_param[NUM_STRINGS];
+	u8 scale_param[NUM_STRINGS];
+	u8 first_stale_string = 255;
 
 	// loop downwards from our string to 1 until we find the first up-to-date string
 	for (u8 s_id = string_id; s_id >= 1; s_id--) {
-		string_column[s_id - 1] = param_index_poly(PP_COLUMN, s_id);
-		string_scale[s_id - 1] = param_index_poly(PP_SCALE, s_id);
-		new_string_hash[s_id - 1] = string_column[s_id - 1] + (string_scale[s_id - 1] << 4);
+		column_param[s_id] = param_index_poly(PP_COLUMN, s_id);
+		scale_param[s_id] = param_index_poly(PP_SCALE, s_id);
+		new_string_hash[s_id] = column_param[s_id] + (scale_param[s_id] << 4);
 		// found up to date string
-		if (new_string_hash[s_id - 1] == string_hash[s_id - 1])
+		if (new_string_hash[s_id] == string_hash[s_id])
 			break;
 		first_stale_string = s_id;
 	}
 
-	// recalculate from first_invalid to string_id
-	if (first_stale_string > 0) {
-		for (u8 s_id = first_stale_string; s_id <= string_id; ++s_id) {
-			// invalidate higher strings when we reach the originally requested string
-			if (s_id == string_id)
-				for (u8 s = string_id + 1; s < NUM_STRINGS; ++s)
-					string_hash[s - 1] = 0;
-
-			// find base octave and pitch in that octave
-			u8 start_semis = string_column[s_id - 1];
-			if (s_id > 1)
-				start_semis += string_start_semis[s_id - 2];
+	// recalculate stale strings up to string_id
+	if (first_stale_string != 255) {
+		for (u8 s_id = first_stale_string; s_id <= string_id; s_id++) {
+			u8 start_semis = string_start_semis[s_id - 1] + column_param[s_id];
 			u8 base_oct = start_semis / 12;
-			u16 pitch_in_base_oct = SEMIS_TO_PITCH(start_semis % 12);
+			u16 pitch_in_oct = SEMIS_TO_PITCH(start_semis % 12);
+			u8 scale_steps = steps_in_scale[scale];
+			const u16* step_pitch = scale_table[scale_param[s_id]];
 
-			// find closest scale step
-			const u16* scale_pitch = scale_table[string_scale[s_id - 1]];
-			u8 steps_in_scale = *scale_pitch++;
-
-			// estimate by linear mapping
-			u8 estimated_step = pitch_in_base_oct * (steps_in_scale - 1) / scale_pitch[steps_in_scale - 1];
-			u16 least_dist = abs(scale_pitch[estimated_step] - pitch_in_base_oct);
-
-			u8 step_in_oct = estimated_step;
+			// estimate closest step by linear mapping
+			u8 closest_step = pitch_in_oct * scale_steps / PITCH_PER_OCT;
+			u16 least_dist = abs(step_pitch[closest_step] - pitch_in_oct);
 			bool check_higher_steps = true;
 
 			// search downward
-			if (step_in_oct > 0) {
-				do {
-					step_in_oct--;
-					u16 dist = abs(scale_pitch[step_in_oct] - pitch_in_base_oct);
-					if (dist >= least_dist) {
-						step_in_oct++;
-						break;
-					}
-					least_dist = dist;
-					// if we found a closer step downwards, we know we won't find a closer step upwards
-					check_higher_steps = false;
-				} while (step_in_oct > 0);
+			while (closest_step > 0) {
+				closest_step--;
+				u16 dist = abs(step_pitch[closest_step] - pitch_in_oct);
+				if (dist >= least_dist) {
+					closest_step++;
+					break;
+				}
+				least_dist = dist;
+				// if we found a closer step downwards, we know we won't find a closer step upwards
+				check_higher_steps = false;
 			}
 
 			// search upward
-			if (check_higher_steps && step_in_oct < steps_in_scale - 1) {
-				step_in_oct = estimated_step;
-				do {
-					step_in_oct++;
-					u16 dist = abs(scale_pitch[step_in_oct] - pitch_in_base_oct);
+			if (check_higher_steps) {
+				while (closest_step < scale_steps - 1) {
+					closest_step++;
+					u16 dist = abs(step_pitch[closest_step] - pitch_in_oct);
 					if (dist >= least_dist) {
-						step_in_oct--;
+						closest_step--;
 						break;
 					}
 					least_dist = dist;
-				} while (step_in_oct < steps_in_scale - 1);
+				}
 			}
 
 			// check first note of next octave
-			if (step_in_oct == steps_in_scale - 1 && PITCH_PER_OCT - pitch_in_base_oct < least_dist) {
-				step_in_oct = 0;
+			if (closest_step == scale_steps - 1 && PITCH_PER_OCT - pitch_in_oct < least_dist) {
+				closest_step = 0;
 				base_oct++;
 			}
 
 			// save results
-			string_hash[s_id - 1] = new_string_hash[s_id - 1];
-			string_start_semis[s_id - 1] = base_oct * 12 + PITCH_TO_SEMIS(scale_pitch[step_in_oct]);
-			string_start_step[s_id - 1] = base_oct * steps_in_scale + step_in_oct;
+			string_hash[s_id] = new_string_hash[s_id];
+			string_start_semis[s_id] = base_oct * 12 + PITCH_TO_SEMIS(step_pitch[closest_step]);
+			string_start_step[s_id] = base_oct * scale_steps + closest_step;
 		}
+		// invalidate higher strings
+		for (u8 s_id = string_id + 1; s_id < NUM_STRINGS; s_id++)
+			string_hash[s_id] = 0;
 	}
 	// return with degree offset
-	return (string_id == 0 ? 0 : string_start_step[string_id - 1]) + param_index_poly(PP_DEGREE, string_id);
+	return string_start_step[string_id] + param_index_poly(PP_DEGREE, string_id);
 }
 
-static s32 string_center_pitch(u8 string_id, Scale scale) {
-	s16 step = step_at_string(string_id, scale) + 3;
-	u8 steps_in_scale = scale_table[scale][0];
+static u16 string_center_pitch(u8 string_id, Scale scale) {
+	u8 scale_steps = steps_in_scale[scale];
+	u8 step = step_at_string(string_id, scale) + 3;
 	// get octave
-	s16 oct = step / steps_in_scale;
-	step -= oct * steps_in_scale;
-	if (step < 0) {
-		step += steps_in_scale;
-		oct--;
-	}
+	u8 oct = step / scale_steps;
+	step %= scale_steps;
 	// get pitch-in-octave of pad 3
-	s32 pitch3 = scale_table[scale][step + 1];
+	u16 pitch3 = scale_table[scale][step];
 	// get pitch-in-octave of pad 4
-	step = (step + 1) % steps_in_scale;
-	s32 pitch4 = scale_table[scale][step + 1];
+	step = (step + 1) % scale_steps;
+	u16 pitch4 = scale_table[scale][step];
 	if (pitch4 < pitch3)
 		pitch4 += PITCH_PER_OCT;
-	// return average plus octave offset
-	return ((pitch3 + pitch4) >> 1) + OCTS_TO_PITCH(oct);
+	// return average
+	return OCTS_TO_PITCH(oct) + ((pitch3 + pitch4) >> 1);
 }
 
-u8 find_string_for_pitch(s32 pitch, bool quantize) {
+u8 find_string_for_pitch(u16 pitch, bool quantize) {
 	// find desired string: center pitch closest to pitch
 	u8 desired_string = 0;
-	u32 prev_pitch_dist = __UINT32_MAX__;
+	u16 prev_pitch_dist = UINT16_MAX;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
 		Scale scale = param_index_poly(PP_SCALE, string_id);
-		u32 pitch_dist =
+		u16 pitch_dist =
 		    abs(string_center_pitch(string_id, scale) - (quantize ? quant_pitch_to_scale(pitch, scale) : pitch));
 		if (pitch_dist >= prev_pitch_dist)
 			break;
@@ -290,12 +298,13 @@ u8 find_string_for_pitch(s32 pitch, bool quantize) {
 	return best_string;
 }
 
-u16 string_position_from_pitch(u8 string_id, s32 pitch) {
+u16 string_position_from_pitch(u8 string_id, u16 pitch) {
 	Scale scale = param_index_poly(PP_SCALE, string_id);
-	s16 string_step_offset = step_at_string(string_id, scale);
+	u8 scale_steps = steps_in_scale[scale];
+	u8 string_step_offset = step_at_string(string_id, scale);
 	u16 position = 7 << 8;
 	for (u8 pad = 7; pad > 0; pad--) {
-		if (pitch < pitch_at_step(string_step_offset + pad, scale))
+		if (pitch < pitch_at_step(string_step_offset + pad, scale, scale_steps))
 			break;
 		position = (7 - pad) << 8;
 	}
@@ -316,6 +325,13 @@ void clear_synth_string(u8 string_id) {
 void clear_synth_strings(void) {
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
 		synth_string[string_id] = init_synth_string;
+}
+
+void set_note_tuning(u8 note_number, u16 pitch) {
+	if (note_number < NUM_NOTES && pitch <= MAX_PITCH) {
+		MIDI_TUNING_SET_ACTIVE(note_number);
+		midi_tuning_pitch[note_number] = pitch;
+	}
 }
 
 // === UNORGANIZED SAMPLER CODE === //
@@ -388,7 +404,7 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 			/// / / / ////////////////////// multisample choice
 			int best = voice_id;
 			int bestdist = 0x7fffffff;
-			int mypitch = (voice->osc[1].pitch + voice->osc[2].pitch) / 2;
+			int mypitch = (voice->osc[1].pitch + voice->osc[2].pitch) / 2 + BOTTOM_PAD_PITCH;
 			int mysemi = (mypitch) >> 9;
 			static u8 multisampletime[8];
 			static u8 trig_count = 0;
@@ -585,7 +601,7 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 	for (int gi = 0; gi < 2; ++gi) {
 		float multisample_grate;
 		if (cur_sample_info.pitched && (ui_mode != UI_SAMPLE_EDIT)) {
-			int relpitch = voice->osc[1 + gi].pitch - cur_sample_info.notes[voice->slice_id] * 512;
+			int relpitch = voice->osc[1 + gi].pitch + BOTTOM_PAD_PITCH - cur_sample_info.notes[voice->slice_id] * 512;
 			if (relpitch < -512 * 12 * 5) {
 				multisample_grate = 0.f;
 			}
@@ -1007,37 +1023,44 @@ static void run_voice(u8 voice_id, u32* dst) {
 	// == GENERATE OSCILLATOR PITCHES == //
 
 	if (s_string->touched || voice_audible) {
-		// precalc some pitches
-		s32 oct_pitch_offset = OCTS_TO_PITCH(arp_oct_offset + param_index_poly(PP_OCT, voice_id));
-		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
-		s32 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
+		// precalc some parameters
+		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_INTERVAL, voice_id));
 		s32 micro_param = param_val_poly(PP_MICROTONE, voice_id);
 		bool using_midi = !!(s_string->using_midi & read_frame_mask);
 
 		// we're filling these
-		s32 note_pitch = 0;
+		u16 note_pitch = 0;
 		s32 pitchbend_pitch = 0;
 
 		// for averages
-		s32 note_pitch_4x = 0;
+		u32 note_pitch_4x = 0;
 		s32 pitchbend_pitch_4x = 0;
 
 		// these only get used by touch
 		Touch* s_touch_sort = &s_string->touch_sorted[2]; // we use pitches 2-5, discarding extreme values
 		Scale scale = S_MAJOR;
-		s16 string_step_offset = 0;
+		u8 scale_steps = 0;
+		u8 string_step_offset = 0;
+		s32 octaves_pitch = 0;
+		s16 pitch_param_pitch = 0;
 
-		if (using_midi)
-			note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
+		if (using_midi) {
+			u8 note_number = s_string->note_number;
+			note_pitch =
+			    USING_MIDI_TUNING(note_number) ? midi_tuning_pitch[note_number] : NOTE_NR_TO_PITCH(note_number);
+		}
 		else {
 			scale = param_index_poly(PP_SCALE, voice_id);
+			scale_steps = steps_in_scale[scale];
 			string_step_offset = step_at_string(voice_id, scale);
+			octaves_pitch = OCTS_TO_PITCH(arp_oct_offset + param_index_poly(PP_OCT, voice_id));
+			pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
 		}
 
 		// loop through oscillators
 		for (u8 osc_id = 0; osc_id < OSCS_PER_VOICE; ++osc_id) {
-			s32 pitch_param_fine_pitch = 0;
-			s32 osc_pitch = 0;
+			s16 pitch_param_fine_pitch = 0;
+			u16 osc_pitch = 0;
 
 			// for midi
 			if (using_midi)
@@ -1045,32 +1068,28 @@ static void run_voice(u8 voice_id, u32* dst) {
 				pitchbend_pitch = s_string->pitchbend_pitch + ((osc_id - 2) * micro_param >> 10);
 			// for touch
 			else {
-				u16 position = s_touch_sort++->pos; // touch position
-				u8 pad_y = 7 - (position >> 8);     // pad on string
-				s32 pad_pitch = pitch_at_step(string_step_offset + pad_y, scale);
+				u16 position = s_touch_sort++->pos;
+				// steps from string + steps from pad
+				u8 pad_step = string_step_offset + (7 - (position >> 8));
 
-				// less than half a semitone offset from P_PITCH: that's just fine pitch
-				if (abs(pitch_param_pitch) < PITCH_PER_SEMI >> 1)
-					pitch_param_fine_pitch = pitch_param_pitch;
-				// more than half a semitone offset: recalculate which pad we land on
-				else {
-					s32 goal_pitch = pad_pitch + pitch_param_pitch;
-					pad_pitch = quant_pitch_to_scale(goal_pitch, scale);
-					pitch_param_fine_pitch = goal_pitch - pad_pitch;
-				}
+				// detuning from pad touch: pitchbend
+				s8 pos_on_pad = 127 - (position & 255);
+				u16 pad_pitch = pitch_at_step_with_midi_tuning(pad_step, scale, scale_steps);
+				s16 pitch_to_next_pad =
+				    pitch_at_step_with_midi_tuning(pad_step + (pos_on_pad > 0 ? 1 : -1), scale, scale_steps)
+				    - pad_pitch;
+				pitchbend_pitch = (s64)abs(pos_on_pad) * micro_param * pitch_to_next_pad >> 24;
 
-				// the note we're playing
-				note_pitch = pad_pitch + oct_pitch_offset;
+				// apply pitch parameter offset
+				u16 total_pitch = clampi(octaves_pitch + pad_pitch + pitch_param_pitch, 0, MAX_PITCH);
+				// round to a semitone
+				note_pitch = ROUND_PITCH_TO_SEMIS(total_pitch);
+				// remember the remaining pitch
+				pitch_param_fine_pitch = total_pitch - note_pitch;
 
 				// oscillator 2 defines the note number
 				if (osc_id == 2 && (!sys_params.mpe_out || s_string->env_trigger))
 					s_string->note_number = PITCH_TO_NOTE_NR(note_pitch);
-
-				// detuning from pad touch: pitchbend
-				s16 pos_on_pad = 127 - (position & 255);
-				u16 pitch_to_next_pad =
-				    abs(pitch_at_step(string_step_offset + pad_y + (pos_on_pad > 0 ? 1 : -1), scale) - note_pitch);
-				pitchbend_pitch = (s64)pos_on_pad * micro_param * pitch_to_next_pad >> 24;
 			}
 
 			// save for averages
@@ -1078,21 +1097,20 @@ static void run_voice(u8 voice_id, u32* dst) {
 			pitchbend_pitch_4x += pitchbend_pitch;
 
 			// add detuning from pitch parameter - doesn't count as pitchbend
-			osc_pitch = note_pitch + pitchbend_pitch + pitch_param_fine_pitch;
+			osc_pitch = clampi(note_pitch + pitchbend_pitch + pitch_param_fine_pitch, 0, MAX_PITCH);
 
-			// add osc interval
-			osc_pitch += (osc_id & 1) == 1 ? osc_interval_pitch : 0;
+			// add osc interval (if within valid pitch range)
+			osc_pitch += (osc_id & 1) == 1 && osc_pitch + osc_interval_pitch <= MAX_PITCH ? osc_interval_pitch : 0;
 
 			// save to voice
 			voice->osc[osc_id].pitch = osc_pitch;
-			voice->osc[osc_id].goal_phase_diff =
-			    maxi(65536, (s32)(table_interp(pitches, osc_pitch + PITCH_BASE) * (65536.f * 128.f)));
+			voice->osc[osc_id].goal_phase_diff = table_interp(pitches, osc_pitch + TUNING_OFFSET) * (65536.f * 128.f);
 		}
 
 		s32 final_pitch_4x = note_pitch_4x + pitchbend_pitch_4x;
 
 		if (!using_midi)
-			s_string->pitchbend_pitch = (final_pitch_4x >> 2) - NOTE_NR_TO_PITCH(s_string->note_number);
+			s_string->pitchbend_pitch = (final_pitch_4x >> 2) - SEMIS_TO_PITCH(s_string->note_number);
 
 		// save the lowest and highest string that are touched
 		if (s_string->touched) {
@@ -1117,7 +1135,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 		if (env_goal < 0.f)
 			env_goal = 0.f;
 		env_goal *= env_goal;
-		env_goal *= 1.f + ((voice->osc[2].pitch - 43000) * (1.f / 65536.f)); // pitch compensation
+		// filter cutoff pitch tracking
+		env_goal *= 1.f + ((voice->osc[2].pitch - (43000 + OCTS_TO_PITCH(2))) * (1.f / 65536.f));
 	}
 
 	// retrieve envelope params
@@ -1206,10 +1225,10 @@ void handle_synth_voices(u32* dst) {
 	// send cv values
 	send_cv_trigger(cv_trig_high);
 	if (got_high_pitch)
-		send_cv_pitch(true, high_string_pitch_4x, true);
+		send_cv_pitch(true, high_string_pitch_4x + BOTTOM_PAD_PITCH, true);
 	send_cv_gate(mini(cv_gate_value, 65535));
 	if (got_low_pitch)
-		send_cv_pitch(false, low_string_pitch_4x, true);
+		send_cv_pitch(false, low_string_pitch_4x + BOTTOM_PAD_PITCH, true);
 	send_cv_pressure(synth_max_pres * 8);
 
 	if (USING_SAMPLER) {

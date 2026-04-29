@@ -35,6 +35,7 @@ SRCS = \
 	sw/Core/Src/plinky/hardware/encoder.c \
 	sw/Core/Src/plinky/hardware/expander.c \
 	sw/Core/Src/plinky/hardware/leds.c \
+	sw/Core/Src/plinky/hardware/midi_sysex.c \
 	sw/Core/Src/plinky/hardware/midi.c \
 	sw/Core/Src/plinky/hardware/memory.c \
 	sw/Core/Src/plinky/hardware/spi.c \

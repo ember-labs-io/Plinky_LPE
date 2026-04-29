@@ -91,15 +91,15 @@ static void draw_main_leds(void) {
 		int sp1 = (x < 7) ? cur_sample_info.splitpoints[x + 1] : cur_sample_info.samplelen;
 
 		Scale scale = param_index_poly(PP_SCALE, x);
-		u8 steps_in_scale = scale_table[scale][0];
+		u8 scale_steps = steps_in_scale[scale];
 		s16 start_step = step_at_string(x, scale);
 
 		// Find first pad that lands on step % steps_in_scale == 0
-		s16 first_y = ((-start_step % steps_in_scale) + steps_in_scale) % steps_in_scale;
+		s16 first_y = ((-start_step % scale_steps) + scale_steps) % scale_steps;
 
 		// Draw all occurrences within 8-pad range
 		u8 root_k[8] = {};
-		for (s16 y = first_y; y < 8; y += steps_in_scale)
+		for (s16 y = first_y; y < 8; y += scale_steps)
 			root_k[7 - y] = 96;
 
 		for (u8 y = 0; y < 8; ++y) {
