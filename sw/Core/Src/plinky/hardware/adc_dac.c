@@ -93,15 +93,6 @@ float adc_get_smooth(ADCSmoothIndex index) {
 	return adc_smoother[index].y2;
 }
 
-s32 apply_dac_pitch_calib(bool pitch_hi, s32 pitch_uncalib) {
-	return (s32)((pitch_uncalib * adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO].scale)
-	             + adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO].bias);
-}
-
-s32 get_dac_pitch_octave(bool pitch_hi) {
-	return abs((s32)(adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO].scale * (2048.f * 12.f)));
-}
-
 // same as general smooth_value(), but with faster constants
 static void adc_smooth_value(ValueSmoother* s, float new_val) {
 	// inspired by  https ://cytomic.com/files/dsp/DynamicSmoothing.pdf
@@ -169,22 +160,21 @@ static void adc_dac_monitor(void) {
 
 // == CV == //
 
-void send_cv_pitch(bool pitch_hi, s32 data, bool apply_calib) {
+void send_cv_pitch(bool pitch_hi, s32 pitch_4x, bool apply_calib) {
 	if (apply_calib) {
-		data = apply_dac_pitch_calib(pitch_hi, data);
-		s32 octave = get_dac_pitch_octave(pitch_hi);
-		for (s32 k = 0; k < 3; ++k)
-			if (data > 65535)
-				data -= octave;
-			else
-				break;
-		for (s32 k = 0; k < 3; ++k)
-			if (data < 0)
-				data += octave;
-			else
-				break;
+		ADC_DAC_Calib* calib = &adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO];
+		u32 octave = abs((512 * 12 * 4) * calib->scale);
+		// apply calibration
+		pitch_4x = (pitch_4x * calib->scale) + calib->bias;
+		// output at the correct pitch, keep octave within bounds
+		while (pitch_4x > UINT16_MAX)
+			pitch_4x -= octave;
+		while (pitch_4x < 0)
+			pitch_4x += octave;
 	}
-	HAL_DAC_SetValue(&hdac1, pitch_hi ? DAC_CHANNEL_2 : DAC_CHANNEL_1, DAC_ALIGN_12B_L, clampi(data, 0, 65535));
+	else
+		pitch_4x = clampi(pitch_4x, 0, 65535);
+	HAL_DAC_SetValue(&hdac1, pitch_hi ? DAC_CHANNEL_2 : DAC_CHANNEL_1, DAC_ALIGN_12B_L, pitch_4x);
 }
 
 void cv_calib(void) {

@@ -7,6 +7,7 @@
 #include "hardware/leds.h"
 #include "hardware/memory.h"
 #include "hardware/midi.h"
+#include "hardware/midi_sysex.h"
 #include "lfos.h"
 #include "param_defs.h"
 #include "sampler.h"
@@ -904,8 +905,11 @@ void draw_preset_info(void) {
 	if (!xtab)
 		xtab = draw_preset_id();
 	// step recording fills the center of the screen
-	if (seq_state() != SEQ_STEP_RECORDING)
-		draw_preset_name(xtab);
+	if (seq_state() != SEQ_STEP_RECORDING) {
+		// tuning name replaces preset name
+		if (!sys_params.midi_tuning || !draw_midi_tuning_name())
+			draw_preset_name(xtab);
+	}
 	// bottom left priority: cued pattern, current pattern
 	xtab = draw_cued_pattern_id(arp_toggle);
 	if (!xtab)

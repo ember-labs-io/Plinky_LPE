@@ -30,6 +30,8 @@
 
 // SYNTH
 
+#define NUM_NOTES 99 // C-1 - D7
+
 #define PITCH_PER_SEMI 512
 #define PITCH_PER_OCT 6144
 
@@ -254,6 +256,7 @@ typedef enum SysParam {
 	SYS_MIDI_IN_FILTER,
 	SYS_MIDI_OUT_FILTER,
 	SYS_MIDI_TRS_OUT_OFF,
+	SYS_MIDI_TUNING,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -767,19 +770,6 @@ const static char* const scale_name[NUM_SCALES] = {
     [S_DIMINISHED] = "Diminished",
 };
 
-static inline const char* note_name(int note) {
-	note += 12;
-	if (note < 0 || note > 8 * 12)
-		return "";
-	static char buf[4];
-	int octave = note / 12;
-	note -= octave * 12;
-	buf[0] = "CCDDEFFGGAAB"[note];
-	buf[1] = " + +  + + + "[note];
-	buf[2] = '0' + octave;
-	return buf;
-}
-
 // == TYPEDEFS == //
 
 typedef struct ValueSmoother {
@@ -804,7 +794,7 @@ typedef struct SynthString {
 	Touch touch_frames[NUM_TOUCH_FRAMES]; // last eight frames of touches
 	Touch touch_sorted[NUM_TOUCH_FRAMES]; // sorted copy of touch
 	Touch cur_touch;                      // active touch for this frame
-	s8 note_number;
+	u8 note_number;
 	u8 start_velocity;
 	s32 pitchbend_pitch;
 	LatchTouch latch_touch;
@@ -894,7 +884,8 @@ typedef struct SysParams {
 	u8 mpe_zone : 1; // 0 = lower, 1 = upper
 	bool midi_in_scale_quant : 1;
 	bool midi_trs_out_off : 1;
-	u8 paddy : 5;
+	bool midi_tuning : 1;
+	u8 paddy : 4;
 	// 13 bytes
 	u8 pad[16 - 14];
 	// 15 bytes

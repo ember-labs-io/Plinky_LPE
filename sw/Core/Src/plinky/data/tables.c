@@ -2431,45 +2431,73 @@ __attribute__((section(".wavetableSection"))) const short wavetable[NUM_WAVETABL
 
 #define CENTS(c) (((c) * PITCH_PER_SEMI) / 100)
 
-#define MAX_SCALE_STEPS 12
+const u8 steps_in_scale[NUM_SCALES] = {
+	[S_CHROMATIC] = 12,
+	[S_MAJOR] = 7,
+	[S_MINOR] = 7,
+	[S_HARMMINOR] = 7,
+	[S_PENTA] = 5,
+	[S_PENTAMINOR] = 5,
+	[S_HIRAJOSHI] = 5,
+	[S_INSEN] = 5,
+	[S_IWATO] = 5,
+	[S_MINYO] = 5,
+	[S_FIFTHS] = 2,
+	[S_TRIADMAJOR] = 3,
+	[S_TRIADMINOR] = 3,
+	[S_DORIAN] = 7,
+	[S_PHYRGIAN] = 7,
+	[S_LYDIAN] = 7,
+	[S_MIXOLYDIAN] = 7,
+	[S_AEOLIAN] = 7,
+	[S_LOCRIAN] = 7,
+	[S_BLUESMAJOR] = 6,
+	[S_BLUESMINOR] = 6,
+	[S_ROMANIAN] = 7,
+	[S_WHOLETONE] = 6,
+	[S_HARMONICS] = 4,
+	[S_HEXANY] = 5,
+	[S_JUST] = 7,
+	[S_DIMINISHED] = 8,
+};
 
-const u16 scale_table[NUM_SCALES][16] = {
-    [S_CHROMATIC] = {12, C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B},
-    [S_MAJOR] = {7, C, D, E, F, G, A, B},
-    [S_MINOR] = {7, C, D, Eb, F, G, Ab, Bb},
-    [S_HARMMINOR] = {7, C, D, Ds, F, G, Gs, B},
-    [S_PENTA] = {5, C, D, E, G, A},
-    [S_PENTAMINOR] = {5, C, Ds, F, G, As},
-    [S_HIRAJOSHI] = {5, C, D, Ds, G, Gs},
-    [S_INSEN] = {5, C, Cs, F, G, As},
-    [S_IWATO] = {5, C, Cs, F, Fs, As},
-    [S_MINYO] = {5, C, D, F, G, A},
+const u16 scale_table[NUM_SCALES][12] = {
+    [S_CHROMATIC] = {C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B},
+    [S_MAJOR] = {C, D, E, F, G, A, B},
+    [S_MINOR] = {C, D, Eb, F, G, Ab, Bb},
+    [S_HARMMINOR] = {C, D, Ds, F, G, Gs, B},
+    [S_PENTA] = {C, D, E, G, A},
+    [S_PENTAMINOR] = {C, Ds, F, G, As},
+    [S_HIRAJOSHI] = {C, D, Ds, G, Gs},
+    [S_INSEN] = {C, Cs, F, G, As},
+    [S_IWATO] = {C, Cs, F, Fs, As},
+    [S_MINYO] = {C, D, F, G, A},
 
-    [S_FIFTHS] = {2, C, G},
-    [S_TRIADMAJOR] = {3, C, E, G},
-    [S_TRIADMINOR] = {3, C, Eb, G},
+    [S_FIFTHS] = {C, G},
+    [S_TRIADMAJOR] = {C, E, G},
+    [S_TRIADMINOR] = {C, Eb, G},
 
     // these are dups of major/minor/rotations thereof, but lets throw them in anyway
-    [S_DORIAN] = {7, C, D, Ds, F, G, A, As},
-    [S_PHYRGIAN] = {7, C, Db, Eb, F, G, Ab, Bb},
-    [S_LYDIAN] = {7, C, D, E, Fs, G, A, B},
-    [S_MIXOLYDIAN] = {7, C, D, E, F, G, A, Bb},
-    [S_AEOLIAN] = {7, C, D, Eb, F, G, Ab, Bb},
-    [S_LOCRIAN] = {7, C, Db, Eb, F, Gb, Ab, Bb},
+    [S_DORIAN] = {C, D, Ds, F, G, A, As},
+    [S_PHYRGIAN] = {C, Db, Eb, F, G, Ab, Bb},
+    [S_LYDIAN] = {C, D, E, Fs, G, A, B},
+    [S_MIXOLYDIAN] = {C, D, E, F, G, A, Bb},
+    [S_AEOLIAN] = {C, D, Eb, F, G, Ab, Bb},
+    [S_LOCRIAN] = {C, Db, Eb, F, Gb, Ab, Bb},
 
-    [S_BLUESMAJOR] = {6, C, D, Ds, E, G, A},
-    [S_BLUESMINOR] = {6, C, Ds, F, Fs, G, As},
+    [S_BLUESMAJOR] = {C, D, Ds, E, G, A},
+    [S_BLUESMINOR] = {C, Ds, F, Fs, G, As},
 
-    [S_ROMANIAN] = {7, C, D, Ds, Fs, G, A, As},
-    [S_WHOLETONE] = {6, C, D, E, Fs, Gs, As},
+    [S_ROMANIAN] = {C, D, Ds, Fs, G, A, As},
+    [S_WHOLETONE] = {C, D, E, Fs, Gs, As},
 
     // microtonal stuff
-    [S_HARMONICS] = {4, C, E - CENTS(14), G + CENTS(2), Bb - CENTS(31)},
-    [S_HEXANY] = {5, CENTS(0), CENTS(386), CENTS(498), CENTS(702),
+    [S_HARMONICS] = {C, E - CENTS(14), G + CENTS(2), Bb - CENTS(31)},
+    [S_HEXANY] = {CENTS(0), CENTS(386), CENTS(498), CENTS(702),
                   CENTS(814)}, // kinda C,E,F,G,G# but the E is quite flat
 
-    [S_JUST] = {7, CENTS(0), CENTS(204), CENTS(386), CENTS(498), CENTS(702), CENTS(884), CENTS(1088)},
-    [S_DIMINISHED] = {8, C, D, Ds, F, Fs, Gs, A, B},
+    [S_JUST] = {CENTS(0), CENTS(204), CENTS(386), CENTS(498), CENTS(702), CENTS(884), CENTS(1088)},
+    [S_DIMINISHED] = {C, D, Ds, F, Fs, Gs, A, B},
 };
 
 #undef C

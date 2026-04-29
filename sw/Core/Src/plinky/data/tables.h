@@ -10,7 +10,8 @@ extern const short sigmoid[65536];
 extern const u8 rndtab[65536];
 extern const u16 wavetable_octave_offset[17];
 extern __attribute__((section(".wavetableSection"))) const short wavetable[NUM_WAVETABLES][WAVETABLE_SIZE];
-extern const u16 scale_table[NUM_SCALES][16];
+extern const u8 steps_in_scale[NUM_SCALES];
+extern const u16 scale_table[NUM_SCALES][12];
 
 float table_interp(const float* table, int x);
 float lpf_k(int x);

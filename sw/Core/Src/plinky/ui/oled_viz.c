@@ -1,6 +1,7 @@
 #include "oled_viz.h"
 #include "gfx/gfx.h"
 #include "hardware/memory.h"
+#include "hardware/midi.h"
 #include "pad_actions.h"
 #include "settings_menu.h"
 #include "synth/lfos.h"
@@ -195,6 +196,7 @@ static void draw_visuals(void) {
 			return;
 		}
 		draw_arp_flag();
+		draw_sysex_flag();
 		draw_startup_visuals();
 		break;
 	case UI_EDITING_A:

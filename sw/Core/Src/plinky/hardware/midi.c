@@ -4,8 +4,10 @@
 
 #include "midi.h"
 // regular includes
+#include "gfx/gfx.h"
 #include "hardware/touchstrips.h"
 #include "memory.h"
+#include "midi_sysex.h"
 #include "synth/audio.h"
 #include "synth/lfos.h"
 #include "synth/params.h"
@@ -57,6 +59,7 @@ typedef struct MpeZone {
 #define THRU_BUFFER_SIZE 16
 #define PARAM_BUFFER_SIZE 8
 #define MIDI_SEND_BUFFER_FREE (MIDI_BUFFER_SIZE - (midi_send_head - midi_send_tail))
+#define SYSEX_TIMEOUT_MILLIS 5000
 
 static const MidiString init_midi_string = {MS_UNPRESSED, 255, {UINT14_HALF}};
 static const LastSentString init_last_sent_string = {255, {UINT14_HALF}};
@@ -79,6 +82,8 @@ static u14 channel_pitchbend;
 static s32 channel_pitchbend_pitch;
 static bool mod_wheel_14bit = false;
 static MpeZone mpe_zone[2] = {};
+static bool receiving_sysex = false;
+static u32 sysex_start_time = 0;
 
 // NRPNs
 static u14 nrpn_id[NUM_STRINGS] = {{UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX}, {UINT14_MAX},
@@ -109,7 +114,7 @@ static u8 sending_param_progress = 255;
 // == UTILS == //
 
 static u8 num_midi_bytes(u8 status) {
-	if (status >= MIDI_TUNE_REQUEST)
+	if (status == MIDI_SYSTEM_EXCLUSIVE || status >= MIDI_TUNE_REQUEST)
 		return 1;
 	if ((status & MIDI_TYPE_MASK) == MIDI_PROGRAM_CHANGE || (status & MIDI_TYPE_MASK) == MIDI_CHANNEL_PRESSURE
 	    || status == MIDI_TIME_CODE || status == MIDI_SONG_SELECT)
@@ -311,6 +316,7 @@ void init_midi(void) {
 	midi_precalc_bends();
 	set_mpe_channels(sys_params.mpe_zone, sys_params.mpe_chans + 1);
 	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
+	receiving_sysex = false;
 }
 
 // cue all midi data for one string, returns whether there is still space in the midi buffer
@@ -340,9 +346,9 @@ static bool cue_midi_string_out(void) {
 	switch (msg_state) {
 	case MSG_NOTE: {
 		u8 last_note = m_last->note_number;
-		u8 string_note = clampi(s_string->note_number, 0, 127);
-		// string is touched
-		if (s_string->touched) {
+		s8 string_note = s_string->note_number;
+		// string is touching a note we can send over midi
+		if (s_string->touched && string_note >= 0) {
 			// we last sent a note off => send a note on
 			if (last_note == 255) {
 				if (!send_midi_msg(MIDI_NOTE_ON, string_note, string_vel))
@@ -764,6 +770,12 @@ static bool try_handle_n_rpn(u8 cc_number, u8 cc_value, bool mpe, u8 string_id) 
 	}
 }
 
+static void start_receiving_sysex(void) {
+	init_sysex();
+	receiving_sysex = true;
+	sysex_start_time = millis();
+}
+
 // apply midi messages to plinky
 static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	MidiMessageType type = status & MIDI_TYPE_MASK;
@@ -771,21 +783,26 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	//  == not channel based == //
 
 	if (type == MIDI_SYSTEM_COMMON_MSG) {
+		// not used => forward
+		if (status <= MIDI_TUNE_REQUEST) {
+			if (sys_params.midi_soft_thru)
+				forward_midi_msg(status, data1, data2);
+		}
 		// clock
-		if (status == MIDI_TIMING_CLOCK) {
+		else if (status == MIDI_TIMING_CLOCK) {
 			if (sys_params.midi_rcv_clock)
 				clock_rcv_midi(status);
 		}
 		// transport
-		else if (status >= MIDI_START && status <= MIDI_STOP) {
+		else if (status <= MIDI_STOP) {
 			if (sys_params.midi_rcv_transport)
 				clock_rcv_midi(status);
 		}
 		// midi reset / panic
 		else if (status == MIDI_SYSTEM_RESET)
 			midi_clear_all();
-		// sysex gets ignored, the remaining five system common msgs get forwarded
-		else if (sys_params.midi_soft_thru && status != MIDI_SYSTEM_EXCLUSIVE && status != MIDI_END_OF_EXCLUSIVE)
+		// active sense not used => forward
+		else if (sys_params.midi_soft_thru)
 			forward_midi_msg(status, data1, data2);
 		return;
 	}
@@ -855,6 +872,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
 		} break;
 		case MIDI_NOTE_ON: {
+			// we can't play this note => ignore
+			if (data1 >= NUM_NOTES)
+				break;
+
 			u8 string_id = 255;
 
 			// find string pressing or sustaining this note
@@ -972,6 +993,10 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 				m_string->state = m_string->sustain_pressed ? MS_SUSTAINED : MS_UNPRESSED;
 			break;
 		case MIDI_NOTE_ON:
+			// we can't play this note => ignore
+			if (data1 >= NUM_NOTES)
+				break;
+
 			register_press(string_id, true, data1, data2,
 			               string_position_from_pitch(string_id, NOTE_NR_TO_PITCH(data1)));
 			break;
@@ -1039,6 +1064,10 @@ void midi_tick(void) {
 		}
 	}
 
+	// sysex timeout
+	if (receiving_sysex && millis() - sysex_start_time >= SYSEX_TIMEOUT_MILLIS)
+		receiving_sysex = false;
+
 	// serial midi in
 	static u8 last_read_pos = 0;
 	static u8 state = 0;
@@ -1056,35 +1085,53 @@ void midi_tick(void) {
 		const u8* buf = &midi_receive_buffer[last_read_pos];
 		for (; len--;) {
 			u8 data = *buf++;
-			// status byte
-			if (data & MIDI_STATUS_BYTE_MASK) {
-				// real-time msg
-				if ((data & MIDI_REAL_TIME_MASK) == MIDI_REAL_TIME_MASK)
-					// handle immediately
-					process_midi_msg(data, 0, 0);
-				// channel mode msg
-				else if ((data & 0xF0) == 0xF0)
-					// cancels running status, no further processing
-					msg[0] = 0;
-				// channel voice msg, start new
+			// not sysex
+			if (!receiving_sysex) {
+				// status byte
+				if (data & MIDI_STATUS_BYTE_MASK) {
+					// sysex start
+					if (data == MIDI_SYSTEM_EXCLUSIVE)
+						start_receiving_sysex();
+					// real-time msg
+					else if ((data & MIDI_REAL_TIME_MASK) == MIDI_REAL_TIME_MASK)
+						// handle immediately
+						process_midi_msg(data, 0, 0);
+					// channel mode msg
+					else if ((data & 0xF0) == 0xF0)
+						// cancels running status, no further processing
+						msg[0] = 0;
+					// channel voice msg, start new
+					else {
+						msg[0] = data;
+						state = 1;
+					}
+				}
+				// data byte
 				else {
-					msg[0] = data;
-					state = 1;
+					// not gathering a channel voice msg, ignore
+					if (msg[0] == 0)
+						continue;
+					// running status
+					if (state == 3)
+						state = 1;
+					// save data
+					msg[state++] = data;
+					// received enough bytes
+					if (state == num_midi_bytes(msg[0]))
+						process_midi_msg(msg[0], msg[1], msg[2]);
 				}
 			}
-			// data byte
+			// sysex
 			else {
-				// not gathering a channel voice msg, ignore
-				if (msg[0] == 0)
-					continue;
-				// running status
-				if (state == 3)
-					state = 1;
-				// save data
-				msg[state++] = data;
-				// received enough bytes
-				if (state == num_midi_bytes(msg[0]))
-					process_midi_msg(msg[0], msg[1], msg[2]);
+				// end sysex
+				if (data == MIDI_END_OF_EXCLUSIVE)
+					receiving_sysex = false;
+				// real-time messages get processed normally
+				else if (data >= MIDI_TIMING_CLOCK)
+					process_midi_msg(data, 0, 0);
+				// sysex data
+				else if (data >> 7 == 0)
+					process_sysex_byte(data);
 			}
 		}
 		last_read_pos = read_pos;
@@ -1093,8 +1140,62 @@ void midi_tick(void) {
 	// usb midi in
 	u8 midi_packet[4];
 	// handle incoming packets
-	while (tud_midi_available() && tud_midi_packet_read(midi_packet))
-		process_midi_msg(midi_packet[1], midi_packet[2], midi_packet[3]);
+	while (tud_midi_available() && tud_midi_packet_read(midi_packet)) {
+		midi_code_index_number_t cin = midi_packet[0] & 15;
+		// not receiving sysex
+		if (!receiving_sysex) {
+			// 3 byte sysex start message
+			if (cin == MIDI_CIN_SYSEX_START) {
+				// byte 1: start sysex
+				start_receiving_sysex();
+				// byte 2
+				if (midi_packet[2] == MIDI_END_OF_EXCLUSIVE)
+					receiving_sysex = false;
+				else {
+					process_sysex_byte(midi_packet[2]);
+					// byte 3
+					if (midi_packet[3] == MIDI_END_OF_EXCLUSIVE)
+						receiving_sysex = false;
+					else
+						process_sysex_byte(midi_packet[3]);
+				}
+			}
+			// regular midi message
+			else
+				process_midi_msg(midi_packet[1], midi_packet[2], midi_packet[3]);
+		}
+		// sysex
+		else {
+			switch (cin) {
+			// 3 byte sysex continue
+			case MIDI_CIN_SYSEX_START:
+				process_sysex_byte(midi_packet[1]);
+				process_sysex_byte(midi_packet[2]);
+				process_sysex_byte(midi_packet[3]);
+				break;
+			// sysex ends
+			case MIDI_CIN_SYSEX_END_1BYTE:
+				receiving_sysex = false;
+				break;
+			case MIDI_CIN_SYSEX_END_2BYTE:
+				process_sysex_byte(midi_packet[1]);
+				receiving_sysex = false;
+				break;
+			case MIDI_CIN_SYSEX_END_3BYTE:
+				process_sysex_byte(midi_packet[1]);
+				process_sysex_byte(midi_packet[2]);
+				receiving_sysex = false;
+				break;
+			// real time messages are allowed during sysex
+			case MIDI_CIN_1BYTE_DATA:
+				if (midi_packet[1] >= MIDI_TIMING_CLOCK)
+					process_midi_msg(midi_packet[1], 0, 0);
+				break;
+			default:
+				break;
+			}
+		}
+	}
 }
 
 void set_mpe_channels(u8 zone, u8 num_chans) {
@@ -1112,7 +1213,7 @@ void set_mpe_channels(u8 zone, u8 num_chans) {
 	set_sys_param(SYS_MPE_CHANS, num_chans);
 }
 
-bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, s8* note_number, u8* start_velocity,
+bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_number, u8* start_velocity,
                         s32* pitchbend_pitch) {
 	MidiString* m_string = &midi_string[string_id];
 	// not pressed => exit
@@ -1164,6 +1265,19 @@ void midi_send_param(Param param_id) {
 	u8 bank = param_id / 32;
 	u8 position = param_id & 31;
 	send_param_val[bank] |= 1 << position;
+}
+
+// == VISUALS == //
+
+void draw_sysex_flag(void) {
+	if (!receiving_sysex)
+		return;
+
+	fill_rectangle(49, 20, 77, 30);
+	inverted_rectangle(49, 20, 77, 30);
+	fill_rectangle(50, 21, 76, 29);
+	gfx_text_color = 0;
+	draw_str(51, 20, F_8, "sysex");
 }
 
 // == AUX == //

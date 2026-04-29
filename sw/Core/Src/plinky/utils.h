@@ -126,11 +126,11 @@ static inline void DebugLog(const char* fmt, ...) {
 #define SMUAD(o, a, b) asm("smuad %0, %1, %2" : "=r"(o) : "r"(a), "r"(b))
 #define USING_SAMPLER (cur_sample_info.samplelen != 0)
 #define PITCH_TO_SEMIS(pitch) (((pitch) + 256) >> 9)
+#define PITCH_TO_NOTE_NR(pitch) PITCH_TO_SEMIS(pitch)
 #define SEMIS_TO_PITCH(semi) ((semi) << 9)
+#define NOTE_NR_TO_PITCH(note_nr) SEMIS_TO_PITCH(note_nr)
 #define OCTS_TO_PITCH(oct) (3 * (oct) << 11)
-#define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5)
-#define NOTE_NR_TO_PITCH(note) SEMIS_TO_PITCH(note - 24)
-#define PITCH_TO_NOTE_NR(pitch) (PITCH_TO_SEMIS(pitch) + 24)
+#define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5) // scales +/- 65536 to +/- 1 octave
 
 #define PARAM_IS_POLY(param_id)                                                                                        \
 	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
@@ -204,5 +204,29 @@ static inline const char* bin16_str(u16 val) {
 	for (int i = 15; i >= 0; i--)
 		buf[15 - i] = (val & (1 << i)) ? '1' : '0';
 	buf[16] = '\0';
+	return buf;
+}
+
+static inline const char* note_name(u8 note_number) {
+	static char buf[5];
+	// note_number 0 = C-1, which is 12 semitones below C0
+	s8 semis = note_number - 12;
+	s8 octave = semis / 12;
+	semis -= octave * 12;
+	if (semis < 0) {
+		semis += 12;
+		octave--;
+	}
+	buf[0] = "CCDDEFFGGAAB"[semis];
+	buf[1] = " + +  + + + "[semis];
+	if (octave < 0) {
+		buf[2] = '-';
+		buf[3] = '0' - octave;
+		buf[4] = '\0';
+	}
+	else {
+		buf[2] = '0' + octave;
+		buf[3] = '\0';
+	}
 	return buf;
 }

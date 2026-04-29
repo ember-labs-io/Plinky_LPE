@@ -20,6 +20,7 @@ typedef enum Item {
 	// system
 	I_ACCEL_SENS = S_SYSTEM * 8,
 	I_ENC_DIR,
+	I_MIDI_TUNING,
 	I_LOCAL_CTRL_OFF,
 	// midi in
 	I_MIDI_IN_CH = S_MIDI_IN * 8,
@@ -65,6 +66,7 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_ACCEL_SENS] = SYS_ACCEL_SENS,
     [I_ENC_DIR] = SYS_REVERSE_ENCODER,
     [I_LOCAL_CTRL_OFF] = SYS_LOCAL_CTRL_OFF,
+    [I_MIDI_TUNING] = SYS_MIDI_TUNING,
     [I_MPE_IN] = SYS_MPE_IN,
     [I_MIDI_IN_CH] = SYS_MIDI_IN_CHAN,
     [I_MIDI_IN_VEL_BALANCE] = SYS_MIDI_IN_VEL_BALANCE,
@@ -98,6 +100,7 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_ACCEL_SENS] = "Acc Sens",
     [I_ENC_DIR] = "Enc dir",
     [I_LOCAL_CTRL_OFF] = "Local Ctrl",
+    [I_MIDI_TUNING] = "Midi Tuning",
     [I_MPE_IN] = "MPE",
     [I_MIDI_IN_CH] = "Channel",
     [I_MIDI_IN_VEL_BALANCE] = "Vel/Pres",
@@ -376,6 +379,7 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 	case I_MPE_OUT:
 	case I_MIDI_IN_SCALE_QUANT:
 	case I_MIDI_OUT_YZ_CONTROL:
+	case I_MIDI_TUNING:
 		return value ? "On" : "Off";
 	case I_LOCAL_CTRL_OFF:
 	case I_MIDI_TRS_OUT_OFF:
