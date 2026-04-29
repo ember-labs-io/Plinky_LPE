@@ -65,6 +65,7 @@ static bool latch_toggle = false;
 // visuals
 static Param param_snap;            // stable snapshot
 static ModSource src_snap;          // stable snapshot
+static bool mod_action_snap;        // stable snapshot
 static u32 clear_mods_duration = 0; // enables clear modulation message
 
 // == UTILS == //
@@ -976,6 +977,7 @@ bool mod_clear_visuals(void) {
 void take_param_snapshots(void) {
 	param_snap = selected_param;
 	src_snap = selected_mod_src;
+	mod_action_snap = mod_action_pressed();
 }
 
 void draw_preset_info(void) {
@@ -1657,18 +1659,17 @@ u8 value_editor_column_led(u8 x, u8 y) {
 }
 
 u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
-	// no leds if no param is selected
-	if (param_snap >= NUM_PARAMS)
-		return 0;
-
+	bool param_selected = param_snap < NUM_PARAMS;
 	u8 k = 0;
-	if (x == 0)
-		// edit strip
-		k = value_editor_column_led(x, y);
+	// edit strip
+	if (x == 0) {
+		if (param_selected)
+			k = value_editor_column_led(x, y);
+	}
 	else if (x < 7) {
 		u8 pAorB = x - 1 + y * 12 + (ui_mode == UI_EDITING_B ? 6 : 0);
 		// holding down a mod source => light up params that are modulated by it
-		if (mod_action_pressed() && src_snap != SRC_BASE && PARAM_VAL_RAW(pAorB, src_snap))
+		if (mod_action_snap && src_snap != SRC_BASE && PARAM_VAL_RAW(pAorB, src_snap))
 			k = 255;
 		// pulse selected param
 		if (pAorB == param_snap)
@@ -1679,7 +1680,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 		if (y == src_snap)
 			k = pulse;
 		// light up mod sources that modulate current param
-		else
+		else if (param_selected)
 			k = (y && PARAM_VAL_RAW(param_snap, y) && param_snap != P_VOLUME) ? 255 : 0;
 	}
 	return k;
