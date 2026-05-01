@@ -292,7 +292,8 @@ void settings_menu_actions(void) {
 	ui_mode = UI_DEFAULT;
 }
 
-void settings_encoder_press(bool pressed, u16 duration) {
+// returns whether this triggered a settings menu action
+bool settings_encoder_press(bool pressed, u16 duration) {
 	static bool enc_pressed = false;
 	if (display_section == S_ACTIONS) {
 		fill_start = pressed ? maxi(OLED_WIDTH * (LONG_PRESS_TIME - duration) / LONG_PRESS_TIME, 0) : OLED_WIDTH;
@@ -302,6 +303,7 @@ void settings_encoder_press(bool pressed, u16 duration) {
 	else if (pressed && !enc_pressed)
 		value_selected = !value_selected;
 	enc_pressed = pressed;
+	return perform_action;
 }
 
 void edit_settings_from_encoder(s8 enc_diff) {

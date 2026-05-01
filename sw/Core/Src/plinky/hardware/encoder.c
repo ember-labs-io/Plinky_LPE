@@ -85,7 +85,9 @@ void encoder_tick(void) {
 		}
 		break;
 	case UI_SETTINGS_MENU:
-		settings_encoder_press(encoder_pressed, encoder_press_duration);
+		// reset encoder press when a settings menu action triggers
+		if (settings_encoder_press(encoder_pressed, encoder_press_duration))
+			encoder_press_start = millis();
 		if (enc_diff)
 			edit_settings_from_encoder(enc_diff);
 		break;
