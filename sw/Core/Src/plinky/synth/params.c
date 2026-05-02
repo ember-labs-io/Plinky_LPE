@@ -1608,7 +1608,11 @@ void draw_cur_param(void) {
 	}
 
 	// draw name
-	draw_str(text_x, text_y, F_12, name_str);
+	multi_id_x = draw_str(text_x, text_y, F_12, name_str);
+
+	// multi-timbral param indicator
+	if ((ui_mode == UI_EDITING_A || ui_mode == UI_EDITING_B) && PARAM_IS_MULTI_TIMBRAL(draw_param))
+		fdraw_str(multi_id_x, text_y - 1, F_8, "M");
 }
 
 void draw_arp_flag(void) {
