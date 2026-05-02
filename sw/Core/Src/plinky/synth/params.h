@@ -10,7 +10,8 @@ bool editing_multi_param(void);
 void dec_selected_edit_strip(void);
 void inc_selected_edit_strip(void);
 u8 arp_active_mask(void);
-bool latch_active(void);
+bool latch_active(void); // only for oled_viz
+bool latch_active_on_string(u8 string_id);
 s16 value_to_index(Param param_id, s32 value);
 void set_param_from_nrpn(Param param_id, u14 value, bool multi, u8 string_id);
 void set_mod_from_nrpn(Param param_id, u14 value, ModSource mod_src);
