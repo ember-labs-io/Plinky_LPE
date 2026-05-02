@@ -532,7 +532,7 @@ s32 param_val_multi(MultiParam mp_id, u8 string_id) {
 
 	// add 16 precision bits to the raw value
 	s32 mod_val = (IS_GLOBAL_LAYOUT(param_id) ? global_data.layout_params[layout_param_from_param[param_id]][string_id]
-	               : string_id > 0            ? cur_preset.multi_params[multi_param_from_param[param_id]][string_id - 1]
+	               : string_id > 0            ? cur_preset.multi_params[mp_id][string_id - 1]
 	                                          : cur_preset.params[param_id][SRC_BASE])
 	              << 16;
 
@@ -560,7 +560,7 @@ s32 param_val_multi(MultiParam mp_id, u8 string_id) {
 
 	// the shape parameter can only modulate within the same oscillator shape type
 	if (param_id == P_SHAPE) {
-		s16 raw = PARAM_VAL_RAW(param_id, SRC_BASE);
+		s16 raw = string_id == 0 ? PARAM_VAL_RAW(P_SHAPE, SRC_BASE) : cur_preset.multi_params[MP_SHAPE][string_id - 1];
 		// wavetable
 		if (raw > 0)
 			mod_val = maxi(1 << 17, mod_val); // 0.1%
