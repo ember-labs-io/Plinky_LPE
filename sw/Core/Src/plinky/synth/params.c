@@ -60,7 +60,7 @@ static u16 sample_hold_global = {8 << 12};
 
 // precalc
 static u8 arp_toggle = 0;
-static bool latch_toggle = false;
+static u8 latch_toggle = 0;
 
 // visuals
 static Param param_snap;            // stable snapshot
@@ -163,6 +163,10 @@ u8 arp_active_mask(void) {
 
 bool latch_active(void) {
 	return latch_toggle;
+}
+
+bool latch_active_on_string(u8 string_id) {
+	return latch_toggle & (1 << string_id);
 }
 
 s16 value_to_index(Param param_id, s32 value) {
@@ -486,7 +490,10 @@ void params_tick(void) {
 			if (param_index_multi(MP_ARP_TGL, i))
 				arp_toggle |= 1 << i;
 	}
-	latch_toggle = param_index(P_LATCH_TGL);
+	latch_toggle = 0;
+	for (u8 i = 0; i < NUM_STRINGS; i++)
+		if (param_index_multi(MP_LATCH_TGL, i))
+			latch_toggle |= 1 << i;
 }
 
 // == RETRIEVAL == //
@@ -847,6 +854,9 @@ void toggle_multi_edit(Param param_id) {
 		break;
 	case P_ARP_TGL:
 		name = "Arp Enable";
+		break;
+	case P_LATCH_TGL:
+		name = "Latch Enable";
 		break;
 	default:
 		name = param_name[param_id] + 1;

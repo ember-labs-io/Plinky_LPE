@@ -742,9 +742,18 @@ void init_synth(void) {
 // string_touch[string_id]
 static void generate_string_touch(u8 string_id) {
 	static bool suppress_latch = false;
+	static bool prev_latch[NUM_STRINGS];
 	SynthString* s_string = &write_strings[string_id];
 
+	bool has_latch = latch_active_on_string(string_id);
+	// clear latch on latch disable
+	if (prev_latch[string_id] && !has_latch) {
+		write_strings[string_id].latch_touch = (LatchTouch){};
+		play_strings[string_id].latch_touch = (LatchTouch){};
+	}
+	prev_latch[string_id] = has_latch;
 	LatchTouch* s_latch = &s_string->latch_touch;
+
 	u8 mask = 1 << string_id;
 	bool pres_increasing = false;
 	// the touch we're processing
@@ -789,7 +798,7 @@ static void generate_string_touch(u8 string_id) {
 
 		// === LATCH WRITE === //
 
-		if (latch_active() && touching && pres_increasing) {
+		if (has_latch && touching && pres_increasing) {
 			if (first_touch_global) {
 				// start a new latch
 				clear_latch();
@@ -804,7 +813,7 @@ static void generate_string_touch(u8 string_id) {
 		}
 	}
 
-	if (latch_active() && s_latch->min.pres > 0) {
+	if (has_latch && s_latch->min.pres > 0) {
 		// randomize 25% variation around the center position
 		s16 avg_pres = (s_latch->min.pres + s_latch->max.pres) / 2;
 		s16 pres_range = (s_latch->max.pres - s_latch->min.pres) / 4;
@@ -867,13 +876,6 @@ void generate_string_touches(void) {
 	static u8 no_arp_touch_mask_1back = 0;
 	static bool do_second_half = false;
 	static u8 phys_string_touch_1back = 0;
-	static bool prev_latch = false;
-
-	// end latch when necessary
-	bool cur_latch = latch_active();
-	if (prev_latch && !cur_latch)
-		clear_latch();
-	prev_latch = cur_latch;
 
 	// update half of the strings (0 - 3 / 4 - 7)
 	for (u8 string_id = 0; string_id < NUM_STRINGS / 2; ++string_id)
