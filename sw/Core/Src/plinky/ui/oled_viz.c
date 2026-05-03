@@ -49,7 +49,7 @@ static void gfx_dither_logo(u8 frame) {
 
 #define MESSAGE_TIME 700 // ms
 
-static char message[16] = {};
+static char message[20] = {};
 static char submessage[16] = {};
 static u8 message_font;
 static u32 message_time = 0;

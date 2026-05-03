@@ -182,7 +182,7 @@ void params_rcv_cc(u8 data1, u8 data2, bool mpe, u8 string_id) {
 		string_id = 0;
 
 	// define param id
-	bool is_14bit = sys_params.midi_rcv_param_ccs == 2 && data1 < 2 * NUM_14BIT_CCS;
+	bool is_14bit = sys_params.midi_rcv_param_ccs == RP_CC14 && data1 < 2 * NUM_14BIT_CCS;
 	Param param_id = midi_cc_table[is_14bit ? data1 % NUM_14BIT_CCS : data1];
 	if (param_id >= NUM_PARAMS)
 		return;

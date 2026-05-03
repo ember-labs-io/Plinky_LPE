@@ -124,16 +124,13 @@ static void adc_smooth_value(ValueSmoother* s, float new_val) {
 }
 
 void adc_dac_tick(void) {
-	// why don't we clamp in the calib stage? and why aren't all calls to value_calib clamped?
 	adc_smooth_value(adc_smoother + ADC_S_A_CV, clampf(adc_get_calib(ADC_A_CV), -1.f, 1.f));
 	adc_smooth_value(adc_smoother + ADC_S_B_CV, clampf(adc_get_calib(ADC_B_CV), -1.f, 1.f));
 	adc_smooth_value(adc_smoother + ADC_S_X_CV, clampf(adc_get_calib(ADC_X_CV), -1.f, 1.f));
 	adc_smooth_value(adc_smoother + ADC_S_Y_CV, clampf(adc_get_calib(ADC_Y_CV), -1.f, 1.f));
-	// why are the knobs saved in 4/5 and not in ADC_A_KNOB / ADC_B_KNOB ?
 	smooth_value(adc_smoother + ADC_S_A_KNOB, clampf(adc_get_calib(ADC_A_KNOB), -1.f, 1.f), 1.f);
 	smooth_value(adc_smoother + ADC_S_B_KNOB, clampf(adc_get_calib(ADC_B_KNOB), -1.f, 1.f), 1.f);
 	adc_smooth_value(adc_smoother + ADC_S_PITCH, cv_pitch_present() ? adc_get_calib(ADC_PITCH) : 0.f);
-	// why do we do another mapping here, instead of incorporating this in cv calib?
 	adc_smooth_value(adc_smoother + ADC_S_GATE,
 	                 cv_gate_present() ? clampf(adc_get_calib(ADC_GATE) * 1.15f - 0.05f, 0.f, 1.f) : 0.f);
 

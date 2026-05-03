@@ -20,7 +20,7 @@ static bool keep_ui_open = false;
 static bool keep_edit_mode_open = false;
 
 // keep track of (long) presses on the main grid
-u8 main_press_pad = 255;
+u8 main_press_item = 255;
 static bool main_press_canceled = false;
 static u32 main_press_start = 0;
 u32 main_press_ms = 0;
@@ -304,7 +304,7 @@ void handle_pad_actions(u8 strip_id) {
 	if (valid_action) {
 		// track main press
 		if (!action_on_main_strip) {
-			main_press_pad = pad_id;
+			main_press_item = pad_id;
 			main_press_start = millis();
 			main_press_ms = 0;
 			main_press_canceled = false;
@@ -394,7 +394,7 @@ void handle_pad_actions(u8 strip_id) {
 
 void pad_actions_frame(void) {
 	// handle long presses - we're looking for exactly one strip being pressed
-	if (main_press_pad == 255 || !action_on_main_strip || !ispow2(action_on_main_strip)) {
+	if (main_press_item == 255 || !action_on_main_strip || !ispow2(action_on_main_strip)) {
 		main_press_ms = 0;
 		return;
 	}
@@ -402,7 +402,7 @@ void pad_actions_frame(void) {
 		main_press_ms = millis() - main_press_start;
 
 		// press action in load ui
-		if (ui_mode == UI_LOAD && press_mem_item(main_press_pad))
+		if (ui_mode == UI_LOAD && press_mem_item())
 			cancel_main_press();
 	}
 	// toggle editing poly params
@@ -448,14 +448,14 @@ bool oled_function_visuals(void) {
 		case FN_SHIFT_A:
 		case FN_SHIFT_B:
 			if (main_press_ms > PRESS_DELAY + SHORT_PRESS_TIME) {
-				u8 id_on_row = main_press_pad >> 3;
+				u8 id_on_row = main_press_item >> 3;
 				// not a parameter
 				if (id_on_row == 0 || id_on_row > 6) {
 					cancel_main_press();
 					return false;
 				}
 
-				u8 param_pad = ((main_press_pad & 7) * 6 + (id_on_row - 1));
+				u8 param_pad = ((main_press_item & 7) * 6 + (id_on_row - 1));
 				// not a poly param
 				if (!PARAM_IS_POLY(2 * param_pad + (function_pressed == FN_SHIFT_B ? 6 : 0))) {
 					cancel_main_press();
@@ -491,7 +491,7 @@ bool oled_function_visuals(void) {
 }
 
 u8 ui_load_long_press_led(u8 x, u8 y, u8 pulse) {
-	if ((action_on_main_strip & (1 << x)) && main_press_pad == x * 8 + y && !main_press_canceled)
+	if ((action_on_main_strip & (1 << x)) && main_press_item == x * 8 + y && !main_press_canceled)
 		return maxi(pulse, 1);
 	return 0;
 }

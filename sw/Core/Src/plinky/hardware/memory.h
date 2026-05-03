@@ -67,7 +67,7 @@ void apply_cued_mem_items(void);
 void cue_mem_item(u8 item_id);
 
 // ui
-bool press_mem_item(u8 item_id);
+bool press_mem_item(void);
 void save_preset(void);
 
 // calib
