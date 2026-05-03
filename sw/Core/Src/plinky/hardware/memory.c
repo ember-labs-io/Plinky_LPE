@@ -453,16 +453,15 @@ void init_memory(void) {
 
 	// update presets
 	u8 presets_updated = 0;
-	Preset preset;
 	for (u8 preset_id = 0; preset_id < NUM_PRESETS; preset_id++) {
 		// load preset
 		FlashPage* fp = LATEST_FLASH_PTR(preset_id);
 		if (fp->footer.idx == preset_id && fp->footer.version == FOOTER_VERSION) {
-			memcpy(&preset, (Preset*)fp, sizeof(Preset));
+			memcpy(&cur_preset, (Preset*)fp, sizeof(Preset));
 			// update preset
-			if (update_preset(&preset)) {
+			if (update_preset(&cur_preset)) {
 				// save updated preset
-				flash_write_page(preset_id, &preset);
+				flash_write_page(preset_id, &cur_preset);
 				presets_updated++;
 			}
 		}
@@ -694,7 +693,6 @@ void revert_presets(void) {
 	oled_flip();
 	HAL_Delay(2000);
 
-	Preset preset;
 	for (u8 preset_id = 0; preset_id < NUM_PRESETS; preset_id++) {
 		// visuals
 		oled_clear();
@@ -706,11 +704,11 @@ void revert_presets(void) {
 		// load preset
 		FlashPage* fp = LATEST_FLASH_PTR(preset_id);
 		if (fp->footer.idx == preset_id && fp->footer.version == FOOTER_VERSION) {
-			memcpy(&preset, (Preset*)fp, sizeof(Preset));
+			memcpy(&cur_preset, (Preset*)fp, sizeof(Preset));
 			// revert preset
-			revert_preset(&preset);
+			revert_preset(&cur_preset);
 			// save reverted preset
-			flash_write_page(preset_id, &preset);
+			flash_write_page(preset_id, &cur_preset);
 		}
 	}
 
@@ -920,8 +918,8 @@ void cue_mem_item(u8 item_id) {
 
 // == UI == //
 
-bool press_mem_item(u8 item_id) {
-	MemItemType item_type = GET_ITEM_TYPE(item_id);
+bool press_mem_item(void) {
+	MemItemType item_type = GET_ITEM_TYPE(main_press_item);
 
 	// fast load for samples and presets/patterns with no changes
 	bool fast_load = function_pressed == FN_NONE
@@ -935,19 +933,19 @@ bool press_mem_item(u8 item_id) {
 	switch (function_pressed) {
 	// not holding function pad: cue item for loading
 	case FN_NONE:
-		cue_mem_item(item_id);
+		cue_mem_item(main_press_item);
 		break;
 	// holding load pad
 	case FN_LOAD:
 		// sample => open sampler
 		if (item_type == MEM_SAMPLE) {
-			u8 sample_id = item_id & 7;
+			u8 sample_id = main_press_item & 7;
 			open_sampler(sample_id);
 			flash_message(F_16_BOLD, "Sample %d", "Editing", sample_id + 1);
 		}
 		// preset or pattern => line up to save next tick
 		else
-			edit_item_id = item_id;
+			edit_item_id = main_press_item;
 		break;
 	// holding clear pad
 	case FN_CLEAR:
@@ -956,7 +954,7 @@ bool press_mem_item(u8 item_id) {
 		case MEM_PRESET:
 			memcpy(&cur_preset, init_params_ptr(), sizeof(Preset));
 			log_ram_edit(SEG_PRESET);
-			set_action_msg(item_id, MEM_ACTION_CLEAR);
+			set_action_msg(main_press_item, MEM_ACTION_CLEAR);
 			break;
 		// clear floating pattern
 		case MEM_PATTERN:
@@ -965,11 +963,11 @@ bool press_mem_item(u8 item_id) {
 			log_ram_edit(SEG_PAT1);
 			log_ram_edit(SEG_PAT2);
 			log_ram_edit(SEG_PAT3);
-			set_action_msg(item_id, MEM_ACTION_CLEAR);
+			set_action_msg(main_press_item, MEM_ACTION_CLEAR);
 			break;
 		// line up sample to be cleared next tick
 		case MEM_SAMPLE:
-			edit_item_id = main_press_pad | MEM_ACTION_CLEAR;
+			edit_item_id = main_press_item | MEM_ACTION_CLEAR;
 			break;
 		default:
 			break;
@@ -1152,7 +1150,7 @@ void draw_ui_load_visuals(void) {
 	else if (function_pressed == FN_CLEAR) {
 		// clear + main pad pressed
 		if (main_press_ms > PRESS_DELAY) {
-			switch (GET_ITEM_TYPE(main_press_pad)) {
+			switch (GET_ITEM_TYPE(main_press_item)) {
 			case MEM_PRESET:
 				snprintf(name_str, sizeof(name_str), "clear preset?");
 				break;
@@ -1160,7 +1158,7 @@ void draw_ui_load_visuals(void) {
 				snprintf(name_str, sizeof(name_str), "clear pattern?");
 				break;
 			case MEM_SAMPLE:
-				snprintf(name_str, sizeof(name_str), "clear sample %d?", main_press_pad - SAMPLES_START + 1);
+				snprintf(name_str, sizeof(name_str), "clear sample %d?", main_press_item - SAMPLES_START + 1);
 				break;
 			default:
 				break;
@@ -1173,17 +1171,17 @@ void draw_ui_load_visuals(void) {
 	}
 	// save/load messages
 	else if (main_press_ms > PRESS_DELAY) {
-		switch (GET_ITEM_TYPE(main_press_pad)) {
+		switch (GET_ITEM_TYPE(main_press_item)) {
 		case MEM_PRESET:
 			snprintf(name_str, sizeof(name_str), "%s preset %d?", function_pressed == FN_LOAD ? "save" : "load",
-			         main_press_pad + 1);
+			         main_press_item + 1);
 			break;
 		case MEM_PATTERN:
 			snprintf(name_str, sizeof(name_str), "%s pattern %d?", function_pressed == FN_LOAD ? "save" : "load",
-			         main_press_pad - PATTERNS_START + 1);
+			         main_press_item - PATTERNS_START + 1);
 			break;
 		case MEM_SAMPLE: {
-			u8 sample_id = main_press_pad - SAMPLES_START;
+			u8 sample_id = main_press_item - SAMPLES_START;
 			if (sample_id == ram_sample_id && function_pressed != FN_LOAD)
 				snprintf(name_str, sizeof(name_str), "deactivate sample?");
 			else

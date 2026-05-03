@@ -470,7 +470,7 @@ void draw_settings_menu(void) {
 		draw_str(x, 17, font, sys_params.midi_rcv_clock ? I_TEMPO : I_CROSS);
 		draw_str(x + 16, 17, font, sys_params.midi_rcv_transport ? I_PLAY : I_CROSS);
 		draw_str(x + 32, 17, font, sys_params.midi_rcv_param_ccs ? I_KNOB : I_CROSS);
-		if (sys_params.midi_rcv_param_ccs == 2) {
+		if (sys_params.midi_rcv_param_ccs == RP_CC14) {
 			x += 35;
 			fill_rectangle(x, 17, x + 9, 32);
 			inverted_rectangle(x, 17, x + 9, 32);

@@ -74,15 +74,14 @@
 #define REV_SYS_PARAMS_VERSION 15
 #define LPE_SYS_PARAMS_VERSION 17
 
-#define PATTERNS_START NUM_PRESETS
-#define SAMPLES_START (PATTERNS_START + NUM_PATTERNS)
-
-#define NUM_PTN_QUARTERS (NUM_PATTERNS * 4)
-#define F_SAMPLES_START (PATTERNS_START + NUM_PTN_QUARTERS)
-#define FLOAT_PRESET_ID (F_SAMPLES_START + NUM_SAMPLES)
-#define FLOAT_PATTERN_ID (FLOAT_PRESET_ID + 1)
-#define FLOAT_GLOBAL_DATA_ID (FLOAT_PATTERN_ID + 4)
-#define NUM_FLASH_ITEMS (FLOAT_GLOBAL_DATA_ID + 1)
+#define PATTERNS_START NUM_PRESETS                          // 32
+#define SAMPLES_START (PATTERNS_START + NUM_PATTERNS)       // 56
+#define NUM_PTN_QUARTERS (NUM_PATTERNS * 4)                 // 96
+#define F_SAMPLES_START (PATTERNS_START + NUM_PTN_QUARTERS) // 128
+#define FLOAT_PRESET_ID (F_SAMPLES_START + NUM_SAMPLES)     // 136
+#define FLOAT_PATTERN_ID (FLOAT_PRESET_ID + 1)              // 137
+#define FLOAT_GLOBAL_DATA_ID (FLOAT_PATTERN_ID + 4)         // 141
+#define NUM_FLASH_ITEMS (FLOAT_GLOBAL_DATA_ID + 1)          // 142
 
 // TIME
 
@@ -278,6 +277,12 @@ typedef enum MidiPressureType {
 	MP_POLY_AFTERTOUCH,
 	NUM_MIDI_PRESSURE_TYPES,
 } MidiPressureType;
+
+typedef enum RcvParamType {
+	RP_NONE,
+	RP_CC,
+	RP_CC14,
+} RcvParamType;
 
 // PITCH
 
@@ -581,7 +586,7 @@ const static Param param_from_poly_param[NUM_POLY_PARAMS] = {
     [PP_SCRUB_JIT] = P_SCRUB_JIT,   [PP_GR_SIZE_JIT] = P_GR_SIZE_JIT,   [PP_PLAY_SPD_JIT] = P_PLAY_SPD_JIT,                                                                                       	// Sampler 2
 };
 
-const static PolyParam poly_param_from_param[NUM_PARAMS] = {
+const static PolyParam poly_param_from_param[P_PLAY_SPD_JIT + 1] = {
     [P_SHAPE] = PP_SHAPE,           [P_DISTORTION] = PP_DISTORTION,     [P_PITCH] = PP_PITCH,           [P_OCT] = PP_OCT,               [P_GLIDE] = PP_GLIDE,           [P_INTERVAL] = PP_INTERVAL,	// Sound 1
     [P_NOISE] = PP_NOISE,           [P_RESO] = PP_RESO,                 [P_DEGREE] = PP_DEGREE,         [P_SCALE] = PP_SCALE,           [P_MICROTONE] = PP_MICROTONE,   [P_COLUMN] = PP_COLUMN,   	// Sound 2
     [P_ENV_LVL1] = PP_ENV_LVL1,     [P_ATTACK1] = PP_ATTACK1,           [P_DECAY1] = PP_DECAY1,         [P_SUSTAIN1] = PP_SUSTAIN1,     [P_RELEASE1] = PP_RELEASE1,     [P_ROOT] = PP_ROOT,         // Envelope 1
@@ -884,7 +889,7 @@ typedef struct SysParams {
 	// 11 bytes
 	bool midi_rcv_clock : 1;
 	bool midi_rcv_transport : 1;
-	bool midi_rcv_param_ccs : 2;
+	RcvParamType midi_rcv_param_ccs : 2;
 	bool midi_send_clock : 1;
 	bool midi_send_transport : 1;
 	bool midi_send_param_ccs : 2; // 0 = off, 1 = CCs, 2 = 14bit CCs

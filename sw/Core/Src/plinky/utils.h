@@ -55,7 +55,6 @@ typedef union u14 {
 #include "plinky.h"
 
 // time
-#define RDTSC() (DWT->CYCCNT)
 static inline u32 millis(void) {
 	return HAL_GetTick();
 }
@@ -170,20 +169,24 @@ static inline void smooth_value(ValueSmoother* s, float new_val, float max_scale
 	s->y2 += (s->y1 - s->y2) * g;
 }
 
-static inline int rand_range(int mn, int mx) {
-	return mn + (((rand() & 255) * (mx - mn)) >> 8);
+static inline s32 random_in_range(s32 min, s32 max) {
+	return min + (((rand() & 255) * (max - min)) >> 8);
 }
+
 static inline u8 pres_compress(s16 pressure) {
 	return clampi((pressure + 12) / 24, 0, 255);
 }
+
 static inline u16 pres_decompress(u8 pressure) {
-	return maxi(rand_range(24 * pressure - 12, 24 * pressure + 12), 0);
+	return maxi(random_in_range(24 * pressure - 12, 24 * pressure + 12), 0);
 }
+
 static inline u8 pos_compress(u16 position) {
 	return clampi((position + 4) / 8, 0, 255);
 }
+
 static inline u16 pos_decompress(u8 position) {
-	return maxi(rand_range(8 * position - 4, 8 * position + 4), 0);
+	return maxi(random_in_range(8 * position - 4, 8 * position + 4), 0);
 }
 
 // clang-format off

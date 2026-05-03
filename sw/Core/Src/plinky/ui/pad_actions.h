@@ -7,7 +7,7 @@
 
 extern FunctionPad function_pressed;
 extern u32 function_press_ms;
-extern u8 main_press_pad;
+extern u8 main_press_item;
 extern u32 main_press_ms;
 
 // main
