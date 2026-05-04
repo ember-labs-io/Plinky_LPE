@@ -9,7 +9,7 @@ bool editing_param(void);
 bool editing_multi_param(void);
 void dec_selected_edit_strip(void);
 void inc_selected_edit_strip(void);
-bool arp_active(void);
+u8 arp_active_mask(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
 void set_param_from_nrpn(Param param_id, u14 value, bool multi, u8 string_id);

@@ -1,5 +1,6 @@
 #include "arp.h"
 #include "conditional_step.h"
+#include "params.h"
 #include "time.h"
 
 ArpOrder arp_order = ARP_UP;
@@ -206,8 +207,16 @@ static void advance_step(u8 avail_touch_mask) {
 }
 
 // returns whether this generates envelope triggers
-bool arp_tick(u8 no_arp_touch_mask, u8* touch_mask) {
+void arp_tick(u8 before_arp_touch_mask, u8* touch_mask, u8* envelope_trigger) {
 	static bool step_next_strings_frame = false;
+
+	u8 mask = arp_active_mask();
+	u8 with_arp_touch_mask = before_arp_touch_mask & mask;
+	u8 without_arp_touch_mask = before_arp_touch_mask & ~mask;
+
+	// clear arp strings from both masks
+	*touch_mask &= without_arp_touch_mask;
+	*envelope_trigger &= without_arp_touch_mask;
 
 	// update properties
 	arp_order = param_index(P_ARP_ORDER);
@@ -250,29 +259,29 @@ bool arp_tick(u8 no_arp_touch_mask, u8* touch_mask) {
 	}
 
 	// no touch
-	if (!no_arp_touch_mask) {
+	if (!with_arp_touch_mask) {
 		arp_touch_mask = 0;
-		*touch_mask = 0;
-		return false;
+		return;
 	}
 
 	// no step
 	if (!arp_step) {
-		*touch_mask = arp_touch_mask;
-		return false;
+		*touch_mask |= arp_touch_mask;
+		return;
 	}
 
 	// step
 	do_conditional_step(&c_step, false, arp_order == ARP_CHORD);
 	// move to the next position, this also fills arp_touch_mask
 	if (c_step.advance_step)
-		advance_step(no_arp_touch_mask);
+		advance_step(with_arp_touch_mask);
 	// suppress touches if required by conditional step
 	if (!c_step.play_step)
 		arp_touch_mask = 0;
 
-	*touch_mask = arp_touch_mask;
-	return c_step.advance_step;
+	*touch_mask |= arp_touch_mask;
+	if (c_step.advance_step)
+		*envelope_trigger |= arp_touch_mask;
 }
 
 void arp_reset(void) {
