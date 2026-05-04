@@ -153,34 +153,32 @@ static bool value_selected = false;
 static u8 fill_start = OLED_WIDTH;
 static bool perform_action = false;
 
-static bool item_exists(Item item) {
+static bool item_exists(u8 x, u8 y) {
 	// actions
-	if (item >= I_REBOOT && item < NUM_DEFAULT_ITEMS)
+	if (y == S_ACTIONS && x < 7)
 		return true;
 	// sys params
-	return item_to_sys_param[item] != 0;
+	return item_to_sys_param[(y << 3) + x] != 0;
 }
 
-static Item alt_section_check(Item item) {
-	item &= 63;
+static void select_item(u8 x, u8 y) {
+	Item item = (y << 3) + x;
+
+	// alternative sections
 	if ((sys_params.mpe_in && (item == I_MIDI_IN_CH || item == I_MIDI_IN_PRES_TYPE))
 	    || (sys_params.mpe_out && (item == I_MIDI_OUT_CH || item == I_MIDI_OUT_PRES_TYPE)))
-		return item + 64;
-	return item;
-}
+		item += 64;
 
-static void select_item(Item item, bool force) {
-	if (item == cur_item && !force)
+	// no change
+	if (item == cur_item)
 		return;
 
 	// save
 	cur_item = item;
-	display_section = (cur_item / 8) & 7;
+	display_section = (cur_item >> 3) & 7;
 
 	// retrieve value
-	SysParam param = item_to_sys_param[cur_item];
-	if (param)
-		cur_value = get_sys_param(param);
+	cur_value = get_sys_param(item_to_sys_param[cur_item]);
 }
 
 static void save_value(s16 value) {
@@ -231,14 +229,14 @@ static void save_value(s16 value) {
 
 void open_settings_menu(void) {
 	ui_mode = UI_SETTINGS_MENU;
-	// force-load the value of the first item
-	select_item(cur_item, true);
+	// update display data
+	display_section = (cur_item >> 3) & 7;
+	cur_value = get_sys_param(item_to_sys_param[cur_item]);
 }
 
 void press_settings_menu_pad(u8 x, u8 y) {
-	Item item = alt_section_check(y * 8 + x);
-	if (item_exists(item))
-		select_item(item, false);
+	if (item_exists(x, y))
+		select_item(x, y);
 }
 
 void settings_menu_actions(void) {
@@ -345,23 +343,31 @@ void edit_settings_from_encoder(s8 enc_diff) {
 		save_value(new_value);
 		return;
 	}
+
 	// edit item selection
-	Item new_item = cur_item & 63;
-	if (enc_diff > 0)
-		while (new_item < NUM_DEFAULT_ITEMS - 1 && enc_diff != 0) {
-			new_item++;
-			while (!item_exists(alt_section_check(new_item)))
-				new_item++;
-			enc_diff--;
+	u8 x = cur_item & 7;
+	u8 y = (cur_item & 63) >> 3;
+
+	while (enc_diff > 0) {
+		x++;
+		if (x == 8 || !item_exists(x, y)) {
+			x = 0;
+			y = y == S_ACTIONS ? 0 : y + 1;
 		}
-	else
-		while (new_item > 0 && enc_diff != 0) {
-			new_item--;
-			while (!item_exists(alt_section_check(new_item)))
-				new_item--;
-			enc_diff++;
+		enc_diff--;
+	}
+	while (enc_diff < 0) {
+		if (x == 0) {
+			y = y == 0 ? S_ACTIONS : y - 1;
+			x = 7;
+			while (!item_exists(x, y))
+				x--;
 		}
-	select_item(alt_section_check(new_item), false);
+		else
+			x--;
+		enc_diff++;
+	}
+	select_item(x, y);
 }
 
 static const char* get_param_str(Item item, u8 value, char* val_buf) {
@@ -555,12 +561,11 @@ void settings_menu_leds(u8 pulse) {
 	for (u8 y = 0; y < NUM_SYS_PARAM_SECTS; y++) {
 		bool active_sect = y == display_section;
 		for (u8 x = 0; x < 8; x++) {
-			Item item = alt_section_check((y << 3) + x);
 			// highlight selected item
-			if (item == cur_item)
+			if ((y << 3) + x == (cur_item & 63))
 				leds[x][y] = 255;
 			// light up section items
-			else if (item_exists(item))
+			else if (item_exists(x, y))
 				leds[x][y] = led_add_gamma(active_sect ? 64 : 32);
 		}
 	}
