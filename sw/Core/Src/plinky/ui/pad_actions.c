@@ -258,6 +258,7 @@ void handle_pad_actions(u8 strip_id) {
 	static const u8 SLIDE_HYSTERESIS = 192; // cover at least 25% of next pad
 
 	static u8 prev_action_pad[NUM_TOUCHSTRIPS] = {255, 255, 255, 255, 255, 255, 255, 255, 255};
+	static u32 strip_press_start[8] = {0};
 
 	u16 mask = 1 << strip_id;
 	bool is_press_start = false;
@@ -317,13 +318,15 @@ void handle_pad_actions(u8 strip_id) {
 		if (!(action_on_main_strip & mask)) {
 			is_press_start = true;
 			action_on_main_strip |= mask;
+			strip_press_start[strip_id] = millis();
 		}
 	}
 	else
 		action_on_main_strip &= ~mask;
 
 	// actions
-	if (action_on_main_strip & mask) {
+	bool action_on_strip = action_on_main_strip & mask;
+	if (action_on_strip) {
 		switch (ui_mode) {
 		case UI_EDITING_A:
 		case UI_EDITING_B:
@@ -394,6 +397,15 @@ void handle_pad_actions(u8 strip_id) {
 			break;
 		}
 	}
+
+	// param releases
+	static u8 prev_action_on_main_strip = 0;
+	if ((ui_mode == UI_EDITING_A || ui_mode == UI_EDITING_B) && (prev_action_on_main_strip & mask) && !action_on_strip
+	    && strip_id > 0 && strip_id < 7 && millis() - strip_press_start[strip_id] < SHORT_PRESS_TIME) {
+		if (short_release_param_pad(pad_id))
+			keep_edit_mode_open = false;
+	}
+	prev_action_on_main_strip = action_on_main_strip;
 }
 
 void pad_actions_frame(void) {

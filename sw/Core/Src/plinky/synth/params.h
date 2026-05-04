@@ -42,6 +42,7 @@ void close_edit_mode(void);
 
 void touch_edit_strip(u8 strip_id, u16 position, bool is_press_start);
 void press_param_pad(u8 pad_id, bool is_press_start);
+bool short_release_param_pad(u8 pad_id);
 void press_mod_pad(u8 pad_y);
 void toggle_multi_edit(Param param_id);
 

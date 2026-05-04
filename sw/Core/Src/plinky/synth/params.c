@@ -799,9 +799,6 @@ void press_param_pad(u8 pad_id, bool is_press_start) {
 	}
 	// parameters that do something the moment they are pressed
 	else if (is_press_start) {
-		// toggle binary params
-		if (range_type[selected_param] == R_BINARY)
-			save_param_index(selected_param, !(cur_preset.params[selected_param][SRC_BASE] >= RAW_HALF));
 		// tap tempo
 		if (selected_param == P_TEMPO)
 			trigger_tap_tempo();
@@ -810,6 +807,16 @@ void press_param_pad(u8 pad_id, bool is_press_start) {
 		for (u8 strip_id = 0; strip_id < NUM_STRINGS; strip_id++)
 			reset_edit_strip_pos(strip_id);
 	}
+}
+
+// returns whether the edit ui should close
+bool short_release_param_pad(u8 pad_id) {
+	if (range_type[selected_param] != R_BINARY)
+		return false;
+
+	// toggle binary params
+	save_param_index(selected_param, !(cur_preset.params[selected_param][SRC_BASE] >= RAW_HALF));
+	return true;
 }
 
 void press_mod_pad(u8 pad_y) {
