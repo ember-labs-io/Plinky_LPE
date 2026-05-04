@@ -84,6 +84,11 @@ static u8 low_string_id = 255;        // lowest touched string
 static u8 high_string_id = 255;       // highest touched string
 static u8 high_string_note = 0;       // note on highest touched string
 
+// precalc arrays for mapping steps to strings
+static u8 string_oct_valid = 0;
+static u8 string_scale_valid = 0;
+static u8 string_start_step_valid = 0;
+
 // Midi Tuning Standard
 static u16 midi_tuning_pitch[NUM_NOTES] = {};
 static u32 midi_tuning_active[(NUM_NOTES + 31) / 32] = {};
@@ -94,9 +99,137 @@ const SynthString* get_synth_string(u8 string_id) {
 
 // === UTILS === //
 
+// only valid if NUM_NOTES == 97 (8 octaves + 1 step)
+#define MAX_VALID_SCALE_STEP(scale) (steps_in_scale[scale] << 3)
+
 #define MIDI_TUNING_IS_ACTIVE(note_nr) (midi_tuning_active[(note_nr) >> 5] & (1u << ((note_nr) & 31)))
 #define MIDI_TUNING_SET_ACTIVE(note_nr) (midi_tuning_active[(note_nr) >> 5] |= (1u << ((note_nr) & 31)))
 #define USING_MIDI_TUNING(note_number) (sys_params.midi_tuning && MIDI_TUNING_IS_ACTIVE(note_number))
+
+static s8 string_oct(u8 string_id) {
+	static s8 oct[NUM_STRINGS] = {};
+	u8 mask = 1 << string_id;
+	if (!(string_oct_valid & mask)) {
+		oct[string_id] = param_index_poly(PP_OCT, string_id);
+		string_oct_valid |= mask;
+	}
+	return oct[string_id];
+}
+
+static Scale string_scale(u8 string_id) {
+	static Scale scale[NUM_STRINGS] = {};
+	u8 mask = 1 << string_id;
+	if (!(string_scale_valid & mask)) {
+		scale[string_id] = param_index_poly(PP_SCALE, string_id);
+		string_scale_valid |= mask;
+	}
+	return scale[string_id];
+}
+
+// absolute number of steps at the bottom-pad of string_id - includes PP_OCT, does not include PP_DEGREE
+static s16 string_start_step(u8 string_id) {
+	static u16 string_hash[NUM_STRINGS] = {};
+	static s16 start_step[NUM_STRINGS] = {};
+	// does not save octave offset, string 0 always starts at BOTTOM_PAD_SEMIS
+	static u8 string_start_semis[NUM_STRINGS] = {BOTTOM_PAD_SEMIS};
+	// we add the octave steps at each return statement
+	s16 oct_steps = string_oct(string_id) * steps_in_scale[string_scale(string_id)];
+
+	// string was updated this frame
+	if (string_start_step_valid & (1u << string_id))
+		return start_step[string_id] + oct_steps;
+
+	// string 0 doesn't need any further mapping
+	if (string_id == 0) {
+		start_step[0] = steps_in_scale[string_scale(0)] * BOTTOM_PAD_OCTS;
+		string_start_step_valid |= 1;
+		return start_step[0] + oct_steps;
+	}
+
+	u16 new_string_hash[NUM_STRINGS];
+	u8 column_param[NUM_STRINGS];
+	Scale scale_param[NUM_STRINGS];
+	u8 first_stale_string = 255;
+
+	// loop downwards from our string to string 1 until we find the first up-to-date string
+	for (u8 s_id = string_id; s_id >= 1; s_id--) {
+		column_param[s_id] = param_index_poly(PP_COLUMN, s_id);
+		scale_param[s_id] = string_scale(s_id);
+		new_string_hash[s_id] = column_param[s_id] + (scale_param[s_id] << 4);
+		if (new_string_hash[s_id] == string_hash[s_id])
+			break;
+		first_stale_string = s_id;
+	}
+
+	// no stale strings, this string doesn't need updating
+	if (first_stale_string == 255) {
+		string_start_step_valid |= 1 << string_id;
+		return start_step[string_id] + oct_steps;
+	}
+
+	// recalculate stale strings up to string_id
+	u8 old_start_semis = string_start_semis[string_id];
+	for (u8 s_id = first_stale_string; s_id <= string_id; s_id++) {
+		Scale scale = scale_param[s_id];
+		u8 goal_semis = string_start_semis[s_id - 1] + column_param[s_id];
+		u8 base_oct = goal_semis / 12;
+		u16 pitch_in_oct = SEMIS_TO_PITCH(goal_semis % 12);
+		u8 scale_steps = steps_in_scale[scale];
+		const u16* step_pitch = scale_table[scale];
+
+		// estimate closest step by linear mapping
+		u8 closest_step = pitch_in_oct * scale_steps / PITCH_PER_OCT;
+		u16 least_dist = abs(step_pitch[closest_step] - pitch_in_oct);
+		bool check_higher_steps = true;
+
+		// search downward
+		while (closest_step > 0) {
+			closest_step--;
+			u16 dist = abs(step_pitch[closest_step] - pitch_in_oct);
+			if (dist >= least_dist) {
+				closest_step++;
+				break;
+			}
+			least_dist = dist;
+			// if we found a closer step downwards, we know we won't find a closer step upwards
+			check_higher_steps = false;
+		}
+
+		// search upward
+		if (check_higher_steps) {
+			while (closest_step < scale_steps - 1) {
+				closest_step++;
+				u16 dist = abs(step_pitch[closest_step] - pitch_in_oct);
+				if (dist >= least_dist) {
+					closest_step--;
+					break;
+				}
+				least_dist = dist;
+			}
+		}
+
+		// check first note of next octave
+		if (closest_step == scale_steps - 1 && PITCH_PER_OCT - pitch_in_oct < least_dist) {
+			closest_step = 0;
+			base_oct++;
+		}
+
+		// resync at root notes to prevent semitone error accumulation
+		string_start_semis[s_id] = closest_step == 0 ? base_oct * 12 : goal_semis;
+
+		// save results
+		string_hash[s_id] = new_string_hash[s_id];
+		start_step[s_id] = base_oct * scale_steps + closest_step;
+		string_start_step_valid |= 1 << s_id;
+	}
+
+	// invalidate higher strings
+	if (string_start_semis[string_id] != old_start_semis)
+		for (u8 s_id = string_id + 1; s_id < NUM_STRINGS; s_id++)
+			string_hash[s_id] = 0;
+
+	return start_step[string_id] + oct_steps;
+}
 
 static u16 pitch_at_step_with_midi_tuning(u8 step, Scale scale, u8 steps_in_scale) {
 	u8 octs = step / steps_in_scale;
@@ -148,94 +281,10 @@ u16 quant_pitch_to_scale(u16 pitch, Scale scale) {
 	return pitch_at_step(step, scale, scale_steps);
 }
 
-u8 step_at_string(u8 string_id, Scale scale) {
-	static u16 string_hash[NUM_STRINGS] = {};
-	static u16 string_start_step[NUM_STRINGS] = {};
-	static u8 string_start_semis[NUM_STRINGS] = {};
-
-	if (string_id == 0) {
-		string_start_semis[0] = BOTTOM_PAD_SEMIS;
-		return steps_in_scale[param_index_poly(PP_SCALE, 0)] * BOTTOM_PAD_OCTS + param_index_poly(PP_DEGREE, string_id);
-	}
-
-	u16 new_string_hash[NUM_STRINGS];
-	u8 column_param[NUM_STRINGS];
-	u8 scale_param[NUM_STRINGS];
-	u8 first_stale_string = 255;
-
-	// loop downwards from our string to 1 until we find the first up-to-date string
-	for (u8 s_id = string_id; s_id >= 1; s_id--) {
-		column_param[s_id] = param_index_poly(PP_COLUMN, s_id);
-		scale_param[s_id] = param_index_poly(PP_SCALE, s_id);
-		new_string_hash[s_id] = column_param[s_id] + (scale_param[s_id] << 4);
-		// found up to date string
-		if (new_string_hash[s_id] == string_hash[s_id])
-			break;
-		first_stale_string = s_id;
-	}
-
-	// recalculate stale strings up to string_id
-	if (first_stale_string != 255) {
-		for (u8 s_id = first_stale_string; s_id <= string_id; s_id++) {
-			u8 start_semis = string_start_semis[s_id - 1] + column_param[s_id];
-			u8 base_oct = start_semis / 12;
-			u16 pitch_in_oct = SEMIS_TO_PITCH(start_semis % 12);
-			u8 scale_steps = steps_in_scale[scale];
-			const u16* step_pitch = scale_table[scale_param[s_id]];
-
-			// estimate closest step by linear mapping
-			u8 closest_step = pitch_in_oct * scale_steps / PITCH_PER_OCT;
-			u16 least_dist = abs(step_pitch[closest_step] - pitch_in_oct);
-			bool check_higher_steps = true;
-
-			// search downward
-			while (closest_step > 0) {
-				closest_step--;
-				u16 dist = abs(step_pitch[closest_step] - pitch_in_oct);
-				if (dist >= least_dist) {
-					closest_step++;
-					break;
-				}
-				least_dist = dist;
-				// if we found a closer step downwards, we know we won't find a closer step upwards
-				check_higher_steps = false;
-			}
-
-			// search upward
-			if (check_higher_steps) {
-				while (closest_step < scale_steps - 1) {
-					closest_step++;
-					u16 dist = abs(step_pitch[closest_step] - pitch_in_oct);
-					if (dist >= least_dist) {
-						closest_step--;
-						break;
-					}
-					least_dist = dist;
-				}
-			}
-
-			// check first note of next octave
-			if (closest_step == scale_steps - 1 && PITCH_PER_OCT - pitch_in_oct < least_dist) {
-				closest_step = 0;
-				base_oct++;
-			}
-
-			// save results
-			string_hash[s_id] = new_string_hash[s_id];
-			string_start_semis[s_id] = base_oct * 12 + PITCH_TO_SEMIS(step_pitch[closest_step]);
-			string_start_step[s_id] = base_oct * scale_steps + closest_step;
-		}
-		// invalidate higher strings
-		for (u8 s_id = string_id + 1; s_id < NUM_STRINGS; s_id++)
-			string_hash[s_id] = 0;
-	}
-	// return with degree offset
-	return string_start_step[string_id] + param_index_poly(PP_DEGREE, string_id);
-}
-
-static u16 string_center_pitch(u8 string_id, Scale scale) {
+static u16 string_center_pitch(u8 string_id) {
+	Scale scale = string_scale(string_id);
 	u8 scale_steps = steps_in_scale[scale];
-	u8 step = step_at_string(string_id, scale) + 3;
+	s16 step = string_start_step(string_id) + 3;
 	// get octave
 	u8 oct = step / scale_steps;
 	step %= scale_steps;
@@ -255,9 +304,8 @@ u8 find_string_for_pitch(u16 pitch, bool quantize) {
 	u8 desired_string = 0;
 	u16 prev_pitch_dist = UINT16_MAX;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
-		Scale scale = param_index_poly(PP_SCALE, string_id);
-		u16 pitch_dist =
-		    abs(string_center_pitch(string_id, scale) - (quantize ? quant_pitch_to_scale(pitch, scale) : pitch));
+		u16 pitch_dist = abs(string_center_pitch(string_id)
+		                     - (quantize ? quant_pitch_to_scale(pitch, string_scale(string_id)) : pitch));
 		if (pitch_dist >= prev_pitch_dist)
 			break;
 		prev_pitch_dist = pitch_dist;
@@ -296,9 +344,9 @@ u8 find_string_for_pitch(u16 pitch, bool quantize) {
 }
 
 u16 string_position_from_pitch(u8 string_id, u16 pitch) {
-	Scale scale = param_index_poly(PP_SCALE, string_id);
+	Scale scale = string_scale(string_id);
 	u8 scale_steps = steps_in_scale[scale];
-	u8 string_step_offset = step_at_string(string_id, scale);
+	s16 string_step_offset = string_start_step(string_id);
 	u16 position = 7 << 8;
 	for (u8 pad = 7; pad > 0; pad--) {
 		if (pitch < pitch_at_step(string_step_offset + pad, scale, scale_steps))
@@ -657,6 +705,15 @@ static void generate_string_touch(u8 string_id) {
 	        || (ui_mode == UI_SAMPLE_EDIT && sampler_mode == SM_PREVIEW && USING_SAMPLER))) {
 		bool touching = strip_touched & mask;
 		bool first_touch_global = false;
+
+		u8 pad_id = 7 - (touch->pos >> 8);
+
+		// disable touches outside valid range
+		if (touching) {
+			s16 step = string_start_step(string_id) + pad_id;
+			if (step < 0 || step > MAX_VALID_SCALE_STEP(string_scale(string_id)))
+				touching = false;
+		}
 
 		if (touching) {
 			// new touch while nothing was touched
@@ -1038,8 +1095,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 		Touch* s_touch_sort = &s_string->touch_sorted[2]; // we use pitches 2-5, discarding extreme values
 		Scale scale = S_MAJOR;
 		u8 scale_steps = 0;
-		u8 string_step_offset = 0;
-		s32 octaves_pitch = 0;
+		s16 string_step_offset = 0;
+		s32 arp_oct_pitch = 0;
 		s16 pitch_param_pitch = 0;
 
 		if (ext_touch) {
@@ -1048,10 +1105,10 @@ static void run_voice(u8 voice_id, u32* dst) {
 			    USING_MIDI_TUNING(note_number) ? midi_tuning_pitch[note_number] : NOTE_NR_TO_PITCH(note_number);
 		}
 		else {
-			scale = param_index_poly(PP_SCALE, voice_id);
+			scale = string_scale(voice_id);
 			scale_steps = steps_in_scale[scale];
-			string_step_offset = step_at_string(voice_id, scale);
-			octaves_pitch = OCTS_TO_PITCH(arp_oct_offset + param_index_poly(PP_OCT, voice_id));
+			string_step_offset = string_start_step(voice_id) + param_index_poly(PP_DEGREE, voice_id);
+			arp_oct_pitch = OCTS_TO_PITCH(arp_oct_offset);
 			pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_poly(PP_PITCH, voice_id));
 		}
 
@@ -1068,7 +1125,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 			else {
 				u16 position = s_touch_sort++->pos;
 				// steps from string + steps from pad
-				u8 pad_step = string_step_offset + (7 - (position >> 8));
+				s16 pad_step = clampi(string_step_offset + (7 - (position >> 8)), 0, MAX_VALID_SCALE_STEP(scale));
 
 				// detuning from pad touch: pitchbend
 				s8 pos_on_pad = 127 - (position & 255);
@@ -1079,7 +1136,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 				pitchbend_pitch = (s64)abs(pos_on_pad) * micro_param * pitch_to_next_pad >> 24;
 
 				// apply pitch parameter offset
-				u16 total_pitch = clampi(octaves_pitch + pad_pitch + pitch_param_pitch, 0, MAX_PITCH);
+				u16 total_pitch = clampi(arp_oct_pitch + pad_pitch + pitch_param_pitch, 0, MAX_PITCH);
 				// round to a semitone
 				note_pitch = ROUND_PITCH_TO_SEMIS(total_pitch);
 				// remember the remaining pitch
@@ -1208,6 +1265,10 @@ static void run_voice(u8 voice_id, u32* dst) {
 }
 
 void handle_synth_voices(u32* dst) {
+	string_oct_valid = 0;
+	string_scale_valid = 0;
+	string_start_step_valid = 0;
+
 	// clear cv values
 	cv_trig_out_high = false;
 	cv_gate_out_high = false;
@@ -1417,5 +1478,17 @@ void draw_sample_playback(SampleInfo* s) {
 				curofscenter += (max_pos - curofscenter - (128 - 48) * 1024) >> GRAIN_SCROLL_SHIFT;
 		}
 		jumpable = false;
+	}
+}
+
+void get_root_and_blackout_leds(u8 string_id, u8 root_k[PADS_PER_STRIP]) {
+	Scale scale = string_scale(string_id);
+	u8 scale_steps = steps_in_scale[scale];
+	s16 step = string_start_step(string_id);
+	for (u8 y = 0; y < PADS_PER_STRIP; y++, step++) {
+		if (step < 0 || step > MAX_VALID_SCALE_STEP(scale))
+			root_k[7 - y] = 48;
+		else if (step % scale_steps == 0)
+			root_k[7 - y] = 96;
 	}
 }

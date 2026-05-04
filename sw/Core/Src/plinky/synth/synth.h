@@ -9,7 +9,6 @@ const SynthString* get_synth_string(u8 string_id);
 
 // utils
 u16 quant_pitch_to_scale(u16 pitch, Scale scale);
-u8 step_at_string(u8 string_id, Scale scale); // only for led_viz!
 u8 find_string_for_pitch(u16 pitch, bool quantize);
 u16 string_position_from_pitch(u8 string_id, u16 pitch);
 void clear_latch(void);
@@ -33,3 +32,4 @@ u8 draw_high_note(void);
 void draw_max_pres(void);
 void draw_voices(bool show_latch);
 void draw_sample_playback(SampleInfo* s);
+void get_root_and_blackout_leds(u8 string_id, u8 root_k[PADS_PER_STRIP]);
