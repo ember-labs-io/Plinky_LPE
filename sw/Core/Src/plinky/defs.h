@@ -31,7 +31,7 @@
 // SYNTH
 
 #define BASE_FREQUENCY 8.175799f // C-1
-#define NUM_NOTES 99             // C-1 - D7
+#define NUM_NOTES 97             // C-1 - C7
 #define MAX_PITCH SEMIS_TO_PITCH(NUM_NOTES - 1)
 
 #define PITCH_PER_SEMI 512
