@@ -59,7 +59,7 @@ static u16 sample_hold[NUM_STRINGS] = {0, 1 << 12, 2 << 12, 3 << 12, 4 << 12, 5 
 static u16 sample_hold_global = {8 << 12};
 
 // precalc
-static bool arp_toggle = false;
+static u8 arp_toggle = 0;
 static bool latch_toggle = false;
 
 // visuals
@@ -156,9 +156,9 @@ void inc_selected_edit_strip(void) {
 	selected_edit_strip = (selected_edit_strip + 1) % NUM_STRINGS;
 }
 
-// is the arp actively being executed?
-bool arp_active(void) {
-	return arp_toggle && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
+// is the arp actively being executed? (per-string bitmask)
+u8 arp_active_mask(void) {
+	return arp_toggle;
 }
 
 bool latch_active(void) {
@@ -480,7 +480,12 @@ void params_tick(void) {
 	}
 
 	// precalc
-	arp_toggle = param_index(P_ARP_TGL);
+	arp_toggle = 0;
+	if (ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING) {
+		for (u8 i = 0; i < NUM_STRINGS; i++)
+			if (param_index_multi(MP_ARP_TGL, i))
+				arp_toggle |= 1 << i;
+	}
 	latch_toggle = param_index(P_LATCH_TGL);
 }
 
@@ -832,6 +837,9 @@ void toggle_multi_edit(Param param_id) {
 		break;
 	case P_ENV_LVL2:
 		name = "Env Level 2";
+		break;
+	case P_ARP_TGL:
+		name = "Arp Enable";
 		break;
 	default:
 		name = param_name[param_id] + 1;
@@ -1588,7 +1596,7 @@ void draw_cur_param(void) {
 
 void draw_arp_flag(void) {
 	gfx_text_color = 0;
-	if (arp_active()) {
+	if (arp_active_mask()) {
 		fill_rectangle(128 - 32, 0, 128 - 17, 8);
 		draw_str(-(128 - 17), -1, F_8, "arp");
 	}

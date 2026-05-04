@@ -79,7 +79,7 @@ static SynthString* write_strings = synth_string[0];
 static SynthString* play_strings = synth_string[1];
 
 static u8 phys_touch_mask = 0;
-static u8 no_arp_touch_mask = 0;
+static u8 before_arp_touch_mask = 0;
 static bool cv_trig_out_high = false; // should cv trigger be high?
 static bool cv_gate_out_high = false; // should cv gate be high?
 static u16 max_env_lvl = 0;           // highest pressure envelope seen
@@ -914,15 +914,15 @@ void generate_string_touches(void) {
 	// for the strings that will be playing this frame -- //
 
 	// calculate string touches
-	no_arp_touch_mask_1back = no_arp_touch_mask;
-	no_arp_touch_mask = 0;
+	no_arp_touch_mask_1back = before_arp_touch_mask;
+	before_arp_touch_mask = 0;
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
 		if (touch_frames[string_id][play_frame].pres > 0)
-			no_arp_touch_mask |= 1 << string_id;
-	u8 envelope_trigger = no_arp_touch_mask & ~no_arp_touch_mask_1back;
+			before_arp_touch_mask |= 1 << string_id;
+	u8 envelope_trigger = before_arp_touch_mask & ~no_arp_touch_mask_1back;
 
 	// new (physical or virtual) touch: restart arp
-	if (arp_active() && no_arp_touch_mask && !no_arp_touch_mask_1back) {
+	if (arp_active_mask() && before_arp_touch_mask && !no_arp_touch_mask_1back) {
 		arp_reset();
 		// if the sequencer is not playing, reset the clock so the arp gets a trigger
 		if (!seq_playing())
@@ -930,10 +930,10 @@ void generate_string_touches(void) {
 	}
 
 	// generate final touch mask
-	u8 touch_mask = no_arp_touch_mask;
+	u8 touch_mask = before_arp_touch_mask;
 	// replace touch_mask by arp touches, update envelope triggers
-	if (arp_active())
-		envelope_trigger = arp_tick(no_arp_touch_mask, &touch_mask) ? touch_mask : 0;
+	if (arp_active_mask())
+		arp_tick(before_arp_touch_mask, &touch_mask, &envelope_trigger);
 
 	// precalc and populate strings for this frame
 	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
@@ -1411,8 +1411,8 @@ void handle_synth_voices(u32* dst) {
 	send_cv_pressure(max_env_lvl << 5);
 
 	// drone the lowest string of the arp
-	if (low_string_id == high_string_id && no_arp_touch_mask)
-		low_string_id = __builtin_ctz(no_arp_touch_mask);
+	if (low_string_id == high_string_id && before_arp_touch_mask)
+		low_string_id = __builtin_ctz(before_arp_touch_mask);
 
 	if (low_string_id != 255)
 		send_cv_pitch(false, voices[low_string_id].pitch);
