@@ -880,7 +880,7 @@ typedef struct SysParams {
 	u8 volume_lsb;
 	// 4 bytes
 	u8 volume_msb : 3; // add 3 bits to make editing in 0-1024 range possible
-	CVQuantType cv_quant : 2;
+	u8 cv_quant : 2;   // CVQuantType
 	bool reverse_encoder : 1;
 	bool preset_aligned : 1;  // is cur_preset identical to preset[preset_id]?
 	bool pattern_aligned : 1; // is cur_pattern_qtr identical to pattern[preset.params[P_PATTERN]]?
@@ -892,8 +892,8 @@ typedef struct SysParams {
 	u8 midi_in_vel_balance;  // balance between incoming velocity and pressure
 	u8 midi_out_vel_balance; // balance between outgoing velocity and pressure
 	// 8 bytes
-	MidiPressureType midi_in_pres_type : 2;
-	MidiPressureType midi_out_pres_type : 2;
+	u8 midi_in_pres_type : 2;  // MidiPressureType
+	u8 midi_out_pres_type : 2; // MidiPressureType
 	bool midi_out_yz_control : 1;
 	u8 midi_channel_bend_range_in : 3;
 	// 9 bytes
@@ -908,10 +908,10 @@ typedef struct SysParams {
 	// 11 bytes
 	bool midi_rcv_clock : 1;
 	bool midi_rcv_transport : 1;
-	RcvParamType midi_rcv_param_ccs : 2;
+	u8 midi_rcv_param_ccs : 2; // RcvParamType
 	bool midi_send_clock : 1;
 	bool midi_send_transport : 1;
-	SendParamType midi_send_param_ccs : 2;
+	u8 midi_send_param_ccs : 2; // SendParamType
 	// 12 bytes
 	bool midi_send_lfo_cc : 1;
 	u8 mpe_zone : 1; // 0 = lower, 1 = upper
@@ -931,6 +931,7 @@ typedef struct SysParams {
 	u8 version;
 	// 16 bytes
 } SysParams;
+static_assert(sizeof(SysParams) == 16, "?");
 
 typedef struct Preset {
 	s16 params[NUM_PARAMS][NUM_MOD_SOURCES];
