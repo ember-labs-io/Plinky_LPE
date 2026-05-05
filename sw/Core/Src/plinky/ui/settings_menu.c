@@ -203,8 +203,10 @@ static void save_value(s16 value) {
 			midi_clear_all();
 		break;
 	case I_MPE_IN:
+	case I_MPE_IN_CHANS:
+	case I_MPE_OUT_CHANS:
 		if (set_sys_param(param, value))
-			midi_update_zone_boundaries();
+			midi_update_mpe_mapping();
 		break;
 	case I_MIDI_CHANNEL_BEND_RANGE_IN:
 	case I_MIDI_STRING_BEND_RANGE_IN:
@@ -215,10 +217,6 @@ static void save_value(s16 value) {
 	case I_MIDI_OUT_CH:
 		if (set_sys_param(param, value))
 			midi_clear_all();
-		break;
-	case I_MPE_IN_CHANS:
-	case I_MPE_OUT_CHANS:
-		set_mpe_channels(sys_params.mpe_zone, value + 1);
 		break;
 	default:
 		set_sys_param(param, value);
