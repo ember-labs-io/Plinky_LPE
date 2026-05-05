@@ -189,6 +189,12 @@ static void apply_sostenuto(bool new_sostenuto, u8 string_id) {
 	}
 }
 
+static void set_mpe_channels(u8 zone, u8 num_chans) {
+	set_sys_param(SYS_MPE_ZONE, zone);
+	set_sys_param(SYS_MPE_CHANS, num_chans);
+	midi_update_mpe_mapping();
+}
+
 static void reset_controls(u8 string_id) {
 	force_release_string(string_id);
 	MidiString* m_string = &midi_string[string_id];
@@ -349,7 +355,7 @@ void midi_panic(void) {
 void init_midi(void) {
 	midi_clear_all();
 	midi_precalc_bends();
-	set_mpe_channels(sys_params.mpe_zone, sys_params.mpe_chans + 1);
+	midi_update_mpe_mapping();
 	HAL_UART_Receive_DMA(&huart3, midi_receive_buffer, MIDI_BUFFER_SIZE);
 	receiving_sysex = false;
 }
@@ -1337,24 +1343,23 @@ void midi_tick(void) {
 	}
 }
 
-void midi_update_zone_boundaries(void) {
-	non_mpe_start_string = sys_params.mpe_in ? mpe_zone[0].num_strings : 0;
-	high_mpe_start_string = sys_params.mpe_in ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
-}
+void midi_update_mpe_mapping(void) {
+	u8 zone = sys_params.mpe_zone;
+	u8 num_chans = sys_params.mpe_chans + 1;
 
-void set_mpe_channels(u8 zone, u8 num_chans) {
 	// set channels
 	mpe_zone[zone].num_chans = num_chans;
 	mpe_zone[(u8)!zone].num_chans = mini(mpe_zone[(u8)!zone].num_chans, 15 - num_chans);
+
 	// recalculate num_strings
 	bool one_chan_per_string = mpe_zone[0].num_chans + mpe_zone[1].num_chans <= 8;
 	mpe_zone[zone].num_strings = one_chan_per_string ? mpe_zone[zone].num_chans : (mpe_zone[zone].num_chans + 1) >> 1;
 	mpe_zone[(u8)!zone].num_strings =
 	    one_chan_per_string ? mpe_zone[(u8)!zone].num_chans : (mpe_zone[(u8)!zone].num_chans + 1) >> 1;
-	midi_update_zone_boundaries();
-	// save to sys_params
-	set_sys_param(SYS_MPE_ZONE, zone);
-	set_sys_param(SYS_MPE_CHANS, num_chans);
+
+	// update boundaries
+	non_mpe_start_string = sys_params.mpe_in ? mpe_zone[0].num_strings : 0;
+	high_mpe_start_string = sys_params.mpe_in ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
 }
 
 static void midi_push_cc(u8 data1, u8 data2) {
