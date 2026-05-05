@@ -1244,8 +1244,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 
 				// pitch offset from pad touch
 				s8 pos_on_pad = 127 - (position & 255);
-				u16 next_pad_pitch =
-				    pitch_at_step_with_midi_tuning(pad_step + (pos_on_pad > 0 ? 1 : -1), scale, scale_steps);
+				u8 next_pad = clampi(pad_step + (pos_on_pad > 0 ? 1 : -1), 0, MAX_VALID_SCALE_STEP(scale));
+				u16 next_pad_pitch = pitch_at_step_with_midi_tuning(next_pad, scale, scale_steps);
 				s16 pitch_to_next_pad = next_pad_pitch - pad_pitch;
 				note_offset_pitch = (s64)abs(pos_on_pad) * micro_param * pitch_to_next_pad >> 24;
 
@@ -1276,7 +1276,10 @@ static void run_voice(u8 voice_id, u32* dst) {
 			osc_pitch = clampi(osc_pitch + pitch_param_pitch, 0, MAX_PITCH);
 
 			// add osc interval (if within valid pitch range)
-			osc_pitch += (osc_id & 1) == 1 && osc_pitch + osc_interval_pitch <= MAX_PITCH ? osc_interval_pitch : 0;
+			s32 pitch_with_interval = osc_pitch + osc_interval_pitch;
+			osc_pitch += (osc_id & 1) == 1 && pitch_with_interval >= 0 && pitch_with_interval <= MAX_PITCH
+			                 ? osc_interval_pitch
+			                 : 0;
 
 			// save to voice
 			voice->osc[osc_id].pitch = osc_pitch;
