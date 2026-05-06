@@ -500,9 +500,19 @@ void params_tick(void) {
 // == RETRIEVAL == //
 
 // raw parameter value, range -1024 to 1024
-#define PARAM_VAL_RAW(param_id, mod_src)                                                                               \
-	((param_id) == P_VOLUME ? (sys_params.volume_msb << 8) + sys_params.volume_lsb                                     \
-	                        : cur_preset.params[param_id][mod_src])
+static s16 param_val_raw(Param param_id, ModSource mod_src) {
+	return param_id == P_VOLUME ? (sys_params.volume_msb << 8) + sys_params.volume_lsb
+	                            : (IS_GLOBAL_LAYOUT(param_id) && mod_src == SRC_BASE
+	                                   ? global_data.layout_params[layout_param_from_param[param_id]][0]
+	                                   : cur_preset.params[param_id][mod_src]);
+}
+
+static s16 param_val_raw_multi(Param param_id, u8 string_id) {
+	return IS_GLOBAL_LAYOUT(param_id)
+	           ? global_data.layout_params[layout_param_from_param[param_id]][string_id]
+	           : (string_id == 0 ? cur_preset.params[param_id][SRC_BASE]
+	                             : cur_preset.multi_params[multi_param_from_param[param_id]][string_id - 1]);
+}
 
 // param value range +/- 65536
 
@@ -544,10 +554,8 @@ s32 param_val_multi(MultiParam mp_id, u8 string_id) {
 	s16* param = cur_preset.params[param_id];
 
 	// add 16 precision bits to the raw value
-	s32 mod_val = (IS_GLOBAL_LAYOUT(param_id) ? global_data.layout_params[layout_param_from_param[param_id]][string_id]
-	               : string_id > 0            ? cur_preset.multi_params[mp_id][string_id - 1]
-	                                          : cur_preset.params[param_id][SRC_BASE])
-	              << 16;
+	s16 raw = param_val_raw_multi(param_id, string_id);
+	s32 mod_val = raw << 16;
 
 	// apply envelope 2 modulation
 	mod_val += envelope2[string_id].level16 * param[SRC_ENV2];
@@ -573,7 +581,6 @@ s32 param_val_multi(MultiParam mp_id, u8 string_id) {
 
 	// the shape parameter can only modulate within the same oscillator shape type
 	if (param_id == P_SHAPE) {
-		s16 raw = string_id == 0 ? PARAM_VAL_RAW(P_SHAPE, SRC_BASE) : cur_preset.multi_params[MP_SHAPE][string_id - 1];
 		// wavetable
 		if (raw > 0)
 			mod_val = maxi(1 << 17, mod_val); // 0.1%
@@ -609,7 +616,7 @@ s8 param_index_unmod(Param param_id) {
 }
 
 u8 param_cc_value(Param param_id) {
-	return raw_to_cc(PARAM_VAL_RAW(param_id, SRC_BASE), param_id);
+	return raw_to_cc(param_val_raw(param_id, SRC_BASE), param_id);
 }
 
 bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
@@ -736,8 +743,9 @@ void close_edit_mode(void) {
 }
 
 static void reset_edit_strip_pos(u8 strip_id) {
-	edit_strip_start_pos = strip_id == 0 ? PARAM_VAL_RAW(selected_param, selected_mod_src)
-	                                     : cur_preset.multi_params[selected_param][strip_id - 1];
+	edit_strip_start_pos = edit_param_multi(selected_param, selected_mod_src)
+	                           ? param_val_raw_multi(selected_param, strip_id)
+	                           : param_val_raw(selected_param, selected_mod_src);
 	set_smoother(&edit_strip_pos[strip_id], edit_strip_start_pos);
 }
 
@@ -882,12 +890,8 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 		pad_actions_keep_edit_mode_open();
 
 	bool edit_multi = edit_param_multi(param_id, selected_mod_src);
-
-	s16 raw = IS_GLOBAL_LAYOUT(param_id) && selected_mod_src == SRC_BASE
-	              ? global_data.layout_params[layout_param_from_param[param_id]][selected_edit_strip]
-	          : edit_multi && selected_edit_strip > 0
-	              ? cur_preset.multi_params[multi_param_from_param[param_id]][selected_edit_strip - 1]
-	              : PARAM_VAL_RAW(param_id, selected_mod_src);
+	s16 raw =
+	    edit_multi ? param_val_raw_multi(param_id, selected_edit_strip) : param_val_raw(param_id, selected_mod_src);
 	u8 range = PARAM_RANGE(param_id);
 
 	// negative values of delay/dual clock are unranged
@@ -945,7 +949,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 
 void params_toggle_default_value(void) {
 	static u16 param_hash = NUM_PARAMS << 6;
-	static s16 saved_val = INT16_MAX;
+	static s16 saved_raw = INT16_MAX;
 
 	Param param_id = RECENT_PARAM;
 	if (param_id >= NUM_PARAMS)
@@ -956,30 +960,29 @@ void params_toggle_default_value(void) {
 	// clear saved value when we're seeing a new parameter
 	u16 new_hash = (param_id << 6) + (selected_mod_src << 3) + (edit_multi ? selected_edit_strip : 0);
 	if (new_hash != param_hash) {
-		saved_val = INT16_MAX;
+		saved_raw = INT16_MAX;
 		param_hash = new_hash;
 	}
 
-	s16 cur_val = IS_GLOBAL_LAYOUT(param_id) && selected_mod_src == SRC_BASE
-	                  ? global_data.layout_params[layout_param_from_param[param_id]][selected_edit_strip]
-	              : edit_multi && selected_edit_strip > 0
-	                  ? cur_preset.multi_params[multi_param_from_param[param_id]][selected_edit_strip - 1]
-	                  : PARAM_VAL_RAW(param_id, selected_mod_src);
-	s16 init_val = selected_mod_src ? 0 : init_params.params[param_id][0];
+	s16 cur_raw =
+	    edit_multi ? param_val_raw_multi(param_id, selected_edit_strip) : param_val_raw(param_id, selected_mod_src);
+	s16 init_raw = edit_multi && selected_edit_strip != 0
+	                   ? init_params.multi_params[multi_param_from_param[param_id]][selected_edit_strip - 1]
+	                   : init_params.params[param_id][SRC_BASE];
 	// first press: save current value and set init value
-	if (cur_val != init_val || saved_val == INT16_MAX) {
-		saved_val = cur_val;
+	if (cur_raw != init_raw || saved_raw == INT16_MAX) {
+		saved_raw = cur_raw;
 		if (edit_multi)
-			save_multi_param_raw(param_id, selected_edit_strip, init_val);
+			save_multi_param_raw(param_id, selected_edit_strip, init_raw);
 		else
-			save_param_raw(param_id, selected_mod_src, init_val);
+			save_param_raw(param_id, selected_mod_src, init_raw);
 	}
 	// second press: restore saved value
 	else {
 		if (edit_multi)
-			save_multi_param_raw(param_id, selected_edit_strip, saved_val);
+			save_multi_param_raw(param_id, selected_edit_strip, saved_raw);
 		else
-			save_param_raw(param_id, selected_mod_src, saved_val);
+			save_param_raw(param_id, selected_mod_src, saved_raw);
 	}
 }
 
@@ -1321,11 +1324,7 @@ void draw_cur_param(void) {
 	u8 x;
 
 	bool edit_multi = edit_param_multi(draw_param, draw_src);
-	s16 raw = IS_GLOBAL_LAYOUT(draw_param) && draw_src == SRC_BASE
-	              ? global_data.layout_params[layout_param_from_param[draw_param]][selected_edit_strip]
-	          : edit_multi && selected_edit_strip > 0
-	              ? cur_preset.multi_params[multi_param_from_param[draw_param]][selected_edit_strip - 1]
-	              : PARAM_VAL_RAW(draw_param, draw_src);
+	s16 raw = edit_multi ? param_val_raw_multi(draw_param, selected_edit_strip) : param_val_raw(draw_param, draw_src);
 
 	gfx_text_color = 3;
 	// draw section name
@@ -1502,7 +1501,7 @@ void draw_cur_param(void) {
 	u8 text_y = 0;
 
 	//  special negative ranges
-	s16 base_raw = PARAM_VAL_RAW(draw_param, SRC_BASE);
+	s16 base_raw = param_val_raw(draw_param, SRC_BASE);
 	if (base_raw < 0) {
 		switch (draw_param) {
 		case P_SHAPE:
@@ -1652,10 +1651,7 @@ u8 value_editor_column_led(u8 x, u8 y) {
 
 	bool selected = !edit_multi || x == selected_edit_strip;
 	bool is_signed = PARAM_SIGNED(param_snap) || src_snap != SRC_BASE;
-	s16 raw = IS_GLOBAL_LAYOUT(param_snap) && src_snap == SRC_BASE
-	              ? global_data.layout_params[layout_param_from_param[param_snap]][x]
-	          : x == 0 ? PARAM_VAL_RAW(param_snap, src_snap)
-	                   : cur_preset.multi_params[multi_param_from_param[param_snap]][x - 1];
+	s16 raw = edit_multi ? param_val_raw_multi(param_snap, x) : param_val_raw(param_snap, src_snap);
 	u8 pad_id = 7 - y;
 	u8 range = src_snap == SRC_BASE ? PARAM_RANGE(param_snap) : 0;
 	float pad_pos = raw * 7 / (range ? (float)INDEX_TO_RAW(range - 1, range) : 1024.f);
@@ -1726,7 +1722,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 		if (!show_mod_targets && pAorB == param_snap)
 			k = pulse;
 		// holding down a mod source => light up params that are modulated by it
-		if (show_mod_targets && pAorB != P_VOLUME && PARAM_VAL_RAW(pAorB, src_snap))
+		if (show_mod_targets && pAorB != P_VOLUME && param_val_raw(pAorB, src_snap))
 			k = 255;
 	}
 	// mod sources
@@ -1739,7 +1735,7 @@ u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 			k = pulse;
 		// light up mod sources that modulate current param
 		else if (param_selected)
-			k = (y && PARAM_VAL_RAW(param_snap, y) && param_snap != P_VOLUME) ? 255 : 0;
+			k = (y && param_val_raw(param_snap, y) && param_snap != P_VOLUME) ? 255 : 0;
 	}
 	return k;
 }
