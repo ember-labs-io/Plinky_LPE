@@ -137,9 +137,15 @@ bool editing_param(void) {
 	return EDITING_PARAM;
 }
 
+static bool edit_param_multi(Param param_id, ModSource mod_src) {
+	if (mod_src != SRC_BASE || !PARAM_IS_MULTI_TIMBRAL(param_id))
+		return false;
+
+	return (global_data.edit_multi_timbral >> multi_param_from_param[param_id]) & 1;
+}
+
 bool editing_multi_param(void) {
-	return EDITING_PARAM && sys_params.edit_multi_params && selected_mod_src == SRC_BASE
-	       && PARAM_IS_MULTI_TIMBRAL(selected_param);
+	return EDITING_PARAM && edit_param_multi(selected_param, selected_mod_src);
 }
 
 void dec_selected_edit_strip(void) {
@@ -148,10 +154,6 @@ void dec_selected_edit_strip(void) {
 
 void inc_selected_edit_strip(void) {
 	selected_edit_strip = (selected_edit_strip + 1) % NUM_STRINGS;
-}
-
-void reset_selected_edit_strip(void) {
-	selected_edit_strip = 0;
 }
 
 // is the arp actively being executed?
@@ -781,7 +783,7 @@ void touch_edit_strip(u8 strip_id, u16 position, bool is_press_start) {
 		raw = smoothed_value + (smoothed_value > 0 ? 0.5f : -0.5f);
 	}
 	// save to parameter
-	if (sys_params.edit_multi_params)
+	if (edit_param_multi(selected_param, SRC_BASE))
 		save_multi_param_raw(selected_param, strip_id, raw);
 	else
 		save_param_raw(selected_param, selected_mod_src, raw);
@@ -818,6 +820,35 @@ void press_mod_pad(u8 pad_y) {
 	selected_mod_src = pad_y;
 }
 
+void toggle_multi_edit(Param param_id) {
+	u32 mask = 1 << multi_param_from_param[param_id];
+	global_data.edit_multi_timbral ^= mask;
+	log_ram_edit(SEG_GLOBAL_DATA);
+	selected_edit_strip = 0;
+	const char* name;
+	switch (param_id) {
+	case P_SHAPE:
+		name = "Shape";
+		break;
+	case P_ENV_LVL2:
+		name = "Env Level 2";
+		break;
+	default:
+		name = param_name[param_id] + 1;
+		break;
+	}
+
+	char name_buf[16];
+	snprintf(name_buf, sizeof(name_buf), "%s", name);
+	if (param_id >= P_ATTACK1 && param_id <= P_RELEASE1)
+		strncat(name_buf, " 1", sizeof(name_buf) - strlen(name_buf) - 1);
+	else if (param_id >= P_ATTACK2 && param_id <= P_RELEASE2)
+		strncat(name_buf, " 2", sizeof(name_buf) - strlen(name_buf) - 1);
+
+	flash_message(F_16_BOLD, "%s", name_buf,
+	              global_data.edit_multi_timbral & mask ? "Multi Editing On" : "Multi Editing Off");
+}
+
 // == ENCODER == //
 
 void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
@@ -829,7 +860,7 @@ void edit_param_from_encoder(s8 enc_diff, float enc_acc) {
 	if (function_pressed == FN_SHIFT_A || function_pressed == FN_SHIFT_B)
 		pad_actions_keep_edit_mode_open();
 
-	bool edit_multi = sys_params.edit_multi_params && selected_mod_src == SRC_BASE && PARAM_IS_MULTI_TIMBRAL(param_id);
+	bool edit_multi = edit_param_multi(param_id, selected_mod_src);
 
 	s16 raw = IS_GLOBAL_LAYOUT(param_id) && selected_mod_src == SRC_BASE
 	              ? global_data.layout_params[layout_param_from_param[param_id]][selected_edit_strip]
@@ -899,7 +930,7 @@ void params_toggle_default_value(void) {
 	if (param_id >= NUM_PARAMS)
 		return;
 
-	bool edit_multi = sys_params.edit_multi_params && selected_mod_src == SRC_BASE && PARAM_IS_MULTI_TIMBRAL(param_id);
+	bool edit_multi = edit_param_multi(param_id, selected_mod_src);
 
 	// clear saved value when we're seeing a new parameter
 	u16 new_hash = (param_id << 6) + (selected_mod_src << 3) + (edit_multi ? selected_edit_strip : 0);
@@ -1268,7 +1299,7 @@ void draw_cur_param(void) {
 	u8 x_center = 0;
 	u8 x;
 
-	bool edit_multi = sys_params.edit_multi_params && draw_src == SRC_BASE && PARAM_IS_MULTI_TIMBRAL(draw_param);
+	bool edit_multi = edit_param_multi(draw_param, draw_src);
 	s16 raw = IS_GLOBAL_LAYOUT(draw_param) && draw_src == SRC_BASE
 	              ? global_data.layout_params[layout_param_from_param[draw_param]][selected_edit_strip]
 	          : edit_multi && selected_edit_strip > 0
@@ -1331,18 +1362,22 @@ void draw_cur_param(void) {
 			sect_str = mod_src_name[draw_src];
 	}
 
-	u8 text_x = 19;
+	u8 text_x = 17;
 	u8 text_right_x = OLED_WIDTH - 16;
 	// draw section icon
 	draw_str(0, sect_str[0] == I_NOTES[0] ? 1 : 0, F_12, (char[]){sect_str[0], '\0'});
 	// draw section name
-	u8 multi_id_x = draw_str(text_x, 3, F_12, sect_str + 1) + (edit_multi && draw_param == P_SCALE ? 0 : 1);
+	u8 multi_id_x = draw_str(text_x, 3, F_12, sect_str + 1) + (draw_param == P_SCALE ? 0 : 1);
 	// draw multi param string number
 	if (edit_multi) {
+		fill_rectangle(multi_id_x, 2, multi_id_x + 8, 13);
+		gfx_text_color = 0;
 		fdraw_str(multi_id_x
-		              + (selected_edit_strip == 0 || selected_edit_strip == 2 || selected_edit_strip == 3 ? 2 : 1),
-		          1, F_8, "%u", selected_edit_strip + 1);
-		inverted_rectangle(multi_id_x, 0, multi_id_x + 6, 8);
+		              + (selected_edit_strip == 0   ? 3
+		                 : selected_edit_strip == 3 ? 2
+		                                            : 1),
+		          3, F_12, "%u", selected_edit_strip + 1);
+		gfx_text_color = 1;
 	}
 
 	// modulated value
@@ -1453,14 +1488,12 @@ void draw_cur_param(void) {
 			icon_str[0] = *I_SHAPE;
 			strcpy(name_str, "PulseWidth");
 			icon_y = 18;
-			text_x = 18;
 			text_y = 20;
 			break;
 		case P_SWING:
 			icon_str[0] = *I_TILT;
 			strcpy(name_str, "Swing 16th");
 			icon_y = 18;
-			text_x = 19;
 			text_y = 18;
 			break;
 		case P_ARP_CHANCE:
@@ -1468,7 +1501,6 @@ void draw_cur_param(void) {
 			icon_str[0] = *I_PERCENT;
 			strcpy(name_str, "Chance (W)");
 			icon_y = 18;
-			text_x = 19;
 			text_y = 20;
 			break;
 		default:
@@ -1480,7 +1512,6 @@ void draw_cur_param(void) {
 			icon_str[0] = *I_TIME;
 			strcpy(name_str, "Rate");
 			icon_y = 18;
-			text_x = 19;
 			text_y = 20;
 			break;
 		default:
@@ -1495,14 +1526,12 @@ void draw_cur_param(void) {
 		icon_str[0] = *I_JACK;
 		strcpy(name_str, "Trigger");
 		icon_y = 18;
-		text_x = 19;
 		text_y = 18;
 	}
 	if (draw_param == P_SHAPE && base_raw == 0) {
 		icon_str[0] = *I_SHAPE;
 		strcpy(name_str, "SuperSaw");
 		icon_y = 18;
-		text_x = 19;
 		text_y = 20;
 	}
 
@@ -1529,8 +1558,6 @@ void draw_cur_param(void) {
 
 	// name default
 	if (text_y == 0) {
-		// x
-		text_x = 19;
 		// y
 		switch (draw_param) {
 		case P_ENV_LVL1:

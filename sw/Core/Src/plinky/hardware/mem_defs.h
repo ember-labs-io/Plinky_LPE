@@ -134,10 +134,6 @@ static u16 get_cv_gate_in_is_pressure(void) {
 	return sys_params.cv_gate_in_is_pressure;
 }
 
-static u16 get_edit_multi_params(void) {
-	return sys_params.edit_multi_params;
-}
-
 static u16 get_layout_global(void) {
 	return sys_params.layout_global;
 }
@@ -178,7 +174,6 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_MIDI_TUNING] = get_midi_tuning,
     [SYS_REFERENCE_PITCH] = get_reference_pitch,
     [SYS_CV_GATE_IN_IS_PRESSURE] = get_cv_gate_in_is_pressure,
-    [SYS_EDIT_MULTI_PARAMS] = get_edit_multi_params,
     [SYS_LAYOUT_GLOBAL] = get_layout_global,
 };
 
@@ -322,10 +317,6 @@ static void set_cv_gate_in_is_pressure(u16 value) {
 	sys_params.cv_gate_in_is_pressure = value;
 }
 
-static void set_edit_multi_params(u16 value) {
-	sys_params.edit_multi_params = value;
-}
-
 static void set_layout_global(u16 value) {
 	sys_params.layout_global = value;
 }
@@ -366,7 +357,6 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_MIDI_TUNING] = set_midi_tuning,
     [SYS_REFERENCE_PITCH] = set_reference_pitch,
     [SYS_CV_GATE_IN_IS_PRESSURE] = set_cv_gate_in_is_pressure,
-    [SYS_EDIT_MULTI_PARAMS] = set_edit_multi_params,
     [SYS_LAYOUT_GLOBAL] = set_layout_global,
 };
 

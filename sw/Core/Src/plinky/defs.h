@@ -275,7 +275,6 @@ typedef enum SysParam {
 	SYS_MIDI_TUNING,
 	SYS_REFERENCE_PITCH,
 	SYS_CV_GATE_IN_IS_PRESSURE,
-	SYS_EDIT_MULTI_PARAMS,
 	SYS_LAYOUT_GLOBAL,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
@@ -916,7 +915,7 @@ typedef struct SysParams {
 	bool midi_in_scale_quant : 1;
 	bool midi_trs_out_off : 1;
 	bool midi_tuning : 1;
-	bool edit_multi_params : 1; // show eight edit strips for multi-timbral params
+	u8 pad0 : 1;
 	bool mpe_out_fine_tuning : 1;
 	bool layout_global : 1;
 	// 13 bytes
@@ -971,6 +970,7 @@ typedef struct GlobalData {
 	u32 midi_tuning_active[(NUM_NOTES + 31) / 32];
 	char midi_tuning_name[17];
 	s16 layout_params[NUM_LAYOUT_PARAMS][NUM_STRINGS];
-	u8 padding[8];
+	u8 padding[6];
+	u32 edit_multi_timbral;
 } GlobalData;
 static_assert((sizeof(GlobalData) & 15) == 0, "?");
