@@ -9,7 +9,6 @@ bool editing_param(void);
 bool editing_multi_param(void);
 void dec_selected_edit_strip(void);
 void inc_selected_edit_strip(void);
-void reset_selected_edit_strip(void);
 bool arp_active(void);
 bool latch_active(void);
 s16 value_to_index(Param param_id, s32 value);
@@ -44,6 +43,7 @@ void close_edit_mode(void);
 void touch_edit_strip(u8 strip_id, u16 position, bool is_press_start);
 void press_param_pad(u8 pad_id, bool is_press_start);
 void press_mod_pad(u8 pad_y);
+void toggle_multi_edit(Param param_id);
 
 // encoder calls
 void edit_param_from_encoder(s8 enc_diff, float enc_acc);

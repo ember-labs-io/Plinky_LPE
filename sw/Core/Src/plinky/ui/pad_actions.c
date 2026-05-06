@@ -21,6 +21,7 @@ static bool keep_edit_mode_open = false;
 
 // keep track of (long) presses on the main grid
 u8 main_press_item = 255;
+static Param main_press_param = 255;
 static bool main_press_canceled = false;
 static u32 main_press_start = 0;
 u32 main_press_ms = 0;
@@ -305,6 +306,9 @@ void handle_pad_actions(u8 strip_id) {
 		// track main press
 		if (!action_on_main_strip) {
 			main_press_item = pad_id;
+			main_press_param = (strip_id == 0 || strip_id >= 7)
+			                       ? 255
+			                       : pad_y * 12 + (strip_id - 1) + (ui_mode == UI_EDITING_B ? 6 : 0);
 			main_press_start = millis();
 			main_press_ms = 0;
 			main_press_canceled = false;
@@ -405,13 +409,11 @@ void pad_actions_frame(void) {
 		if (ui_mode == UI_LOAD && press_mem_item())
 			cancel_main_press();
 	}
-	// toggle editing multi params
+	// toggle editing multi params for param
 	if ((ui_mode == UI_EDITING_A || ui_mode == UI_EDITING_B)
 	    && main_press_ms >= PRESS_DELAY + SHORT_PRESS_TIME + LONG_PRESS_TIME + POST_PRESS_DELAY) {
-		set_sys_param(SYS_EDIT_MULTI_PARAMS, !sys_params.edit_multi_params);
-		reset_selected_edit_strip();
+		toggle_multi_edit(main_press_param);
 		cancel_main_press();
-		flash_message(F_16_BOLD, "%s", "Multi Editing", sys_params.edit_multi_params ? "On" : "Off");
 	}
 }
 
@@ -448,21 +450,14 @@ bool oled_function_visuals(void) {
 		case FN_SHIFT_A:
 		case FN_SHIFT_B:
 			if (main_press_ms > PRESS_DELAY + SHORT_PRESS_TIME) {
-				u8 id_on_row = main_press_item >> 3;
-				// not a parameter
-				if (id_on_row == 0 || id_on_row > 6) {
-					cancel_main_press();
-					return false;
-				}
-
-				u8 param_pad = ((main_press_item & 7) * 6 + (id_on_row - 1));
 				// not a multi param
-				if (!PARAM_IS_MULTI_TIMBRAL(2 * param_pad + (function_pressed == FN_SHIFT_B ? 6 : 0))) {
+				if (main_press_param == 255 || !PARAM_IS_MULTI_TIMBRAL(main_press_param)) {
 					cancel_main_press();
 					return false;
 				}
 
-				draw_str_ctr(8, F_16_BOLD, "Toggle Multi Edit");
+				Font font = F_16_BOLD;
+				draw_str_ctr((OLED_HEIGHT - font_height(font)) >> 1, font, "Toggle Multi Edit");
 				draw_load_bar(main_press_ms - PRESS_DELAY - SHORT_PRESS_TIME, LONG_PRESS_TIME);
 				return true;
 			}
@@ -491,7 +486,7 @@ bool oled_function_visuals(void) {
 }
 
 u8 ui_load_long_press_led(u8 x, u8 y, u8 pulse) {
-	if ((action_on_main_strip & (1 << x)) && main_press_item == x * 8 + y && !main_press_canceled)
+	if ((action_on_main_strip & (1 << x)) && main_press_item == (x << 3) + y && !main_press_canceled)
 		return maxi(pulse, 1);
 	return 0;
 }
