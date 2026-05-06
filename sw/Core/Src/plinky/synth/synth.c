@@ -85,7 +85,7 @@ static bool cv_gate_out_high = false; // should cv gate be high?
 static u16 max_env_lvl = 0;           // highest pressure envelope seen
 static u8 low_string_id = 255;        // lowest touched string
 static u8 high_string_id = 255;       // highest touched string
-static u8 high_string_note = 0;       // note on highest touched string
+static u8 high_string_note = 255;     // note on highest touched string
 
 // precalc arrays for mapping steps to strings
 static u8 string_oct_valid = 0;
@@ -1405,6 +1405,7 @@ void handle_synth_voices(u32* dst) {
 	max_env_lvl = 0;
 	low_string_id = 255;
 	high_string_id = 255;
+	high_string_note = 255;
 
 	// run all voices
 	for (u8 voice_id = 0; voice_id < NUM_VOICES; ++voice_id)
@@ -1477,7 +1478,7 @@ void handle_synth_voices(u32* dst) {
 
 u8 draw_high_note(void) {
 	gfx_text_color = 3;
-	if (max_env_lvl > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
+	if (high_string_note != 255 && !(USING_SAMPLER && !cur_sample_info.pitched))
 		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name(high_string_note, true));
 	else
 		return 0;
