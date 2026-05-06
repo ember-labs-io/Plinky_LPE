@@ -4,27 +4,27 @@
 #include "memory.h"
 #include "sensor_defs.h"
 #include "synth/audio.h"
+#include "synth/time.h"
 #include "ui/pad_actions.h"
 
 extern TSC_HandleTypeDef htsc;
 
 #define TOUCH_THRESHOLD 1000
-
-static TouchCalibData touch_calib_data[NUM_TOUCH_READINGS];
-
-TouchCalibData* touch_calib_ptr(void) {
-	return touch_calib_data;
-}
+#define TOUCH_STABILITY_TICKS 9
 
 u8 touch_frame = 0; // frame counter for touch reading loop
+u16 strip_touched = 0;
 
-static Touch touches[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // the touches
-static u16 sensor_val[2 * NUM_TOUCH_READINGS];           // current value (range 0 - 65027)
-static u16 sensor_min[2 * NUM_TOUCH_READINGS];           // lifetime low
-static u16 sensor_max[2 * NUM_TOUCH_READINGS];           // lifetime high
+static TouchCalibData touch_calib_data[NUM_TOUCH_READINGS];
+static Touch touches[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES];  // the touches
+static u8 module_ticks = 0;                               // tracking ticks for the module
+static u8 touch_ticks[NUM_TOUCHSTRIPS][NUM_TOUCH_FRAMES]; // synth_tick timestamp for each touch
+static u16 sensor_val[2 * NUM_TOUCH_READINGS];            // current value (range 0 - 65027)
+static u16 sensor_min[2 * NUM_TOUCH_READINGS];            // lifetime low
+static u16 sensor_max[2 * NUM_TOUCH_READINGS];            // lifetime high
 
 static bool tsc_started = false;
-static u8 read_this_frame = 0; // has touch (0 - 7) been read this touch_frame? bitmask
+static u16 read_this_frame = 0; // has touch been read this touch_frame? bitmask
 
 // sensor macros
 
@@ -37,6 +37,10 @@ static u8 read_this_frame = 0; // has touch (0 - 7) been read this touch_frame? 
 #define A_DIFF(reading_id) (A_VAL(reading_id) - A_MIN(reading_id))
 #define B_DIFF(reading_id) (B_VAL(reading_id) - B_MIN(reading_id))
 #define IS_TOUCH(reading_id) (A_DIFF(reading_id) + B_DIFF(reading_id) > TOUCH_THRESHOLD)
+
+#define GET_TOUCH(touch_id, frames_back)                                                                               \
+	(&touches[touch_id]                                                                                                \
+	         [(touch_frame - (read_this_frame & (1 << touch_id) ? 0 : 1) - frames_back + NUM_TOUCH_FRAMES) & 7])
 
 static void setup_tsc(u8 read_phase) {
 	TSC_IOConfigTypeDef config = {0};
@@ -67,19 +71,37 @@ static u16 sensor_reading_pressure(u8 reading_id) {
 	return clampi(A_DIFF(reading_id) + B_DIFF(reading_id), 0, 65536);
 }
 
-bool touch_read_this_frame(u8 strip_id) {
-	return read_this_frame & (1 << strip_id);
-}
-
-static Touch* get_touch(u8 touch_id) {
-	return &touches[touch_id][touch_frame];
-}
-
-Touch* get_touch_prev(u8 touch_id, u8 frames_back) {
-	return &touches[touch_id][(touch_frame - frames_back + NUM_TOUCH_FRAMES) & 7];
+const Touch* get_touch(u8 touch_id, u8 frames_back) {
+	return GET_TOUCH(touch_id, frames_back);
 }
 
 // == MAIN == //
+
+static bool touch_stable(u8 touch_id, s16 pressure, u16 position) {
+	static const u8 STABLE_POS_RANGE = 32;
+	u8 cur_tick = module_ticks;
+	u8 pad_y = position >> 8;
+
+	// search backwards through touch history for samples old enough to validate stability
+	u8 hist_frame = (touch_frame + 7) & 7;
+	while (hist_frame != touch_frame) {
+		Touch* hist_touch = &touches[touch_id][hist_frame];
+
+		// position out of range or different pad => not stable
+		if (abs(hist_touch->pos - position) > STABLE_POS_RANGE || (hist_touch->pos >> 8) != pad_y)
+			return false;
+
+		// within accepted ranges and old enough => stable
+		if (cur_tick - touch_ticks[touch_id][hist_frame] >= TOUCH_STABILITY_TICKS)
+			return true;
+
+		// within accepted ranges but not old enough => check previous frame
+		hist_frame = (hist_frame + 7) & 7;
+	}
+
+	// no historical sample old enough found
+	return false;
+}
 
 static void process_reading(u8 reading_id) {
 	// raw values
@@ -88,8 +110,6 @@ static void process_reading(u8 reading_id) {
 
 	// touch
 	u8 touch_id = reading_id % NUM_TOUCHSTRIPS;
-	Touch* cur_touch = get_touch(touch_id);
-	Touch* prev_touch = get_touch_prev(touch_id, 1);
 
 	// calibration
 	u16 calib_pos;
@@ -148,22 +168,39 @@ static void process_reading(u8 reading_id) {
 		calib_pres = ((raw_pres - TOUCH_THRESHOLD) << 11) / (32767 - TOUCH_THRESHOLD);
 	}
 
-	// save pressure to touch
-	cur_touch->pres = calib_pres;
-	// only save position if touching and not quickly releasing
-	if (calib_pres > 0 && calib_pres > prev_touch->pres - 128)
-		cur_touch->pos = calib_pos;
-	// fast release or no touch, retain the previous position
-	else
-		cur_touch->pos = prev_touch->pos;
+	// noise filtering
+
+	u16 mask = 1 << touch_id;
+	bool was_touching = (strip_touched & mask) != 0;
+	// pressure hysteresis
+	bool is_touching = calib_pres > (was_touching ? 0 : 100);
+
+	// check stability on new touches
+	bool is_valid_touch = is_touching && (was_touching || touch_stable(touch_id, calib_pres, calib_pos));
+	// save touch validities
+	if (is_valid_touch != was_touching) {
+		if (is_valid_touch)
+			strip_touched |= mask;
+		else
+			strip_touched &= ~mask;
+	}
+
+	// not touching or quickly lifting finger => retain previous frame's position
+	Touch* prev_touch = &touches[touch_id][(touch_frame + 7) & 7];
+	if (!is_touching || calib_pres < prev_touch->pres - 128)
+		calib_pos = prev_touch->pos;
+
+	// save results to touch
+	touches[touch_id][touch_frame].pres = calib_pres;
+	touches[touch_id][touch_frame].pos = calib_pos;
+	touch_ticks[touch_id][touch_frame] = synth_tick;
+
+	// sensor value has been read
+	read_this_frame |= 1 << touch_id;
 
 	// don't further process the touches during cv-calib
 	if (calib_mode == CALIB_CV)
 		return;
-
-	// sensor values have been read
-	if (touch_id != 8)
-		read_this_frame |= 1 << touch_id;
 
 	// at this point the touchstrip has fully been processed to be used by the synth, which runs on its own time
 	// next, the touchstrip gets handled in the context of parameters and other actions
@@ -182,6 +219,8 @@ u8 read_touchstrips(void) {
 	static u8 sensor_id = 0;
 	static u8 read_phase = 0;
 	static u16 phase_read_mask = 0xffff; // fill min_value array on first loop
+
+	module_ticks++;
 
 	if (!tsc_started) {
 		HAL_TSC_Start(&htsc);
@@ -359,6 +398,10 @@ u8 read_touchstrips(void) {
 }
 
 // == CALIB == //
+
+TouchCalibData* touch_calib_ptr(void) {
+	return touch_calib_data;
+}
 
 void touch_calib(FlashCalibType flash_calib_type) {
 	calib_mode = CALIB_TOUCH;

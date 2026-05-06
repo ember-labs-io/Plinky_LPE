@@ -7,13 +7,9 @@
 // - after processing, these readings are reduced to 9 touches
 
 extern u8 touch_frame;
+extern u16 strip_touched;
 
-TouchCalibData* touch_calib_ptr(void);
-
-// get touch info
-
-bool touch_read_this_frame(u8 strip_id);
-Touch* get_touch_prev(u8 touch_id, u8 frames_back);
+const Touch* get_touch(u8 touch_id, u8 frames_back);
 
 // main
 
@@ -22,4 +18,5 @@ u8 read_touchstrips(void);
 
 // calib
 
+TouchCalibData* touch_calib_ptr(void);
 void touch_calib(FlashCalibType flash_calib_type);
