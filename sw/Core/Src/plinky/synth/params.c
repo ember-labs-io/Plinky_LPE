@@ -64,8 +64,6 @@ static Param mem_param = 255; // remembers previous selected_param, used by enco
 static s16 left_strip_start = 0;
 static ValueSmoother left_strip_smooth;
 
-static Touch* touch_pointer[NUM_STRINGS];
-
 // == UTILS == //
 
 static s32 SATURATE17(s32 a) {
@@ -130,13 +128,6 @@ bool strip_available_for_synth(u8 strip_id) {
 // is the arp actively being executed?
 bool arp_active(void) {
 	return param_index(P_ARP_TGL) && ui_mode != UI_SAMPLE_EDIT && seq_state() != SEQ_STEP_RECORDING;
-}
-
-// to prevent redundant calls to get_string_touch(), we save our own list of pointers to the relevant Touch*
-// elements every time strings_frame increments
-void params_update_touch_pointers(void) {
-	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-		touch_pointer[string_id] = get_string_touch(string_id);
 }
 
 void params_rcv_cc(u8 d1, u8 d2) {
@@ -354,12 +345,13 @@ void params_tick(void) {
 		apply_lfo_mods(param_id);
 	max_pres_global = 0;
 	max_env_global = 0;
+	const s16* string_pressures = get_string_pressures();
 	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
 		// update envelope 2
 		u8 mask = 1 << string_id;
 		Voice* v = &voices[string_id];
 		// reset envelope on new touch
-		if (env_trig_mask & mask) {
+		if (envelope_trigger & mask) {
 			v->env2_lvl = 0.f;
 			v->env2_decaying = false;
 		}
@@ -394,17 +386,17 @@ void params_tick(void) {
 		v->env2_lvl16 = SATURATE17(v->env2_lvl * param_val_poly(P_ENV_LVL2, string_id));
 
 		// collect range pressure
-		max_pres_global = maxi(max_pres_global, touch_pointer[string_id]->pres);
+		max_pres_global = maxi(max_pres_global, string_pressures[string_id]);
 		// collect range envelope
 		max_env_global = maxf(max_env_global, voices[string_id].env2_lvl16);
 		// generate polyphonic sample & hold random value on new touch
-		if (env_trig_mask & mask)
+		if (envelope_trigger & mask)
 			sample_hold_poly[string_id] += 4813;
 	}
 	// scale range pressure to u16 range
 	max_pres_global *= 32;
 	// generate global sample & hold random value on new touch
-	if (env_trig_mask)
+	if (envelope_trigger)
 		sample_hold_global += 4813;
 
 	accel_tick();
@@ -498,7 +490,7 @@ s32 param_val(Param param_id) {
 
 s32 param_val_poly(Param param_id, u8 string_id) {
 	return param_val_mod(param_id, sample_hold_poly[string_id], voices[string_id].env2_lvl16,
-	                     clampi(touch_pointer[string_id]->pres << 5, 0, 65535));
+	                     clampi(get_string_pressures()[string_id] << 5, 0, 65535));
 }
 
 // index value is scaled to its appropriate range

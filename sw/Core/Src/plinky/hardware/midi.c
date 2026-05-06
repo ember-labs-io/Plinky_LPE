@@ -305,7 +305,7 @@ static void cue_midi_out(void) {
 	while (num_loops < 8) {
 		num_loops++;
 		//  get a bunch of parameters from the synth
-		Touch* synthf = get_string_touch(string_id);
+		const Touch* synthf = get_string_touch(string_id);
 		Touch* prevsynthf = get_string_touch_prev(string_id, 2);
 		bool pres_stable = abs(prevsynthf->pres - synthf->pres) < 100;
 		bool pos_stable = abs(prevsynthf->pos - synthf->pos) < 32;

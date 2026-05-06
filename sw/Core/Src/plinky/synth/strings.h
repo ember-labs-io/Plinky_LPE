@@ -6,13 +6,15 @@
 // combine physical and virtual touches and use these to trigger plinky's voices
 
 // which of these can we keep local?
-extern u8 string_touched; // sampler & params
-extern u8 env_trig_mask;  // arp
+extern u8 string_touched;
+extern u8 envelope_trigger;
 
-Touch* get_string_touch(u8 string_id);
-Touch* sorted_string_touch_ptr(u8 string_id);
+const Touch* get_string_touch(u8 string_id);
+u16 get_string_pos(u8 string_id);
+s16 get_string_pres(u8 string_id);
+const s16* get_string_pressures(void);
+const Touch* sorted_string_touch_ptr(u8 string_id);
 
-void clean_string(u8 string_id);
 void clear_latch(void);
 
 void generate_string_touches(void);

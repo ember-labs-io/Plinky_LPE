@@ -9,6 +9,8 @@
 #include "synth.h"
 #include "time.h"
 
+#define GET_STRING_TOUCH(string_id) (&string_touch[(string_id)][strings_read_frame])
+
 // current frame in string_touch
 static u8 strings_write_frame;
 static u8 strings_read_frame;
@@ -18,18 +20,16 @@ static u8 strings_read_frame;
 // pointers to this array should always be marked with an s-prefix (s_touch) to differentiate them from pointers named
 // "touch", which refer to a physical touch read from the touchstrips
 static Touch string_touch[NUM_STRINGS][NUM_TOUCH_FRAMES];
+static s16 working_string_pres[NUM_STRINGS];
 
 // the same array as above, but sorted by pitch
 static Touch string_touch_sorted[NUM_STRINGS][NUM_TOUCH_FRAMES];
 
-// bitmasks that keep track of touches on the read_frame, implements hysteresis
 u8 string_touched = 0;
-u8 env_trig_mask = 0;
-static u8 string_touched_no_arp = 0;
-static u8 string_touched_no_arp_1back = 0;
+u8 envelope_trigger = 0;
 
 // physical touch mask during the write_frame, used by latch
-static u8 strings_phys_touched = 0;
+static u8 phys_string_touch = 0;
 
 // latching
 
@@ -38,7 +38,7 @@ typedef struct TouchMemCompressed {
 	u8 pres;
 } TouchMemCompressed;
 
-static TouchMemCompressed latch_touch[8];
+static TouchMemCompressed latch_touch[NUM_STRINGS];
 
 void clear_latch(void) {
 	memset(latch_touch, 0, sizeof(latch_touch));
@@ -51,63 +51,65 @@ Touch* get_string_touch_prev(u8 string_id, u8 frames_back) {
 	return &string_touch[string_id][(strings_write_frame - frames_back) & 7];
 }
 
-Touch* get_string_touch(u8 string_id) {
-	return &string_touch[string_id][strings_read_frame];
+const Touch* get_string_touch(u8 string_id) {
+	return GET_STRING_TOUCH(string_id);
 }
 
-Touch* sorted_string_touch_ptr(u8 string_id) {
+u16 get_string_pos(u8 string_id) {
+	return GET_STRING_TOUCH(string_id)->pos;
+}
+
+s16 get_string_pres(u8 string_id) {
+	return (string_touched & (1 << string_id)) ? GET_STRING_TOUCH(string_id)->pres : TOUCH_MIN_PRES;
+}
+
+const s16* get_string_pressures(void) {
+	return &working_string_pres[0];
+}
+
+const Touch* sorted_string_touch_ptr(u8 string_id) {
 	return &string_touch_sorted[string_id][0];
-}
-
-void clean_string(u8 string_id) {
-	s16 position = get_string_touch(string_id)->pos;
-	Touch* st = string_touch[string_id];
-	for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id, st++)
-		if (string_id != strings_read_frame)
-			st->pos = position ^ (st->pos & 3);
 }
 
 // this combines inputs from touchstrips, latch, arp & sequencer, and saves the resulting Touch in
 // string_touch[string_id]
 static void generate_string_touch(u8 string_id) {
 	static bool suppress_latch = false;
-	// helpers
 	u8 mask = 1 << string_id;
-	bool is_read = touch_read_this_frame(string_id);
-	s16 pres_2back =
-	    get_touch_prev(string_id, is_read ? 2 : 3)->pres; // this is because we only update every other frame?
 	bool pres_increasing = false;
-	// fundamental
-	Touch* touch = get_touch_prev(string_id, is_read ? 0 : 1); // the touch we're processing
-	Touch* s_touch =
-	    &string_touch[string_id][strings_write_frame]; // the string-touch that results from that processing
-	s16 pressure = TOUCH_MIN_PRES; // we save the resulting pressure in here until we write it to s_touch
-	s16 position = TOUCH_MIN_POS;  // we save the resulting position in here until we write it to s_touch
+	// the touch we're processing
+	const Touch* touch = get_touch(string_id, 0);
+	// the string-touch that results from that processing
+	Touch* s_touch = &string_touch[string_id][strings_write_frame];
+	// we save the resulting touch in here until we write it to s_touch
+	s16 pressure = TOUCH_MIN_PRES;
+	s16 position = TOUCH_MIN_POS;
 
 	// === TOUCH INPUT === //
 
 	if (strip_available_for_synth(string_id)) {
-		// read touch values
-		pressure = touch->pres;
-		position = touch->pos;
-		pres_increasing = pressure > pres_2back;
-		// log touch
-		if (pressure > 0)
-			strings_phys_touched |= mask;
+		bool touching = strip_touched & mask;
+		bool first_touch_global = false;
+
+		if (touching) {
+			// new touch while nothing was touched
+			if (!phys_string_touch)
+				first_touch_global = true;
+			phys_string_touch |= mask;
+			pressure = touch->pres;
+			position = touch->pos;
+			pres_increasing = pressure > get_touch(string_id, 1)->pres;
+		}
 		else
-			strings_phys_touched &= ~mask;
+			phys_string_touch &= ~mask;
 
 		// === LATCH WRITE === //
 
-		// finger touching and pressure increasing
-		if (param_index(P_LATCH_TGL) && pressure > 0 && pres_increasing) {
-			// is this a new touch after no fingers where touching?
-			if (pres_2back <= 0 && strings_phys_touched == mask) {
-				// start a new latch, clear all previous latch values
-				for (u8 i = 0; i < NUM_STRINGS; i++) {
-					latch_touch[i].pres = 0;
-					latch_touch[i].pos = 0;
-				}
+		if (param_index(P_LATCH_TGL) && touching && pres_increasing) {
+			if (first_touch_global) {
+				// start a new latch
+				clear_latch();
+
 				// in step record mode, trying to start a new latch temporarily turns off latching
 				// trying to start a new latch outside of step record mode turns it on again
 				suppress_latch = seq_state() == SEQ_STEP_RECORDING;
@@ -147,8 +149,6 @@ static void generate_string_touch(u8 string_id) {
 		// recall latch values
 		pressure = pres_decompress(latch_touch[string_id].pres);
 		position = pos_decompress(latch_touch[string_id].pos);
-
-		// signal sequencer it's okay to record this
 		pres_increasing = true;
 
 		// Averaging code for reference:
@@ -179,29 +179,33 @@ static void generate_string_touch(u8 string_id) {
 
 	// === FINISHING UP === //
 
+	Touch prev_touch = string_touch[string_id][(strings_write_frame + 7) & 7];
+
+	// no pressure => retain previous frame's position
+	if (pressure <= 0)
+		position = prev_touch.pos;
 	// new finger touch => fill (non-pressed) history with slightly randomized variant of current position
-	static s16 pres_1back[NUM_STRINGS];
-	if (pres_1back[string_id] <= 0 && s_touch->pres > 0) {
+	else if (prev_touch.pres <= 0) {
 		Touch* st = string_touch[string_id];
 		for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id, st++)
 			if (string_id != strings_write_frame && st->pres <= 0)
 				st->pos = position ^ (st->pos & 3);
 	}
-	pres_1back[string_id] = s_touch->pres;
 
-	// save resulting touch to main array, the position is only valid if the string was touched
+	// save results to string_touch
 	s_touch->pres = pressure;
-	if (pressure > 0)
-		s_touch->pos = position;
+	s_touch->pos = position;
 
-	// sort string's frames by position
+	// sort string_touch frames by position
 	sort8((int*)string_touch_sorted[string_id], (int*)string_touch[string_id]);
 }
 
 // manage generating the string_touch array
 void generate_string_touches(void) {
+	static u8 string_touched_no_arp = 0;
+	static u8 string_touched_no_arp_1back = 0;
 	static bool do_second_half = false;
-	static u8 strings_phys_touch_1back = 0;
+	static u8 phys_string_touch_1back = 0;
 	static bool prev_latch = false;
 
 	// end latch when necessary
@@ -216,38 +220,35 @@ void generate_string_touches(void) {
 	// end of a full update of all strings
 	if (do_second_half) {
 		// lift the last finger in step record mode: auto-step forward
-		if (seq_state() == SEQ_STEP_RECORDING && !strings_phys_touched && strings_phys_touch_1back)
+		if (seq_state() == SEQ_STEP_RECORDING && !phys_string_touch && phys_string_touch_1back)
 			seq_inc_step();
-		strings_phys_touch_1back = strings_phys_touched;
+		phys_string_touch_1back = phys_string_touch;
+
 		// processing the strings happens at a significantly higher framerate than reading out the touchstrips
 		// u8 touch_frame tracks which frame in the touches array is currently being written to
 		// u8 strings_write_frame tracks which frame in the string_touch array we are writing to
 		// we never want any half-filled frames in the string_touch array, so we only update strings_write_frame after
 		// processing a full frame of strings
-		//
+
 		// in practice, all internal functionality (arp, sequencer, mod sources, etc) get processed at the higher
 		// framerate - whenever touchstrips.h has read out a full frame of touches, strings_write_frame increments to
 		// make use of the new touch-data
+
 		if (strings_write_frame != touch_frame) {
 			// we read from the frame that was written just before
 			strings_read_frame = strings_write_frame;
 			// we write to the frame that is currently being processed by the touchstrips
 			strings_write_frame = touch_frame;
-			// we update the touch pointers for he new strings_read_frame
-			params_update_touch_pointers();
 			arp_next_strings_frame_trig();
 		}
 
 		// calculate string touches
 		string_touched_no_arp_1back = string_touched_no_arp;
 		string_touched_no_arp = 0;
-		for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id) {
-			Touch* s_touch = get_string_touch(string_id);
-			s8 thresh = (string_touched_no_arp_1back & (1 << string_id)) ? -50 : 1; // hysteresis
-			if (s_touch->pres > thresh)
+		for (u8 string_id = 0; string_id < NUM_STRINGS; ++string_id)
+			if (GET_STRING_TOUCH(string_id)->pres > 0)
 				string_touched_no_arp |= 1 << string_id;
-		}
-		env_trig_mask = (string_touched_no_arp & ~string_touched_no_arp_1back);
+		envelope_trigger = string_touched_no_arp & ~string_touched_no_arp_1back;
 
 		// new (physical or virtual) touch: restart arp
 		if (arp_active() && string_touched_no_arp && !string_touched_no_arp_1back) {
@@ -261,15 +262,11 @@ void generate_string_touches(void) {
 	// toggle which half we process
 	do_second_half = !do_second_half;
 
-	// arp
-	if (arp_active()) {
-		string_touched = arp_tick(string_touched_no_arp);
-		// force-remove touches from strings not selected by arp
-		for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
-			if ((string_touched & (1 << string_id)) == 0)
-				get_string_touch(string_id)->pres = 0;
-	}
-	// no arp
-	else
-		string_touched = string_touched_no_arp;
+	// generate final touch mask
+	string_touched = arp_active() ? arp_tick(string_touched_no_arp) : string_touched_no_arp;
+
+	// precalculate working string pressures
+	for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++)
+		working_string_pres[string_id] =
+		    (string_touched & (1 << string_id)) ? GET_STRING_TOUCH(string_id)->pres : TOUCH_MIN_PRES;
 }

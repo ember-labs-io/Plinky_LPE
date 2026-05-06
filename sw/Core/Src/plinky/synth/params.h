@@ -7,7 +7,6 @@
 const Preset* init_params_ptr();
 bool strip_available_for_synth(u8 strip_id);
 bool arp_active(void);
-void params_update_touch_pointers(void);
 void params_rcv_cc(u8 d1, u8 d2);
 
 // main
