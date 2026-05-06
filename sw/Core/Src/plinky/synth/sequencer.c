@@ -152,7 +152,7 @@ static void seq_step(void) {
 	// perform a conditional step
 	c_step.euclid_len = param_index(P_SEQ_EUC_LEN);
 	c_step.density = param_val(P_SEQ_CHANCE);
-	do_conditional_step(&c_step, true, false);
+	do_conditional_step(&c_step);
 
 	// the first pulse doesn't advance a step
 	if (!c_step.advance_step || seq_flags.is_first_pulse) {
@@ -371,7 +371,7 @@ void seq_try_get_touch(u8 string_id, s16* pressure, s16* position) {
 	if (!string_step->pres[substep])
 		return;
 	// exit if we're beyond the gate length
-	if (seq_substep(GATE_LEN_SUBSTEPS) > (param_val(P_GATE_LENGTH) >> 8))
+	if (seq_substep(GATE_LEN_SUBSTEPS) > (param_val_multi(MP_GATE_LENGTH, string_id) >> 8))
 		return;
 
 	// we're playing from the sequencer => create touch from pattern

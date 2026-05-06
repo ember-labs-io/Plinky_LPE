@@ -271,7 +271,12 @@ void arp_tick(u8 before_arp_touch_mask, u8* touch_mask, u8* envelope_trigger) {
 	}
 
 	// step
-	do_conditional_step(&c_step, false, arp_order == ARP_CHORD);
+	do_conditional_step(&c_step);
+	// random chord mode: trigger is always true, some notes will be suppressed according to density value
+	if (arp_order == ARP_CHORD && abs(c_step.euclid_len) == 0) {
+		c_step.advance_step = true;
+		c_step.play_step = true;
+	}
 	// move to the next position, this also fills arp_touch_mask
 	if (c_step.advance_step)
 		advance_step(with_arp_touch_mask);

@@ -141,7 +141,8 @@ static bool edit_param_multi(Param param_id, ModSource mod_src) {
 	if (mod_src != SRC_BASE || !PARAM_IS_MULTI_TIMBRAL(param_id))
 		return false;
 
-	return (global_data.edit_multi_timbral >> multi_param_from_param[param_id]) & 1;
+	MultiParam mp_id = multi_param_from_param[param_id];
+	return (global_data.edit_multi_timbral[mp_id >> 3] >> (mp_id % 8)) & 1;
 }
 
 bool editing_multi_param(void) {
@@ -833,8 +834,10 @@ void press_mod_pad(u8 pad_y) {
 }
 
 void toggle_multi_edit(Param param_id) {
-	u32 mask = 1 << multi_param_from_param[param_id];
-	global_data.edit_multi_timbral ^= mask;
+	MultiParam mp_id = multi_param_from_param[param_id];
+	u8 bank = mp_id >> 3;
+	u8 mask = 1 << (mp_id % 8);
+	global_data.edit_multi_timbral[bank] ^= mask;
 	log_ram_edit(SEG_GLOBAL_DATA);
 	selected_edit_strip = 0;
 	const char* name;
@@ -864,7 +867,7 @@ void toggle_multi_edit(Param param_id) {
 		strncat(name_buf, " 2", sizeof(name_buf) - strlen(name_buf) - 1);
 
 	flash_message(F_16_BOLD, "%s", name_buf,
-	              global_data.edit_multi_timbral & mask ? "Multi Editing On" : "Multi Editing Off");
+	              global_data.edit_multi_timbral[bank] & mask ? "Multi Editing On" : "Multi Editing Off");
 }
 
 // == ENCODER == //

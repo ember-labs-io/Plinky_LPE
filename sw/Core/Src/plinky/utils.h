@@ -137,7 +137,7 @@ static inline void DebugLog(const char* fmt, ...) {
 #define PARAM_IS_MULTI_TIMBRAL(param_id)                                                                               \
 	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \
 	 || ((param_id) >= P_SCRUB_JIT && (param_id) <= P_PLAY_SPD_JIT) || (param_id) == P_ARP_TGL                         \
-	 || (param_id) == P_LATCH_TGL)
+	 || (param_id) == P_LATCH_TGL || (param_id) == P_GATE_LENGTH)
 
 #define IS_GLOBAL_LAYOUT(param_id)                                                                                     \
 	(sys_params.layout_global                                                                                          \

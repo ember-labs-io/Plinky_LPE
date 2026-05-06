@@ -584,7 +584,7 @@ typedef enum MultiParam {
     MP_NOISE,         MP_RESO,         MP_DEGREE,        MP_SCALE,           MP_MICROTONE,     MP_COLUMN,	// Sound 2
     MP_ENV_LVL1,      MP_ATTACK1,      MP_DECAY1,        MP_SUSTAIN1,        MP_RELEASE1,	   MP_ROOT,		// Envelope 1
     MP_ENV_LVL2,      MP_ATTACK2,      MP_DECAY2,        MP_SUSTAIN2,        MP_RELEASE2,                	// Envelope 2
-	MP_ARP_TGL,		  MP_LATCH_TGL,
+	MP_ARP_TGL,		  MP_LATCH_TGL,	   MP_GATE_LENGTH,
     MP_SCRUB,         MP_GR_SIZE,      MP_PLAY_SPD,      MP_SMP_STRETCH,                                 	// Sampler 1
     MP_SCRUB_JIT,     MP_GR_SIZE_JIT,  MP_PLAY_SPD_JIT,                                                 	// Sampler 2
 
@@ -596,7 +596,7 @@ const static Param param_from_multi_param[NUM_MULTI_PARAMS] = {
     [MP_NOISE] = P_NOISE,           [MP_RESO] = P_RESO,                 [MP_DEGREE] = P_DEGREE,         [MP_SCALE] = P_SCALE,           [MP_MICROTONE] = P_MICROTONE,   [MP_COLUMN] = P_COLUMN,   	// Sound 2
     [MP_ENV_LVL1] = P_ENV_LVL1,     [MP_ATTACK1] = P_ATTACK1,           [MP_DECAY1] = P_DECAY1,         [MP_SUSTAIN1] = P_SUSTAIN1,     [MP_RELEASE1] = P_RELEASE1,     [MP_ROOT] = P_ROOT,         // Envelope 1
     [MP_ENV_LVL2] = P_ENV_LVL2,     [MP_ATTACK2] = P_ATTACK2,           [MP_DECAY2] = P_DECAY2,         [MP_SUSTAIN2] = P_SUSTAIN2,     [MP_RELEASE2] = P_RELEASE2,                               	// Envelope 2
-	[MP_ARP_TGL] = P_ARP_TGL,		[MP_LATCH_TGL] = P_LATCH_TGL,
+	[MP_ARP_TGL] = P_ARP_TGL,		[MP_LATCH_TGL] = P_LATCH_TGL,		[MP_GATE_LENGTH] = P_GATE_LENGTH,
     [MP_SCRUB] = P_SCRUB,           [MP_GR_SIZE] = P_GR_SIZE,           [MP_PLAY_SPD] = P_PLAY_SPD,     [MP_SMP_STRETCH] = P_SMP_STRETCH,                                                          	// Sampler 1
     [MP_SCRUB_JIT] = P_SCRUB_JIT,   [MP_GR_SIZE_JIT] = P_GR_SIZE_JIT,   [MP_PLAY_SPD_JIT] = P_PLAY_SPD_JIT,                                                                                       	// Sampler 2
 };
@@ -606,7 +606,7 @@ const static MultiParam multi_param_from_param[P_PLAY_SPD_JIT + 1] = {
     [P_NOISE] = MP_NOISE,           [P_RESO] = MP_RESO,                 [P_DEGREE] = MP_DEGREE,         [P_SCALE] = MP_SCALE,           [P_MICROTONE] = MP_MICROTONE,   [P_COLUMN] = MP_COLUMN,   	// Sound 2
     [P_ENV_LVL1] = MP_ENV_LVL1,     [P_ATTACK1] = MP_ATTACK1,           [P_DECAY1] = MP_DECAY1,         [P_SUSTAIN1] = MP_SUSTAIN1,     [P_RELEASE1] = MP_RELEASE1,     [P_ROOT] = MP_ROOT,         // Envelope 1
     [P_ENV_LVL2] = MP_ENV_LVL2,     [P_ATTACK2] = MP_ATTACK2,           [P_DECAY2] = MP_DECAY2,         [P_SUSTAIN2] = MP_SUSTAIN2,     [P_RELEASE2] = MP_RELEASE2,                               	// Envelope 2
-	[P_ARP_TGL] = MP_ARP_TGL,		[P_LATCH_TGL] = MP_LATCH_TGL,
+	[P_ARP_TGL] = MP_ARP_TGL,		[P_LATCH_TGL] = MP_LATCH_TGL,		[P_GATE_LENGTH] = MP_GATE_LENGTH,
     [P_SCRUB] = MP_SCRUB,           [P_GR_SIZE] = MP_GR_SIZE,           [P_PLAY_SPD] = MP_PLAY_SPD,     [P_SMP_STRETCH] = MP_SMP_STRETCH,                                                          	// Sampler 1
     [P_SCRUB_JIT] = MP_SCRUB_JIT,   [P_GR_SIZE_JIT] = MP_GR_SIZE_JIT,   [P_PLAY_SPD_JIT] = MP_PLAY_SPD_JIT,    
 };
@@ -942,6 +942,7 @@ typedef struct Preset {
 	u8 category;
 	u8 name[8];
 	s16 multi_params[NUM_MULTI_PARAMS][NUM_STRINGS - 1];
+	u8 padding[2];
 } Preset;
 static_assert((sizeof(Preset) & 15) == 0, "?");
 
@@ -972,7 +973,8 @@ typedef struct GlobalData {
 	u32 midi_tuning_active[(NUM_NOTES + 31) / 32];
 	char midi_tuning_name[17];
 	s16 layout_params[NUM_LAYOUT_PARAMS][NUM_STRINGS];
-	u8 padding[6];
-	u32 edit_multi_timbral;
+	u8 edit_multi_timbral[5];
+	u8 padding[5];
+
 } GlobalData;
 static_assert((sizeof(GlobalData) & 15) == 0, "?");
