@@ -1501,8 +1501,7 @@ void draw_cur_param(void) {
 	u8 text_y = 0;
 
 	//  special negative ranges
-	s16 base_raw = param_val_raw(draw_param, SRC_BASE);
-	if (base_raw < 0) {
+	if (raw < 0) {
 		switch (draw_param) {
 		case P_SHAPE:
 			icon_str[0] = *I_SHAPE;
@@ -1541,14 +1540,14 @@ void draw_cur_param(void) {
 
 	// special incidental  cases
 	u8 range = PARAM_RANGE(draw_param);
-	s8 index = RAW_TO_INDEX(base_raw, range);
+	s8 index = RAW_TO_INDEX(raw, range);
 	if (draw_param == P_SEQ_CLK_DIV && index == range - 1) {
 		icon_str[0] = *I_JACK;
 		strcpy(name_str, "Trigger");
 		icon_y = 18;
 		text_y = 18;
 	}
-	if (draw_param == P_SHAPE && base_raw == 0) {
+	if (draw_param == P_SHAPE && raw == 0) {
 		icon_str[0] = *I_SHAPE;
 		strcpy(name_str, "SuperSaw");
 		icon_y = 18;
