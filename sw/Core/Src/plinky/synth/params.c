@@ -1712,24 +1712,30 @@ u8 value_editor_column_led(u8 x, u8 y) {
 
 u8 ui_editing_led(u8 x, u8 y, u8 pulse) {
 	bool param_selected = param_snap < NUM_PARAMS;
+	bool show_mod_targets = mod_action_snap && src_snap != SRC_BASE;
 	u8 k = 0;
 	// edit strip
 	if (x == 0) {
-		if (param_selected)
+		if (param_selected && !show_mod_targets)
 			k = value_editor_column_led(x, y);
 	}
+	// parameters
 	else if (x < 7) {
 		u8 pAorB = x - 1 + y * 12 + (ui_mode == UI_EDITING_B ? 6 : 0);
-		// holding down a mod source => light up params that are modulated by it
-		if (mod_action_snap && src_snap != SRC_BASE && PARAM_VAL_RAW(pAorB, src_snap))
-			k = 255;
 		// pulse selected param
-		if (pAorB == param_snap)
+		if (!show_mod_targets && pAorB == param_snap)
 			k = pulse;
+		// holding down a mod source => light up params that are modulated by it
+		if (show_mod_targets && pAorB != P_VOLUME && PARAM_VAL_RAW(pAorB, src_snap))
+			k = 255;
 	}
+	// mod sources
 	else {
+		// light up held mod source
+		if (show_mod_targets)
+			k = y == src_snap ? 255 : 0;
 		// pulse active mod source
-		if (y == src_snap)
+		else if (y == src_snap)
 			k = pulse;
 		// light up mod sources that modulate current param
 		else if (param_selected)
