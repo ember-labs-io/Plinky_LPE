@@ -54,8 +54,8 @@ typedef enum Item {
 	I_CV_CALIB,
 	I_PUSH_PRESET,
 	I_OG_PRESETS,
-	I_CLEAR_MIDI_TUNING,
 	I_MIDI_PANIC,
+	I_SYSTEM_RESET,
 
 	NUM_DEFAULT_ITEMS,
 
@@ -138,8 +138,8 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_CV_CALIB] = "CV Calib",
     [I_PUSH_PRESET] = "Push Preset",
     [I_OG_PRESETS] = "OG Presets",
-    [I_CLEAR_MIDI_TUNING] = "Clear Midi Tuning",
     [I_MIDI_PANIC] = "Midi Panic",
+    [I_SYSTEM_RESET] = "System Reset",
     [I_MPE_IN_CHANS] = "Chans",
     [I_MIDI_STRING_BEND_RANGE_IN] = "Vc Bend",
     [I_MPE_OUT_CHANS] = "Chans",
@@ -275,12 +275,12 @@ void settings_menu_actions(void) {
 	case I_OG_PRESETS:
 		revert_presets();
 		break;
-	case I_CLEAR_MIDI_TUNING:
-		clear_midi_tuning();
-		flash_message(F_16_BOLD, "cleared", "midi tuning");
-		break;
 	case I_MIDI_PANIC:
 		midi_panic();
+		break;
+	case I_SYSTEM_RESET:
+		system_reset();
+		flash_message(F_16_BOLD, "reset", "system settings");
 		break;
 	default:
 		break;
@@ -472,8 +472,7 @@ void draw_settings_menu(void) {
 	// actions
 	if (display_section == S_ACTIONS) {
 		draw_str(1, 16, font, item_name[cur_item]);
-		if (cur_item != I_CLEAR_MIDI_TUNING)
-			draw_str(OLED_WIDTH - 32, 15, font, I_TOUCH);
+		draw_str(OLED_WIDTH - 20, 15, font, I_TOUCH);
 		if (fill_start < OLED_WIDTH)
 			inverted_rectangle(fill_start, 0, OLED_WIDTH, OLED_HEIGHT);
 		return;

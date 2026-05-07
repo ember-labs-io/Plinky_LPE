@@ -396,3 +396,66 @@ const u8 sys_param_ranges[] = {
     [SYS_CV_GATE_IN_IS_PRESSURE] = 2,
     [SYS_LAYOUT_GLOBAL] = 2,
 };
+
+const static GlobalData init_global_data = {
+    .midi_tuning_pitch = {},
+    .midi_tuning_active = {},
+    .midi_tuning_name = {},
+    .layout_params =
+        {
+            [LP_ROOT] = {},
+            [LP_OCT] = {},
+            [LP_SCALE] = {},
+            [LP_COLUMN] = {INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13),
+                           INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13), INDEX_TO_RAW(7, 13)},
+        },
+    .edit_multi_timbral = {},
+};
+
+const static SysParams init_sys_params = {
+    .preset_id = 0,
+    .midi_in_chan = 0,
+    .midi_out_chan = 0,
+    .accel_sens = 150, // 100%
+    .volume_lsb = 0,   // ??
+    .volume_msb = 0,   // ??
+    .cv_quant = CVQ_OFF,
+    .reverse_encoder = false,
+    .preset_aligned = false,
+    .pattern_aligned = false,
+    .cv_in_ppqn = 2,            // 4 ppqn
+    .cv_out_ppqn = 2,           // 4 ppqn
+    .midi_in_clock_mult = 1,    // x1
+    .midi_in_vel_balance = 64,  // 50/50
+    .midi_out_vel_balance = 64, // 50/50
+    .midi_in_pres_type = MP_CHANNEL_PRESSURE,
+    .midi_out_pres_type = MP_POLY_AFTERTOUCH,
+    .midi_out_yz_control = false,
+    .midi_channel_bend_range_in = 1, // 2 semis
+    .mpe_in = false,
+    .mpe_out = false,
+    .midi_string_bend_range_in = 6,  // 48 semis
+    .midi_string_bend_range_out = 6, // 48 semis
+    .mpe_chans = 7,                  // 1 channel/string, zero-based
+    .midi_soft_thru = false,
+    .local_ctrl_off = false, // false means local control on
+    .midi_rcv_clock = true,
+    .midi_rcv_transport = true,
+    .midi_rcv_param_ccs = RP_CC,
+    .midi_send_clock = true,
+    .midi_send_transport = true,
+    .midi_send_param_ccs = SP_CC,
+    .midi_send_lfo_cc = false,
+    .mpe_zone = 0, // lower
+    .midi_in_scale_quant = false,
+    .midi_trs_out_off = false, // false means trs out on
+    .midi_tuning = false,
+    .pad0 = 0,
+    .mpe_out_fine_tuning = false,
+    .layout_global = false,
+    .cv_gate_in_is_pressure = false,
+    .reference_pitch = 10, // 440Hz
+    .pad1 = 0,
+    .pad2 = 0,
+    .version = LPE_SYS_PARAMS_VERSION,
+};

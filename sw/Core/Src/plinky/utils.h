@@ -133,6 +133,8 @@ static inline void DebugLog(const char* fmt, ...) {
 #define OCTS_TO_PITCH(oct) (3 * (oct) << 11)
 #define PARAM_VAL_TO_PITCH(value) ((3 * (value) + 16) >> 5) // scales +/- 65536 to +/- 1 octave
 #define MAP_7BIT_TO_14BIT(val7) (((val7) << 7) | (val7))
+// map to the value closest to 0 that is fully inside of the requested index
+#define INDEX_TO_RAW(index, range) (((abs(index) << 10) + ((range) - 1)) / ((index) >= 0 ? (range) : -(range)))
 
 #define PARAM_IS_MULTI_TIMBRAL(param_id)                                                                               \
 	(((param_id) >= P_SHAPE && (param_id) <= P_RELEASE2) || ((param_id) >= P_SCRUB && (param_id) <= P_SMP_STRETCH)     \

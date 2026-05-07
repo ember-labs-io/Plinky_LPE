@@ -725,6 +725,13 @@ void revert_presets(void) {
 	while (true) {}
 }
 
+void system_reset(void) {
+	sys_params = init_sys_params;
+	log_ram_edit(SEG_SYS_PARAMS);
+	global_data = init_global_data;
+	log_ram_edit(SEG_GLOBAL_DATA);
+}
+
 // == UPDATE RAM == //
 
 #define SEGMENT_OUTDATED(segment) (last_ram_write[segment] != last_flash_write[segment])
