@@ -415,13 +415,13 @@ void init_memory(void) {
 		break;
 	case OG_SYS_PARAMS_VERSION:
 		// never initialized before - fill with defaults
-		sys_params.midi_in_chan = 0;
-		sys_params.midi_out_chan = 0;
-		sys_params.accel_sens = 150; // 100%
-		sys_params.cv_quant = CVQ_OFF;
-		sys_params.reverse_encoder = false;
-		sys_params.preset_aligned = false;
-		sys_params.pattern_aligned = false;
+		sys_params.midi_in_chan = init_sys_params.midi_in_chan;
+		sys_params.midi_out_chan = init_sys_params.midi_out_chan;
+		sys_params.accel_sens = init_sys_params.accel_sens;
+		sys_params.cv_quant = init_sys_params.cv_quant;
+		sys_params.reverse_encoder = init_sys_params.reverse_encoder;
+		sys_params.preset_aligned = init_sys_params.preset_aligned;
+		sys_params.pattern_aligned = init_sys_params.pattern_aligned;
 		sys_params.version = REV_SYS_PARAMS_VERSION;
 		// fall through for further updating
 	case REV_SYS_PARAMS_VERSION:
@@ -432,40 +432,40 @@ void init_memory(void) {
 		// updated at LPE v0.5.0
 
 		// added system settings, set defaults
-		sys_params.cv_in_ppqn = 2;            // 4 ppqn
-		sys_params.cv_out_ppqn = 2;           // 4 ppqn
-		sys_params.midi_in_clock_mult = 1;    // x1
-		sys_params.midi_in_vel_balance = 64;  // 50/50
-		sys_params.midi_out_vel_balance = 64; // 50/50
-		sys_params.midi_in_pres_type = MP_CHANNEL_PRESSURE;
-		sys_params.midi_out_pres_type = MP_POLY_AFTERTOUCH;
-		sys_params.midi_out_yz_control = 0;        // off
-		sys_params.midi_channel_bend_range_in = 1; // 2 semis
-		sys_params.mpe_in = false;                 // off
-		sys_params.mpe_out = false;                // off
-		sys_params.midi_string_bend_range_in = 6;  // 48 semis
-		sys_params.midi_string_bend_range_out = 6; // 48 semis
-		sys_params.mpe_chans = 7;                  // 1 channel/string, zero-based
-		sys_params.midi_soft_thru = false;         // off
-		sys_params.local_ctrl_off = false;         // false means local control on
-		sys_params.midi_rcv_clock = true;          // on
-		sys_params.midi_rcv_transport = true;      // on
-		sys_params.midi_rcv_param_ccs = RP_CC;     // ccs
-		sys_params.midi_send_clock = true;         // on
-		sys_params.midi_send_transport = true;     // on
-		sys_params.midi_send_param_ccs = SP_CC;    // ccs
-		sys_params.midi_send_lfo_cc = false;       // off
-		sys_params.mpe_zone = 0;                   // lower
-		sys_params.midi_in_scale_quant = false;    // off
-		sys_params.midi_trs_out_off = false;       // false means trs out on
-		sys_params.midi_tuning = false;            // off
-		sys_params.mpe_out_fine_tuning = false;    // off
-		sys_params.layout_global = false;          // off
-		sys_params.cv_gate_in_is_pressure = false; // off
-		sys_params.reference_pitch = 10;           // 440Hz
+		sys_params.cv_in_ppqn = init_sys_params.cv_in_ppqn;
+		sys_params.cv_out_ppqn = init_sys_params.cv_out_ppqn;
+		sys_params.midi_in_clock_mult = init_sys_params.midi_in_clock_mult;
+		sys_params.midi_in_vel_balance = init_sys_params.midi_in_vel_balance;
+		sys_params.midi_out_vel_balance = init_sys_params.midi_out_vel_balance;
+		sys_params.midi_in_pres_type = init_sys_params.midi_in_pres_type;
+		sys_params.midi_out_pres_type = init_sys_params.midi_out_pres_type;
+		sys_params.midi_out_yz_control = init_sys_params.midi_out_yz_control;
+		sys_params.midi_channel_bend_range_in = init_sys_params.midi_channel_bend_range_in;
+		sys_params.mpe_in = init_sys_params.mpe_in;
+		sys_params.mpe_out = init_sys_params.mpe_out;
+		sys_params.midi_string_bend_range_in = init_sys_params.midi_string_bend_range_in;
+		sys_params.midi_string_bend_range_out = init_sys_params.midi_string_bend_range_out;
+		sys_params.mpe_chans = init_sys_params.mpe_chans;
+		sys_params.midi_soft_thru = init_sys_params.midi_soft_thru;
+		sys_params.local_ctrl_off = init_sys_params.local_ctrl_off;
+		sys_params.midi_rcv_clock = init_sys_params.midi_rcv_clock;
+		sys_params.midi_rcv_transport = init_sys_params.midi_rcv_transport;
+		sys_params.midi_rcv_param_ccs = init_sys_params.midi_rcv_param_ccs;
+		sys_params.midi_send_clock = init_sys_params.midi_send_clock;
+		sys_params.midi_send_transport = init_sys_params.midi_send_transport;
+		sys_params.midi_send_param_ccs = init_sys_params.midi_send_param_ccs;
+		sys_params.midi_send_lfo_cc = init_sys_params.midi_send_lfo_cc;
+		sys_params.mpe_zone = init_sys_params.mpe_zone;
+		sys_params.midi_in_scale_quant = init_sys_params.midi_in_scale_quant;
+		sys_params.midi_trs_out_off = init_sys_params.midi_trs_out_off;
+		sys_params.midi_tuning = init_sys_params.midi_tuning;
+		sys_params.mpe_out_fine_tuning = init_sys_params.mpe_out_fine_tuning;
+		sys_params.layout_global = init_sys_params.layout_global;
+		sys_params.cv_gate_in_is_pressure = init_sys_params.cv_gate_in_is_pressure;
+		sys_params.reference_pitch = init_sys_params.reference_pitch;
 
 		// finalize
-		sys_params.version = LPE_SYS_PARAMS_VERSION;
+		sys_params.version = init_sys_params.version;
 		log_ram_edit(SEG_SYS_PARAMS);
 		HAL_Delay(500);
 		oled_clear();
@@ -748,6 +748,13 @@ void revert_presets(void) {
 	draw_str_ctr(16, font, "off plinky!");
 	oled_flip();
 	while (true) {}
+}
+
+void system_reset(void) {
+	sys_params = init_sys_params;
+	log_ram_edit(SEG_SYS_PARAMS);
+	global_data = init_global_data;
+	log_ram_edit(SEG_GLOBAL_DATA);
 }
 
 // == UPDATE RAM == //

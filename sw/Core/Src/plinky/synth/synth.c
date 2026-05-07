@@ -426,13 +426,6 @@ void set_note_tuning(u8 note_number, u16 pitch) {
 	}
 }
 
-void clear_midi_tuning(void) {
-	memset(&global_data.midi_tuning_pitch, 0,
-	       sizeof(global_data.midi_tuning_pitch) + sizeof(global_data.midi_tuning_active)
-	           + sizeof(global_data.midi_tuning_name));
-	log_ram_edit(SEG_GLOBAL_DATA);
-}
-
 void update_reference_pitch(void) {
 	// offset from bottom of the sound engine (G-4) to the first valid note (C-1) is 29 semis
 	tuning_offset = SEMIS_TO_PITCH(29) + ref_pitch_offset[sys_params.reference_pitch];

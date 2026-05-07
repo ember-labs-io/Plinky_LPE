@@ -9,8 +9,6 @@
 
 #define RAW_QUART (RAW_SIZE / 4)
 #define RAW_EIGHTH (RAW_SIZE / 8)
-// map to the value closest to 0 that is fully inside of the requested index
-#define INDEX_TO_RAW(index, range) (((abs(index) << 10) + ((range) - 1)) / ((index) >= 0 ? (range) : -(range)))
 
 typedef enum RangeType {
 	R_UVALUE, // unsigned value

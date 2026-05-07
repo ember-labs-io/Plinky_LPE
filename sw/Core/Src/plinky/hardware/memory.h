@@ -55,6 +55,7 @@ void init_memory(void);
 // main
 void memory_frame(void);
 void revert_presets(void);
+void system_reset(void);
 
 // update ram
 void log_ram_edit(MemSegment segment);
