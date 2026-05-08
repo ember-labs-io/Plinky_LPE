@@ -271,25 +271,48 @@ static bool send_double_midi_msg(u8 status1, u8 data1_1, u8 data1_2, u8 status2,
 	return true;
 }
 
-static bool send_nrpn(u8 nrpn_msb, u8 nrpn_lsb, u14 value) {
-	// don't send identical parameter numbers
-	static u14 last_nrpn = {UINT14_MAX};
-	bool send_nrpn_msb = nrpn_msb != last_nrpn.msb;
-	bool send_nrpn_lsb = nrpn_lsb != last_nrpn.lsb;
+static void midi_push_cc(u8 data1, u8 data2) {
+	// wait for DMA to be ready
+	if (!sys_params.midi_trs_out_off)
+		while (huart3.TxXferCount)
+			;
+
+	// fill buffer
+	u8 buffer[4];
+	buffer[0] = MIDI_CIN_CONTROL_CHANGE;
+	buffer[1] =
+	    MIDI_CONTROL_CHANGE | (sys_params.mpe_out ? sys_params.mpe_zone == 0 ? 0 : 15 : sys_params.midi_out_chan);
+	buffer[2] = data1;
+	buffer[3] = data2;
+
+	// send buffer
+	if (!sys_params.midi_trs_out_off)
+		HAL_UART_Transmit_DMA(&huart3, &buffer[1], 3);
+	// when mounted, keep trying to send until success
+	while (tud_ready() && !tud_midi_packet_write(buffer))
+		;
+}
+
+static bool send_nrpn(u8 nrpn_msb, u8 nrpn_lsb, u14 value, bool force) {
+	// blocking send
+	if (force) {
+		// send number
+		midi_push_cc(CC_NRPN_MSB, nrpn_msb);
+		midi_push_cc(CC_NRPN_LSB, nrpn_lsb);
+
+		// send data
+		midi_push_cc(CC_DATA_MSB, value.msb);
+		midi_push_cc(CC_DATA_LSB, value.lsb);
+		return false;
+	}
 
 	// we need three bytes for each cc message
-	if (MIDI_SEND_BUFFER_FREE < (send_nrpn_msb + send_nrpn_lsb + 2) * 3)
+	if (MIDI_SEND_BUFFER_FREE < 12)
 		return false;
 
 	// send number
-	if (send_nrpn_msb) {
-		send_midi_msg(MIDI_CONTROL_CHANGE, CC_NRPN_MSB, nrpn_msb);
-		last_nrpn.msb = nrpn_msb;
-	}
-	if (send_nrpn_lsb) {
-		send_midi_msg(MIDI_CONTROL_CHANGE, CC_NRPN_LSB, nrpn_lsb);
-		last_nrpn.lsb = nrpn_lsb;
-	}
+	send_midi_msg(MIDI_CONTROL_CHANGE, CC_NRPN_MSB, nrpn_msb);
+	send_midi_msg(MIDI_CONTROL_CHANGE, CC_NRPN_LSB, nrpn_lsb);
 
 	// send data
 	send_midi_msg(MIDI_CONTROL_CHANGE, CC_DATA_MSB, value.msb);
@@ -657,7 +680,7 @@ static void cue_midi_out(void) {
 					for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
 						u14 nrpn_value;
 						get_param_nrpn_value(send_param, mod_src, &nrpn_value);
-						if (!send_nrpn(mod_src, send_param, nrpn_value))
+						if (!send_nrpn(mod_src, send_param, nrpn_value, false))
 							return;
 						sending_param_progress++;
 					}
@@ -665,7 +688,8 @@ static void cue_midi_out(void) {
 					if (PARAM_IS_MULTI_TIMBRAL(send_param)) {
 						for (u8 i = sending_param_progress; i < 16; i++) {
 							u8 string_id = i - 8;
-							if (!send_nrpn(string_id + 8, send_param, param_nrpn_multi_value(send_param, string_id)))
+							if (!send_nrpn(string_id + 8, send_param, param_nrpn_multi_value(send_param, string_id),
+							               false))
 								return;
 							sending_param_progress++;
 						}
@@ -1356,28 +1380,6 @@ void midi_update_mpe_mapping(void) {
 	high_mpe_start_string = sys_params.mpe_in ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
 }
 
-static void midi_push_cc(u8 data1, u8 data2) {
-	// wait for DMA to be ready
-	if (!sys_params.midi_trs_out_off)
-		while (huart3.TxXferCount)
-			;
-
-	// fill buffer
-	u8 buffer[4];
-	buffer[0] = MIDI_CIN_CONTROL_CHANGE;
-	buffer[1] =
-	    MIDI_CONTROL_CHANGE | (sys_params.mpe_out ? sys_params.mpe_zone == 0 ? 0 : 15 : sys_params.midi_out_chan);
-	buffer[2] = data1;
-	buffer[3] = data2;
-
-	// send buffer
-	if (!sys_params.midi_trs_out_off)
-		HAL_UART_Transmit_DMA(&huart3, &buffer[1], 3);
-	// when mounted, keep trying to send until success
-	while (tud_ready() && !tud_midi_packet_write(buffer))
-		;
-}
-
 void midi_push_preset(void) {
 	pushing_preset = true;
 	// send params set to "off" or ccs => send ccs
@@ -1396,33 +1398,17 @@ void midi_push_preset(void) {
 	else {
 		// loop through mod sources
 		for (ModSource mod_src = SRC_BASE; mod_src <= SRC_RND; mod_src++) {
-			// send nrpn msb (selects main parameter or mod source)
-			midi_push_cc(CC_NRPN_MSB, mod_src);
-
 			// loop through parameters
 			for (Param param_id = 0; param_id < NUM_PARAMS; param_id++) {
 				u14 nrpn_value;
 				if (!get_param_nrpn_value(param_id, mod_src, &nrpn_value))
 					continue;
-				// send nrpn lsb (selects parameter id)
-				midi_push_cc(CC_NRPN_LSB, param_id);
-				// send value
-				midi_push_cc(CC_DATA_MSB, nrpn_value.msb);
-				midi_push_cc(CC_DATA_LSB, nrpn_value.lsb);
+				send_nrpn(mod_src, param_id, nrpn_value, true);
 
-				// send multi-timbral parameters
 				if (PARAM_IS_MULTI_TIMBRAL(param_id)) {
 					// loop through strings (string 0 is identical to the global param value)
-					for (u8 string_id = 1; string_id < NUM_STRINGS; string_id++) {
-						nrpn_value = param_nrpn_multi_value(param_id, string_id);
-						// send nrpn msb (selects string_id)
-						midi_push_cc(CC_NRPN_MSB, string_id + 8);
-						// send nrpn lsb (selects parameter id)
-						midi_push_cc(CC_NRPN_LSB, param_id);
-						// send value
-						midi_push_cc(CC_DATA_MSB, nrpn_value.msb);
-						midi_push_cc(CC_DATA_LSB, nrpn_value.lsb);
-					}
+					for (u8 string_id = 1; string_id < NUM_STRINGS; string_id++)
+						send_nrpn(string_id + 8, param_id, param_nrpn_multi_value(param_id, string_id), true);
 				}
 			}
 		}
