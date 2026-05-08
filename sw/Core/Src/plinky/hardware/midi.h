@@ -17,7 +17,7 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 // cue midi out
 void midi_send_clock(void);
 void midi_send_transport(MidiMessageType transport_type);
-void midi_send_param(Param param_id);
+void midi_send_param(Param param_id, ModSource mod_src);
 
 // visuals
 void draw_sysex_flag(void);

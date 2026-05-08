@@ -112,7 +112,7 @@ static u8 thru_buffer[THRU_BUFFER_SIZE][3];
 static u8 thru_buffer_head = 0;
 static u8 thru_buffer_tail = 0;
 static u8 thru_buffer_count = 0;
-static u32 send_param_val[3] = {};
+static u8 send_param_val[NUM_PARAMS] = {};
 static Param sending_param_id = 0;
 static u8 sending_param_progress = 255;
 
@@ -632,32 +632,20 @@ static void cue_midi_out(void) {
 		else {
 			// start searching beyond the last sent param
 			Param start_param = sending_param_id + 1;
-			u8 bank = start_param >> 5;
-			// mask bits of lower-numbered params
-			u32 bank_bits = send_param_val[bank] & ~((1 << (start_param & 31)) - 1);
-			u32 skipped_bits = send_param_val[bank] & ((1 << (start_param & 31)) - 1);
-			if (bank_bits)
-				send_param = (bank << 5) + __builtin_ctz(bank_bits);
-			// look for set bits in the other two banks
-			else if (send_param_val[(bank + 1) % 3]) {
-				bank = (bank + 1) % 3;
-				send_param = (bank << 5) + __builtin_ctz(send_param_val[bank]);
+			for (Param i = 0; i < NUM_PARAMS; i++) {
+				Param candidate = (start_param + i) % NUM_PARAMS;
+				if (send_param_val[candidate]) {
+					send_param = candidate;
+					sending_param_progress = 0;
+					break;
+				}
 			}
-			else if (send_param_val[(bank + 2) % 3]) {
-				bank = (bank + 2) % 3;
-				send_param = (bank << 5) + __builtin_ctz(send_param_val[bank]);
-			}
-			// check the skipped bits in the first bank
-			else if (skipped_bits)
-				send_param = (bank << 5) + __builtin_ctz(skipped_bits);
-			// found a param, kick off sending
-			if (send_param != NUM_PARAMS)
-				sending_param_progress = 0;
 		}
 
 		// we have a param to send
 		if (send_param != NUM_PARAMS) {
 			sending_param_id = send_param;
+			u8* send_mask = &send_param_val[send_param];
 			for (u8 zone = 0; zone < (sys_params.mpe_out ? 2 : 1); zone++) {
 				// set midi channel
 				if (sys_params.mpe_out) {
@@ -671,25 +659,34 @@ static void cue_midi_out(void) {
 
 				// send param value as cc
 				if (sys_params.midi_send_param_ccs == SP_CC) {
-					if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
+					if ((*send_mask & 1)
+					    && !send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param],
+					                      param_cc_value(send_param)))
 						return;
 				}
 				// send nrpns
 				else {
-					// send param and modulation values
+					// send param and modulation values (nrpn pages 0-7)
 					for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
+						// param not marked to send - skip
+						if (!(*send_mask & (1 << mod_src))) {
+							sending_param_progress++;
+							continue;
+						}
 						u14 nrpn_value;
-						get_param_nrpn_value(send_param, mod_src, &nrpn_value);
+						// live nrpns inlude global layout values
+						get_param_nrpn_value(send_param, mod_src, true, &nrpn_value);
 						if (!send_nrpn(mod_src, send_param, nrpn_value, false))
 							return;
 						sending_param_progress++;
 					}
-					// send multi param values
-					if (PARAM_IS_MULTI_TIMBRAL(send_param)) {
-						for (u8 i = sending_param_progress; i < 16; i++) {
-							u8 string_id = i - 8;
-							if (!send_nrpn(string_id + 8, send_param, param_nrpn_multi_value(send_param, string_id),
-							               false))
+					// send multi param values (nrpn pages 8-15)
+					if (PARAM_IS_MULTI_TIMBRAL(send_param) && (*send_mask & 1)) {
+						for (u8 page_id = sending_param_progress; page_id < 16; page_id++) {
+							u14 nrpn_value;
+							// live nrpns inlude global layout values
+							get_param_nrpn_value_multi(send_param, page_id - 8, true, &nrpn_value);
+							if (!send_nrpn(page_id, send_param, nrpn_value, false))
 								return;
 							sending_param_progress++;
 						}
@@ -697,7 +694,7 @@ static void cue_midi_out(void) {
 				}
 			}
 			// done
-			send_param_val[send_param >> 5] &= ~(1 << (send_param & 31));
+			send_param_val[send_param] = 0;
 			sending_param_progress = 255;
 		}
 	}
@@ -1396,19 +1393,22 @@ void midi_push_preset(void) {
 	}
 	// send params set to send nrpns
 	else {
-		// loop through mod sources
+		// loop through mod sources (nrpn pages)
 		for (ModSource mod_src = SRC_BASE; mod_src <= SRC_RND; mod_src++) {
 			// loop through parameters
 			for (Param param_id = 0; param_id < NUM_PARAMS; param_id++) {
 				u14 nrpn_value;
-				if (!get_param_nrpn_value(param_id, mod_src, &nrpn_value))
+				if (!get_param_nrpn_value(param_id, mod_src, false, &nrpn_value))
 					continue;
 				send_nrpn(mod_src, param_id, nrpn_value, true);
 
-				if (PARAM_IS_MULTI_TIMBRAL(param_id)) {
-					// loop through strings (string 0 is identical to the global param value)
-					for (u8 string_id = 1; string_id < NUM_STRINGS; string_id++)
-						send_nrpn(string_id + 8, param_id, param_nrpn_multi_value(param_id, string_id), true);
+				// send multi-timbral parameters with the base values
+				if (mod_src == SRC_BASE && PARAM_IS_MULTI_TIMBRAL(param_id)) {
+					// loop through strings (nrpn page numbers 8-15)
+					for (u8 string_id = 0; string_id < NUM_STRINGS; string_id++) {
+						get_param_nrpn_value_multi(param_id, string_id, false, &nrpn_value);
+						send_nrpn(string_id + 8, param_id, nrpn_value, true);
+					}
 				}
 			}
 		}
@@ -1471,10 +1471,8 @@ void midi_send_transport(MidiMessageType transport_type) {
 		send_transport = transport_type;
 }
 
-void midi_send_param(Param param_id) {
-	u8 bank = param_id / 32;
-	u8 position = param_id & 31;
-	send_param_val[bank] |= 1 << position;
+void midi_send_param(Param param_id, ModSource mod_src) {
+	send_param_val[param_id] |= 1 << mod_src;
 }
 
 // == VISUALS == //

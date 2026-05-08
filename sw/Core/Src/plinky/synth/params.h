@@ -29,8 +29,8 @@ s8 param_index(Param param_id);
 s8 param_index_multi(MultiParam mp_id, u8 string_id);
 s8 param_index_unmod(Param param_id);
 u8 param_cc_value(Param param_id);
-bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value);
-u14 param_nrpn_multi_value(Param param_id, u8 string_id);
+bool get_param_nrpn_value(Param param_id, ModSource mod_src, bool allow_global_layout, u14* nrpn_value);
+bool get_param_nrpn_value_multi(Param param_id, u8 string_id, bool allow_global_layout, u14* nrpn_value);
 
 // param saving
 void save_param_raw(Param param_id, ModSource mod_src, s16 data);

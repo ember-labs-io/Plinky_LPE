@@ -619,32 +619,28 @@ u8 param_cc_value(Param param_id) {
 	return raw_to_cc(param_val_raw(param_id, SRC_BASE), param_id);
 }
 
-bool get_param_nrpn_value(Param param_id, ModSource mod_src, u14* nrpn_value) {
+bool get_param_nrpn_value(Param param_id, ModSource mod_src, bool allow_global_layout, u14* nrpn_value) {
 	if (range_type[param_id] == R_UNUSED || param_id == P_VOLUME)
 		return false;
-	nrpn_value->value = raw_to_u14(cur_preset.params[param_id][mod_src], param_id, mod_src);
+
+	nrpn_value->value = raw_to_u14(allow_global_layout && mod_src == SRC_BASE && IS_GLOBAL_LAYOUT(param_id)
+	                                   ? global_data.layout_params[layout_param_from_param[param_id]][0]
+	                                   : cur_preset.params[param_id][mod_src],
+	                               param_id, mod_src);
 	return true;
 }
 
-u14 param_nrpn_multi_value(Param param_id, u8 string_id) {
-	s16 value = string_id == 0 ? cur_preset.params[param_id][0]
-	                           : cur_preset.multi_params[multi_param_from_param[param_id]][string_id - 1];
-	if (PARAM_SIGNED(param_id))
-		value = (value + (1 << 14)) >> 1;
-	return (u14){clampi(value, 0, UINT14_MAX)};
+bool get_param_nrpn_value_multi(Param param_id, u8 string_id, bool allow_global_layout, u14* nrpn_value) {
+	nrpn_value->value =
+	    raw_to_u14(allow_global_layout && IS_GLOBAL_LAYOUT(param_id)
+	                   ? global_data.layout_params[layout_param_from_param[param_id]][string_id]
+	                   : (string_id == 0 ? cur_preset.params[param_id][SRC_BASE]
+	                                     : cur_preset.multi_params[multi_param_from_param[param_id]][string_id - 1]),
+	               param_id, SRC_BASE);
+	return true;
 }
 
 // == SAVING == //
-
-static void try_send_param_midi(Param param_id, ModSource mod_src, s16 raw_old, s16 raw_new) {
-	if (
-	    // conditions to send CC
-	    (sys_params.midi_send_param_ccs == SP_CC && raw_to_cc(raw_new, param_id) != raw_to_cc(raw_old, param_id))
-	    // conditions to send NRPN
-	    || (sys_params.midi_send_param_ccs == SP_NRPN
-	        && raw_to_u14(raw_new, param_id, mod_src) != raw_to_u14(raw_old, param_id, mod_src)))
-		midi_send_param(param_id);
-}
 
 void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	// special case
@@ -660,8 +656,13 @@ void save_param_raw(Param param_id, ModSource mod_src, s16 data) {
 	if (data == *target)
 		return;
 
-	// send to midi
-	try_send_param_midi(param_id, mod_src, *target, data);
+	// CCs
+	if ((sys_params.midi_send_param_ccs == SP_CC && raw_to_cc(data, param_id) != raw_to_cc(*target, param_id))
+	    // NRPNs
+	    || (sys_params.midi_send_param_ccs == SP_NRPN
+	        && raw_to_u14(data, param_id, mod_src) != raw_to_u14(*target, param_id, mod_src)))
+		// send to midi
+		midi_send_param(param_id, mod_src);
 
 	// save base value
 	*target = data;
@@ -690,8 +691,15 @@ void save_multi_param_raw(Param param_id, u8 string_id, s16 data) {
 	if (data == *target)
 		return;
 
-	// send to midi
-	try_send_param_midi(param_id, SRC_BASE, *target, data);
+	// CCs (only track string 0)
+	if ((sys_params.midi_send_param_ccs == SP_CC && string_id == 0
+	     && raw_to_cc(data, param_id) != raw_to_cc(*target, param_id))
+	    // NRPNs
+	    || (sys_params.midi_send_param_ccs == SP_NRPN
+	        && raw_to_u14(data, param_id, SRC_BASE) != raw_to_u14(*target, param_id, SRC_BASE))) {
+		// send to midi
+		midi_send_param(param_id, SRC_BASE);
+	}
 
 	// save
 	*target = data;
