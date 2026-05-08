@@ -220,7 +220,7 @@ static inline const char* note_name(u8 note_number) {
 		octave--;
 	}
 	buf[0] = "CCDDEFFGGAAB"[semis];
-	buf[1] = " + +  + + + "[semis];
+	buf[1] = " # #  # # # "[semis];
 	if (octave < 0) {
 		buf[2] = '-';
 		buf[3] = '0' - octave;

@@ -1364,6 +1364,7 @@ void handle_synth_voices(u32* dst) {
 // === VISUALS === //
 
 u8 draw_high_note(void) {
+	gfx_text_color = 3;
 	if (max_env_lvl > 1 && !(USING_SAMPLER && !cur_sample_info.pitched))
 		return fdraw_str(0, 0, F_20_BOLD, "%s", note_name(high_string_note));
 	else
