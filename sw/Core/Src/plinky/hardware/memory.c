@@ -529,9 +529,11 @@ void init_memory(void) {
 	fp = LATEST_FLASH_PTR(GLOBAL_DATA_ID);
 	if (fp->footer.idx == GLOBAL_DATA_ID && fp->footer.version == FOOTER_VERSION)
 		memcpy(&global_data, (GlobalData*)fp, sizeof(GlobalData));
-	// no existing global data => trigger save of empty struct
-	else
+	// no existing global data => initialize and trigger save
+	else {
+		global_data = init_global_data;
 		log_ram_edit(SEG_GLOBAL_DATA);
+	}
 	ram_initialized = true;
 }
 
