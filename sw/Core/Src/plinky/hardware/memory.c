@@ -57,6 +57,7 @@ typedef struct FlashPage {
 		Preset preset;
 		PatternQuarter pattern_quarter;
 		SampleInfo sample_info;
+		GlobalData global_data;
 	};
 	SysParams sys_params;
 	PageFooter footer;
@@ -65,6 +66,7 @@ static_assert(sizeof(FlashPage) == FLASH_PAGE_SIZE, "?");
 static_assert(sizeof(Preset) <= FLASH_PAGE_USABLE, "?");
 static_assert(sizeof(PatternQuarter) <= FLASH_PAGE_USABLE, "?");
 static_assert(sizeof(SampleInfo) <= FLASH_PAGE_USABLE, "?");
+static_assert(sizeof(GlobalData) <= FLASH_PAGE_USABLE, "?");
 
 // == FLASH VARS == //
 
@@ -92,6 +94,7 @@ SysParams sys_params;
 Preset cur_preset;                 // floating preset, the one we edit and use for sound generation
 PatternQuarter cur_pattern_qtr[4]; // floating pattern, the one we edit and use for recording/playing
 SampleInfo cur_sample_info;
+GlobalData global_data = {};
 
 // item to change to
 static u8 cued_preset_id = 255;
@@ -228,7 +231,8 @@ static void flash_write_page(u8 item_id, const void* src) {
 			++next_free_flash_page;
 	} while (in_use);
 	flash_erase_page(next_free_flash_page);
-	u16 size = (item_id < PATTERNS_START || item_id == FLOAT_PRESET_ID)     ? sizeof(Preset)
+	u16 size = (item_id == GLOBAL_DATA_ID)                                  ? sizeof(GlobalData)
+	           : (item_id < PATTERNS_START || item_id == FLOAT_PRESET_ID)   ? sizeof(Preset)
 	           : (item_id < F_SAMPLES_START || item_id >= FLOAT_PATTERN_ID) ? sizeof(PatternQuarter)
 	                                                                        : sizeof(SampleInfo);
 	FlashPage* fp = FLASH_PAGE_PTR(next_free_flash_page);
@@ -522,6 +526,13 @@ void init_memory(void) {
 		sys_params.pattern_aligned = true;
 		log_ram_edit(SEG_SYS_PARAMS);
 	}
+	// load global data
+	fp = LATEST_FLASH_PTR(GLOBAL_DATA_ID);
+	if (fp->footer.idx == GLOBAL_DATA_ID && fp->footer.version == FOOTER_VERSION)
+		memcpy(&global_data, (GlobalData*)fp, sizeof(GlobalData));
+	// no existing global data => trigger save of empty struct
+	else
+		log_ram_edit(SEG_GLOBAL_DATA);
 	ram_initialized = true;
 }
 
@@ -642,6 +653,12 @@ void memory_frame(void) {
 	// write ram items to flash (auto-save)
 
 	u32 now = millis();
+	if (need_flash_write(SEG_GLOBAL_DATA, now)) {
+		last_flash_write[SEG_SYS_PARAMS] = last_ram_write[SEG_SYS_PARAMS];
+		last_flash_write[SEG_GLOBAL_DATA] = last_ram_write[SEG_GLOBAL_DATA];
+		// write global data
+		flash_write_page(GLOBAL_DATA_ID, &global_data);
+	}
 	for (u8 qtr = 0; qtr < 4; ++qtr) {
 		if (need_flash_write(SEG_PAT0 + qtr, now)) {
 			last_flash_write[SEG_SYS_PARAMS] = last_ram_write[SEG_SYS_PARAMS];

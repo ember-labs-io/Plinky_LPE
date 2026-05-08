@@ -1,5 +1,6 @@
 #include "midi_sysex.h"
 #include "gfx/gfx.h"
+#include "memory.h"
 #include "synth/params.h"
 #include "synth/synth.h"
 #include "ui/oled_viz.h"
@@ -14,7 +15,6 @@ typedef enum {
 static u16 sysex_status = 0;
 static u8 sysex_manuf_id = 0;
 static u8 sysex_sub_id[2] = {};
-static char tuning_name[17] = {};
 
 void init_sysex(void) {
 	sysex_status = 0;
@@ -35,8 +35,9 @@ static void process_bulk_tuning_byte(u8 byte) {
 	}
 	// 16 char tuning name
 	if (sysex_status < 21) {
-		tuning_name[sysex_status - 6] = byte;
+		global_data.midi_tuning_name[sysex_status - 6] = byte;
 		sysex_status++;
+		log_ram_edit(SEG_GLOBAL_DATA);
 		return;
 	}
 	// note data, 128 x 3 bytes
@@ -174,10 +175,10 @@ void process_sysex_byte(u8 byte) {
 }
 
 bool draw_midi_tuning_name(void) {
-	if (tuning_name[0] == '\0')
+	if (global_data.midi_tuning_name[0] == '\0')
 		return false;
 
 	gfx_text_color = 2;
-	draw_str_ctr(0, F_8, tuning_name);
+	draw_str_ctr(0, F_8, global_data.midi_tuning_name);
 	return true;
 }

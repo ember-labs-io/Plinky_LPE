@@ -81,7 +81,8 @@
 #define F_SAMPLES_START (PATTERNS_START + NUM_PTN_QUARTERS)
 #define FLOAT_PRESET_ID (F_SAMPLES_START + NUM_SAMPLES)
 #define FLOAT_PATTERN_ID (FLOAT_PRESET_ID + 1)
-#define NUM_FLASH_ITEMS (FLOAT_PATTERN_ID + 4)
+#define GLOBAL_DATA_ID (FLOAT_PATTERN_ID + 4)
+#define NUM_FLASH_ITEMS (GLOBAL_DATA_ID + 1)
 
 // TIME
 
@@ -409,6 +410,7 @@ typedef enum MemSegment {
 	SEG_PAT3,
 	SEG_SYS_PARAMS,
 	SEG_SAMPLE_INFO,
+	SEG_GLOBAL_DATA,
 	NUM_MEM_SEGMENTS
 } MemSegment;
 
@@ -940,3 +942,11 @@ typedef struct SampleInfo {
 	u8 paddy[2];
 } SampleInfo;
 static_assert((sizeof(SampleInfo) & 15) == 0, "?");
+
+typedef struct GlobalData {
+	u16 midi_tuning_pitch[NUM_NOTES];
+	u32 midi_tuning_active[(NUM_NOTES + 31) / 32];
+	char midi_tuning_name[17];
+	u8 padding[8];
+} GlobalData;
+static_assert((sizeof(GlobalData) & 15) == 0, "?");
