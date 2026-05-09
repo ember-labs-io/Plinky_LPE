@@ -296,8 +296,7 @@ static u16 pitch_to_scale_step(u16 pitch, Scale scale) {
 	return oct * scale_steps + step;
 }
 
-u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
-	Scale scale = string_scale(string_id);
+static u16 quant_pitch_to_scale_with_scale(u16 pitch, u8 string_id, Scale scale) {
 	u8 scale_steps = steps_in_scale[scale];
 	const u16* step_pitch = scale_table[scale];
 
@@ -342,6 +341,10 @@ u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 
 	// adjust back for root note
 	return pitch_at_step(oct * scale_steps + step, scale, scale_steps) - root_pitch_offset;
+}
+
+u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
+	return quant_pitch_to_scale_with_scale(pitch, string_id, string_scale(string_id));
 }
 
 static u16 string_center_pitch(u8 string_id) {
@@ -1145,6 +1148,48 @@ static void apply_synth_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, flo
 	voice->noise_lvl = noise;
 }
 
+static u16 map_to_midi_tuning(u8 voice_id, Scale scale, SynthString* s_string) {
+	u32 micro_param = param_val_multi(MP_MICROTONE, voice_id);
+	u16 start_note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
+	u16 cv_pitch = start_note_pitch + s_string->note_offset_pitch;
+
+	// closest step
+	u16 this_step_pitch = quant_pitch_to_scale_with_scale(cv_pitch, voice_id, scale);
+
+	// pitch lands exactly on a step
+	if (cv_pitch == this_step_pitch) {
+		u16 pitch_with_midi_tuning = pitch_at_note_with_midi_tuning(s_string->note_number);
+		s_string->note_offset_pitch = 0;
+		s_string->pitchbend_pitch = pitch_with_midi_tuning - start_note_pitch;
+		return pitch_with_midi_tuning;
+	}
+
+	// closest step
+	u16 this_step_pitch_with_midi_tuning = pitch_at_note_with_midi_tuning(PITCH_TO_NOTE_NR(this_step_pitch));
+
+	// next closest step
+	u8 next_step = pitch_to_scale_step(this_step_pitch, scale) + (this_step_pitch > cv_pitch ? -1 : 1);
+	u16 next_step_pitch = pitch_at_step(next_step, scale, steps_in_scale[scale]);
+	u16 next_step_pitch_with_midi_tuning = pitch_at_note_with_midi_tuning(PITCH_TO_NOTE_NR(next_step_pitch));
+
+	// map detuning to pitches with_midi_tuning range
+	s16 detuning =
+	    // target range
+	    (next_step_pitch_with_midi_tuning - this_step_pitch_with_midi_tuning)
+	    // distance in source range
+	    * abs(cv_pitch - this_step_pitch)
+	    // source range
+	    / abs(next_step_pitch - this_step_pitch);
+
+	// apply microtone param
+	s_string->note_offset_pitch = micro_param * detuning >> 16;
+
+	// pitchbend derived from exact pitch and start note
+	s_string->pitchbend_pitch = this_step_pitch_with_midi_tuning + s_string->note_offset_pitch - start_note_pitch;
+
+	return this_step_pitch_with_midi_tuning;
+}
+
 static void run_voice(u8 voice_id, u32* dst) {
 	// the synth string we read data from
 	SynthString* s_string = &play_strings[voice_id];
@@ -1198,55 +1243,16 @@ static void run_voice(u8 voice_id, u32* dst) {
 			note_pitch = pitch_at_note_with_midi_tuning(s_string->note_number);
 			break;
 		case CV_TOUCH:
-			// microtune at 100% effectively turns off all quantization
-			CVQuantType cv_quant = micro_param == 65536 ? CVQ_OFF : sys_params.cv_quant;
-			u16 start_note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
-			switch (cv_quant) {
+			switch (sys_params.cv_quant) {
 			case CVQ_OFF:
-				note_pitch = start_note_pitch;
+				note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
 				s_string->pitchbend_pitch = s_string->note_offset_pitch;
 				break;
 			case CVQ_CHROMATIC:
+				note_pitch = map_to_midi_tuning(voice_id, S_CHROMATIC, s_string);
+				break;
 			case CVQ_SCALE:
-				u16 cv_pitch = start_note_pitch + s_string->note_offset_pitch;
-				note_pitch =
-				    cv_quant == CVQ_SCALE ? quant_pitch_to_scale(cv_pitch, voice_id) : ROUND_PITCH_TO_SEMIS(cv_pitch);
-				u8 note_step = pitch_to_scale_step(note_pitch, scale);
-				bool quantized_up = note_pitch > cv_pitch;
-				u16 next_step_dist;
-
-				// To make cv pitch input work smoothly with midi tuning, we find the closest (quantized) note numbers
-				// and calculate how much cv_pitch is offset from the closest as a percentage. This becomes the pitch
-				// offset factor. Then we apply that factor to the actual pitches (either linear or midi tuning) to
-				// smoothly interpolate between the pitches that are actually heard
-
-				// how far are we away from the closest note?
-				u16 quant_offset_dist = abs(cv_pitch - note_pitch);
-				// how far is the closest note to the next-closest note?
-				if (cv_quant == CVQ_SCALE) {
-					u8 step_in_scale = note_step % scale_steps;
-					u8 next_step_in_scale = (step_in_scale + (quantized_up ? -1 : 1) + scale_steps) % scale_steps;
-					next_step_dist =
-					    (scale_table[scale][next_step_in_scale] - scale_table[scale][step_in_scale] + PITCH_PER_OCT)
-					    % PITCH_PER_OCT;
-				}
-				else
-					next_step_dist = PITCH_PER_SEMI;
-				// how far away are we as a u16 percentage?
-				u16 pitch_offset_factor = UINT16_MAX * quant_offset_dist / next_step_dist;
-
-				// find that same relative distance between the actual output pitches, also attenuate by micro_param
-				if (pitch_offset_factor) {
-					u8 note_number = PITCH_TO_NOTE_NR(note_pitch);
-					u8 next_note_number = note_number + PITCH_TO_SEMIS(next_step_dist) * (quantized_up ? -1 : 1);
-					u16 output_range = abs(pitch_at_note_with_midi_tuning(next_note_number)
-					                       - pitch_at_note_with_midi_tuning(note_number));
-					s_string->note_offset_pitch =
-					    ((u64)pitch_offset_factor * output_range * micro_param >> 32) * (quantized_up ? -1 : 1);
-				}
-
-				// pitchbend derived from new exact pitch and start note
-				s_string->pitchbend_pitch = note_pitch + s_string->note_offset_pitch - start_note_pitch;
+				note_pitch = map_to_midi_tuning(voice_id, scale, s_string);
 				break;
 			default:
 				break;
