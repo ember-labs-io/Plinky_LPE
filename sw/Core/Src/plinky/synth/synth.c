@@ -257,58 +257,91 @@ static u16 pitch_at_step(u8 step, Scale scale, u8 steps_in_scale) {
 	return OCTS_TO_PITCH(step / steps_in_scale) + scale_table[scale][step % steps_in_scale];
 }
 
-static u16 quant_pitch_to_scale_with_step(u16 pitch, u8 string_id, u8* out_step) {
+static u16 pitch_to_scale_step(u16 pitch, Scale scale) {
+	const u16* step_pitch = scale_table[scale];
+	u8 scale_steps = steps_in_scale[scale];
+	u16 oct = pitch / PITCH_PER_OCT;
+
+	// pitches at or above C7 round down to C7
+	if (oct >= 8)
+		return 8 * scale_steps;
+
+	// linear estimate of the closest step
+	u16 pitch_in_oct = pitch % PITCH_PER_OCT;
+	u8 step = pitch_in_oct * scale_steps / PITCH_PER_OCT;
+	u16 best_distance = abs(step_pitch[step] - pitch_in_oct);
+
+	// search down
+	while (step > 0) {
+		u16 distance = abs(step_pitch[step - 1] - pitch_in_oct);
+		if (distance >= best_distance)
+			break;
+		best_distance = distance;
+		step--;
+	}
+	// search up
+	while (step < scale_steps - 1) {
+		u16 distance = abs(step_pitch[step + 1] - pitch_in_oct);
+		if (distance >= best_distance)
+			break;
+		best_distance = distance;
+		step++;
+	}
+	// check first step of next octave
+	if (PITCH_PER_OCT - pitch_in_oct < best_distance) {
+		oct++;
+		step = 0;
+	}
+
+	return oct * scale_steps + step;
+}
+
+u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
 	Scale scale = string_scale(string_id);
 	u8 scale_steps = steps_in_scale[scale];
+	const u16* step_pitch = scale_table[scale];
 
 	// adjust for root note
 	u16 root_pitch_offset = -string_root_pitch(string_id) + PITCH_PER_OCT;
 	pitch += root_pitch_offset;
 
-	// estimate closest by linear mapping
-	u8 step = pitch * scale_steps / PITCH_PER_OCT;
-	u16 best_distance = abs(pitch - pitch_at_step(step, scale, scale_steps));
+	u16 oct = pitch / PITCH_PER_OCT;
+	u16 pitch_in_oct = pitch % PITCH_PER_OCT;
 
-	// find step in scale closest to pitch
-	if (pitch - pitch_at_step(step, scale, scale_steps) > 0) {
-		// search up
-		while (true) {
-			step++;
-			u16 step_pitch = pitch_at_step(step, scale, scale_steps);
-			if (step_pitch > MAX_PITCH + root_pitch_offset)
-				break;
-			u16 distance = abs(pitch - step_pitch);
-			if (distance >= best_distance)
-				break;
-			best_distance = distance;
-		}
+	// estimate closest by linear mapping
+	u8 step = pitch_in_oct * scale_steps / PITCH_PER_OCT;
+	// lower bounds check
+	if (oct == 0 && step_pitch[step] < root_pitch_offset)
+		step++;
+	u16 best_distance = abs(step_pitch[step] - pitch_in_oct);
+
+	// search down
+	while (step > 0) {
+		// lower bounds check
+		if (oct == 0 && step_pitch[step - 1] < root_pitch_offset)
+			break;
+		u16 distance = abs(step_pitch[step - 1] - pitch_in_oct);
+		if (distance >= best_distance)
+			break;
+		best_distance = distance;
 		step--;
 	}
-	else if (pitch - pitch_at_step(step, scale, scale_steps) < 0) {
-		// search down
-		while (true) {
-			step--;
-			s32 step_pitch = pitch_at_step(step, scale, scale_steps);
-			if (step_pitch < root_pitch_offset)
-				break;
-			u16 distance = abs(pitch - step_pitch);
-			if (distance >= best_distance)
-				break;
-			best_distance = distance;
-		}
+	// search up
+	while (step < scale_steps - 1) {
+		u16 distance = abs(step_pitch[step + 1] - pitch_in_oct);
+		if (distance >= best_distance)
+			break;
+		best_distance = distance;
 		step++;
 	}
-
-	// return found step
-	*out_step = step;
+	// check first step of next octave
+	if (PITCH_PER_OCT - pitch_in_oct < best_distance) {
+		oct++;
+		step = 0;
+	}
 
 	// adjust back for root note
-	return pitch_at_step(step, scale, scale_steps) - root_pitch_offset;
-}
-
-u16 quant_pitch_to_scale(u16 pitch, u8 string_id) {
-	u8 dummy;
-	return quant_pitch_to_scale_with_step(pitch, string_id, &dummy);
+	return pitch_at_step(oct * scale_steps + step, scale, scale_steps) - root_pitch_offset;
 }
 
 static u16 string_center_pitch(u8 string_id) {
@@ -1176,9 +1209,9 @@ static void run_voice(u8 voice_id, u32* dst) {
 			case CVQ_CHROMATIC:
 			case CVQ_SCALE:
 				u16 cv_pitch = start_note_pitch + s_string->note_offset_pitch;
-				u8 note_step = 0;
-				note_pitch = cv_quant == CVQ_SCALE ? quant_pitch_to_scale_with_step(cv_pitch, voice_id, &note_step)
-				                                   : ROUND_PITCH_TO_SEMIS(cv_pitch);
+				note_pitch =
+				    cv_quant == CVQ_SCALE ? quant_pitch_to_scale(cv_pitch, voice_id) : ROUND_PITCH_TO_SEMIS(cv_pitch);
+				u8 note_step = pitch_to_scale_step(note_pitch, scale);
 				bool quantized_up = note_pitch > cv_pitch;
 				u16 next_step_dist;
 
