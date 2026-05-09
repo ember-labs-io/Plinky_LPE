@@ -402,6 +402,8 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		else
 			sprintf(val_buf, sys_params.mpe_chans == 0 ? "2 [ 1 ]" : "2-%u [ 1 ]", sys_params.mpe_chans + 2);
 		return val_buf;
+	case I_MIDI_IN_SCALE_QUANT:
+		return value == MQ_OFF ? "Off" : value == MQ_NOTE ? "Note" : "Pitch";
 	case I_MIDI_IN_CLOCK_MULT:
 		switch (value) {
 		case 0:
@@ -424,7 +426,6 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		}
 	case I_MPE_IN:
 	case I_MPE_OUT:
-	case I_MIDI_IN_SCALE_QUANT:
 	case I_MIDI_TUNING:
 		return value ? "On" : "Off";
 	case I_LOCAL_CTRL_OFF:

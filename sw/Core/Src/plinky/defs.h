@@ -241,6 +241,13 @@ typedef enum CVQuantType {
 	NUM_CV_QUANT_TYPES,
 } CVQuantType;
 
+typedef enum MidiQuantType {
+	MQ_OFF,
+	MQ_NOTE,
+	MQ_PITCH,
+	NUM_MIDI_QUANT_TYPES,
+} MidiQuantType;
+
 typedef enum SysParam {
 	SYS_PRESET_ID,
 	SYS_MIDI_IN_CHAN,
@@ -915,10 +922,9 @@ typedef struct SysParams {
 	// 12 bytes
 	bool midi_send_lfo_cc : 1;
 	u8 mpe_zone : 1; // 0 = lower, 1 = upper
-	bool midi_in_scale_quant : 1;
+	MidiQuantType midi_in_scale_quant : 2;
 	bool midi_trs_out_off : 1;
 	bool midi_tuning : 1;
-	u8 pad0 : 1;
 	bool mpe_out_fine_tuning : 1;
 	bool layout_global : 1;
 	// 13 bytes

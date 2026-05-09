@@ -1213,7 +1213,6 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// precalc some parameters
 		s32 pitch_param_pitch = PARAM_VAL_TO_PITCH(param_val_multi(MP_PITCH, voice_id));
 		s16 osc_interval_pitch = PARAM_VAL_TO_PITCH(param_val_multi(MP_INTERVAL, voice_id));
-		u32 micro_param = param_val_multi(MP_MICROTONE, voice_id);
 		TouchType touch_type = s_string->touch_type;
 
 		// the pitch of the base note
@@ -1226,6 +1225,7 @@ static void run_voice(u8 voice_id, u32* dst) {
 		// these only get used by phys touch
 		Touch* s_touch_sort = &touch_sorted[voice_id][2]; // we use pitches 2-5, discarding extreme values
 		u16 root_pitch;
+		u32 micro_param;
 		s16 string_step_offset = 0;
 		s32 arp_oct_pitch = 0;
 
@@ -1236,11 +1236,15 @@ static void run_voice(u8 voice_id, u32* dst) {
 		switch (touch_type) {
 		case PHYS_TOUCH:
 			root_pitch = string_root_pitch(voice_id);
+			micro_param = param_val_multi(MP_MICROTONE, voice_id);
 			string_step_offset = string_start_step(voice_id) + param_index_multi(MP_DEGREE, voice_id);
 			arp_oct_pitch = OCTS_TO_PITCH(arp_oct_offset);
 			break;
 		case MIDI_TOUCH:
-			note_pitch = pitch_at_note_with_midi_tuning(s_string->note_number);
+			if (sys_params.midi_in_scale_quant == MQ_PITCH)
+				note_pitch = map_to_midi_tuning(voice_id, scale, s_string);
+			else
+				note_pitch = pitch_at_note_with_midi_tuning(s_string->note_number);
 			break;
 		case CV_TOUCH:
 			switch (sys_params.cv_quant) {
@@ -1290,11 +1294,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 				}
 				break;
 			}
-			// midi touch: saved offset pitch + generate pitch spread
+			// saved offset pitch + fixed width pitch spread
 			case MIDI_TOUCH:
-				note_offset_pitch = s_string->note_offset_pitch + ((osc_id - 2) * micro_param >> 10);
-				break;
-			// cv touch: saved offset pitch + fixed width pitch spread
 			case CV_TOUCH:
 				note_offset_pitch = s_string->note_offset_pitch + ((osc_id - 2) * 8192 >> 10);
 				break;
