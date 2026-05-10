@@ -381,7 +381,7 @@ void handle_pad_actions(u8 strip_id) {
 				default:
 					break;
 				}
-			if (sampler_mode == SM_PREVIEW)
+			if (sampler_mode == SM_PREVIEW && !main_press_canceled)
 				sampler_adjust_slice_point_from_touch(strip_id, touch->pos, is_press_start);
 			if (sampler_mode == SM_RECORDING && main_press_ms > SHORT_PRESS_TIME)
 				try_stop_recording_sample();
