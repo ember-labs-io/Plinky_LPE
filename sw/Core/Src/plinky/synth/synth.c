@@ -538,13 +538,14 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 			/// / / / ////////////////////// multisample choice
 			int best = voice_id;
 			int bestdist = 0x7fffffff;
-			int mypitch = (voice->osc[1].pitch + voice->osc[2].pitch) / 2 + BOTTOM_PAD_PITCH;
+			int mypitch = (voice->osc[1].pitch + voice->osc[2].pitch) / 2;
 			int mysemi = (mypitch) >> 9;
 			static u8 multisampletime[8];
 			static u8 trig_count = 0;
 			trig_count++;
+			// SampleInfo notes are two octaves off from system notes mapping
 			for (int i = 0; i < 8; ++i) {
-				int dist = abs(mysemi - cur_sample_info.notes[i]) * 256 - (u8)(trig_count - multisampletime[i]);
+				int dist = abs(mysemi - (cur_sample_info.notes[i] + 24)) * 256 - (u8)(trig_count - multisampletime[i]);
 				if (dist < bestdist) {
 					bestdist = dist;
 					best = i;
@@ -739,7 +740,8 @@ static void apply_sample_lpg_noise(u8 voice_id, Voice* voice, float goal_lpg, fl
 	for (int gi = 0; gi < 2; ++gi) {
 		float multisample_grate;
 		if (cur_sample_info.pitched && (ui_mode != UI_SAMPLE_EDIT)) {
-			int relpitch = voice->osc[1 + gi].pitch + BOTTOM_PAD_PITCH - cur_sample_info.notes[voice->slice_id] * 512;
+			// SampleInfo notes are two octaves off from system notes mapping
+			int relpitch = voice->osc[1 + gi].pitch - NOTE_NR_TO_PITCH(cur_sample_info.notes[voice->slice_id] + 24);
 			if (relpitch < -512 * 12 * 5) {
 				multisample_grate = 0.f;
 			}
