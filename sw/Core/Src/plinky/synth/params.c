@@ -1342,11 +1342,8 @@ void draw_cur_param(void) {
 
 		// manual section name overrides
 		switch (draw_param) {
-		case P_PITCH:
 		case P_OCT:
-		case P_DEGREE:
 		case P_SCALE:
-		case P_MICROTONE:
 		case P_COLUMN:
 		case P_ROOT:
 			sect_str = I_TOUCH "Pads";
@@ -1482,7 +1479,7 @@ void draw_cur_param(void) {
 	// draw first line
 	width = str_width(font, val_buf);
 	x = x_center == 0 ? text_right_x - width : x_center - width / 2;
-	if (text_x + str_width(F_12, sect_str + 1) > 54 && +val_buf[0] == '-' && strlen(val_buf) == 6) {
+	if (text_x + str_width(F_12, sect_str + 1) > 58 && +val_buf[0] == '-' && strlen(val_buf) == 6) {
 		font--;
 		width = str_width(font, val_buf);
 		x = x_center == 0 ? text_right_x - width : x_center - width / 2;
