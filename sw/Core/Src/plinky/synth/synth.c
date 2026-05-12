@@ -1249,6 +1249,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 				note_pitch = pitch_at_note_with_midi_tuning(s_string->note_number);
 			break;
 		case CV_TOUCH:
+			if (s_string->env_trigger)
+				write_strings[voice_id] = *s_string;
 			switch (sys_params.cv_quant) {
 			case CVQ_OFF:
 				note_pitch = NOTE_NR_TO_PITCH(s_string->note_number);
