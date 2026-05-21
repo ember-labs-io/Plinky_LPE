@@ -975,7 +975,7 @@ void params_toggle_default_value(void) {
 	    edit_multi ? param_val_raw_multi(param_id, selected_edit_strip) : param_val_raw(param_id, selected_mod_src);
 	s16 init_raw = edit_multi && selected_edit_strip != 0
 	                   ? init_params.multi_params[multi_param_from_param[param_id]][selected_edit_strip - 1]
-	                   : init_params.params[param_id][SRC_BASE];
+	                   : init_params.params[param_id][selected_mod_src];
 	// first press: save current value and set init value
 	if (cur_raw != init_raw || saved_raw == INT16_MAX) {
 		saved_raw = cur_raw;
