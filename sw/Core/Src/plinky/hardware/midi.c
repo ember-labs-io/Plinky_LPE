@@ -278,23 +278,20 @@ static bool send_double_midi_msg(u8 status1, u8 data1_1, u8 data1_2, u8 status2,
 }
 
 static void midi_push_cc(u8 data1, u8 data2) {
-	// wait for DMA to be ready
-	if (!sys_params.midi_trs_out_off)
-		while (huart3.TxXferCount)
-			;
-
 	// fill buffer
-	u8 buffer[4];
+	static u8 buffer[4];
 	buffer[0] = MIDI_CIN_CONTROL_CHANGE;
 	buffer[1] =
 	    MIDI_CONTROL_CHANGE | (sys_params.mpe_out ? sys_params.mpe_zone == 0 ? 0 : 15 : sys_params.midi_out_chan);
 	buffer[2] = data1;
 	buffer[3] = data2;
 
-	// send buffer
+	// send buffer to serial
 	if (!sys_params.midi_trs_out_off)
-		HAL_UART_Transmit_DMA(&huart3, &buffer[1], 3);
-	// when mounted, keep trying to send until success
+		while (HAL_UART_Transmit_DMA(&huart3, &buffer[1], 3) != HAL_OK)
+			;
+
+	// send buffer to usb
 	while (tud_midi_mounted() && !tud_midi_packet_write(buffer))
 		;
 }
@@ -501,7 +498,8 @@ static bool cue_midi_string_out(void) {
 					return false;
 				m_last->note_number = string_note;
 			}
-			// the string has an envelope retrigger or we last sent a different note => send both a note off and note on
+			// the string has an envelope retrigger or we last sent a different note => send both a note off and
+			// note on
 			else if (s_string->env_trigger || last_note != string_note) {
 				if (!send_double_midi_msg(MIDI_NOTE_OFF, last_note, 0, MIDI_NOTE_ON, string_note, string_vel))
 					return false;
