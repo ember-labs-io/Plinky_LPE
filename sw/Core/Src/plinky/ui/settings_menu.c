@@ -230,6 +230,7 @@ void open_settings_menu(void) {
 	// update display data
 	display_section = (cur_item >> 3) & 7;
 	cur_value = get_sys_param(item_to_sys_param[cur_item]);
+	value_selected = false;
 }
 
 void press_settings_menu_pad(u8 x, u8 y) {
