@@ -252,18 +252,18 @@ void finish_recording_sample(void) {
 
 // == SLICES == //
 
-static void set_slice_point(u8 slice_id, float slice_pos) {
-	float smin = maxf(slice_id ? cur_sample_info.splitpoints[slice_id - 1] + 1024.f : 0.f, 0.f);
-	float smax = minf((slice_id < 7) ? cur_sample_info.splitpoints[slice_id + 1] - 1024.f : cur_sample_info.samplelen,
-	                  cur_sample_info.samplelen);
-	slice_pos = clampf(slice_pos, smin, smax);
+static void set_slice_point(u8 slice_id, int slice_pos) {
+	int min_pos = slice_id == 0 ? 0 : maxi(cur_sample_info.splitpoints[slice_id - 1] + 1024, 0);
+	int max_pos = slice_id == 7 ? cur_sample_info.samplelen
+	                            : mini(cur_sample_info.splitpoints[slice_id + 1] - 1024, cur_sample_info.samplelen);
+	slice_pos = clampi(slice_pos, min_pos, max_pos);
 	if (cur_sample_info.splitpoints[slice_id] != slice_pos) {
 		cur_sample_info.splitpoints[slice_id] = slice_pos;
 		log_ram_edit(SEG_SAMPLE_INFO);
 	}
 }
 
-void sampler_adjust_cur_slice_point(float diff) {
+void sampler_adjust_cur_slice_point(s16 diff) {
 	set_slice_point(cur_slice_id, cur_sample_info.splitpoints[cur_slice_id] + diff);
 }
 

@@ -20,7 +20,7 @@ static inline void stop_recording_sample(void) {
 
 // slices
 
-void sampler_adjust_cur_slice_point(float diff);
+void sampler_adjust_cur_slice_point(s16 diff);
 void sampler_adjust_slice_point_from_touch(u8 slice_id, u16 touch_pos, bool init_slice);
 void sampler_adjust_cur_slice_pitch(s8 diff);
 
