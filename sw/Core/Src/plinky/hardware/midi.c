@@ -84,8 +84,10 @@ static u8 channel_pressure;
 static u14 channel_pitchbend;
 static s32 channel_pitchbend_pitch;
 static MpeZone mpe_zone[2] = {};
-static u8 non_mpe_start_string = 0;
-static u8 high_mpe_start_string = NUM_STRINGS;
+static u8 non_mpe_start_string_in = 0;
+static u8 high_mpe_start_string_in = NUM_STRINGS;
+static u8 non_mpe_start_string_out = 0;
+static u8 high_mpe_start_string_out = NUM_STRINGS;
 static bool receiving_sysex = false;
 static u32 sysex_start_time = 0;
 static bool pushing_preset = false;
@@ -405,11 +407,11 @@ static bool cue_midi_string_out(void) {
 	bool using_mpe = sys_params.mpe_out;
 	if (using_mpe) {
 		// early exit for non-mpe strings
-		if (string_id >= non_mpe_start_string && string_id < high_mpe_start_string)
+		if (string_id >= non_mpe_start_string_out && string_id < high_mpe_start_string_out)
 			return true;
-		midi_out_channel = string_id < non_mpe_start_string
+		midi_out_channel = string_id < non_mpe_start_string_out
 		                       ? string_id + 1
-		                       : 15 - mpe_zone[1].num_chans + (string_id - high_mpe_start_string);
+		                       : 15 - mpe_zone[1].num_chans + (string_id - high_mpe_start_string_out);
 	}
 	else
 		midi_out_channel = sys_params.midi_out_chan;
@@ -762,7 +764,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 			else if (n_rpn_string == 15) {
 				set_mpe_channels(1, num_chans);
 				// clear strings in mpe zone
-				for (u8 string_id = high_mpe_start_string; string_id < 8; string_id++)
+				for (u8 string_id = high_mpe_start_string_in; string_id < 8; string_id++)
 					reset_controls(string_id);
 			}
 		}
@@ -1058,7 +1060,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			bool string_found = false;
 			MidiString* m_string;
 			// find string pressing this note
-			for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++) {
+			for (u8 string_id = non_mpe_start_string_in; string_id < high_mpe_start_string_in; string_id++) {
 				m_string = &midi_string[string_id];
 				if (m_string->state == MS_PRESSED && m_string->note_number == data1) {
 					string_found = true;
@@ -1077,7 +1079,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			u8 string_id = 255;
 
 			// find string pressing or sustaining this note
-			for (u8 i = non_mpe_start_string; i < high_mpe_start_string; ++i) {
+			for (u8 i = non_mpe_start_string_in; i < high_mpe_start_string_in; ++i) {
 				MidiString* m_string = &midi_string[i];
 				if (m_string->state != MS_UNPRESSED && m_string->note_number == data1) {
 					string_id = i;
@@ -1088,7 +1090,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			// no existing string found => find new string
 			s32 midi_pitch = NOTE_NR_TO_PITCH(data1);
 			if (string_id == 255)
-				string_id = find_string_for_pitch(midi_pitch, non_mpe_start_string, high_mpe_start_string);
+				string_id = find_string_for_pitch(midi_pitch, non_mpe_start_string_in, high_mpe_start_string_in);
 
 			// no space to register a new midi press => exit
 			if (string_id == 255)
@@ -1105,7 +1107,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 		} break;
 		case MIDI_POLY_KEY_PRESSURE:
 			// apply to all strings holding this note
-			for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++) {
+			for (u8 string_id = non_mpe_start_string_in; string_id < high_mpe_start_string_in; string_id++) {
 				MidiString* m_string = &midi_string[string_id];
 				if (m_string->note_number == data1)
 					m_string->pressure = data2;
@@ -1125,19 +1127,19 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 			switch (data1) {
 			// update string mod wheels
 			case CC_MOD_WHEEL:
-				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
+				for (u8 string_id = non_mpe_start_string_in; string_id < high_mpe_start_string_in; string_id++)
 					midi_string[string_id].mod_wheel = data2;
 				break;
 			// update string sustains
 			case CC_SUSTAIN: {
 				bool new_sustain = data2 >= 64;
-				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
+				for (u8 string_id = non_mpe_start_string_in; string_id < high_mpe_start_string_in; string_id++)
 					apply_sustain(new_sustain, string_id);
 			} break;
 			// update string sostenutos
 			case CC_SOSTENUTO: {
 				bool new_sostenuto = data2 >= 64;
-				for (u8 string_id = non_mpe_start_string; string_id < high_mpe_start_string; string_id++)
+				for (u8 string_id = non_mpe_start_string_in; string_id < high_mpe_start_string_in; string_id++)
 					apply_sostenuto(new_sostenuto, string_id);
 			} break;
 			default:
@@ -1156,7 +1158,7 @@ static void process_midi_msg(u8 status, u8 data1, u8 data2) {
 	// == mpe manager channel == //
 
 	if (is_manager_msg) {
-		u8 zone_start_string = mpe_zone_upper ? high_mpe_start_string : 0;
+		u8 zone_start_string = mpe_zone_upper ? high_mpe_start_string_in : 0;
 		u8 zone_end_string = mpe_zone_upper ? NUM_STRINGS : mpe_zone[0].num_strings;
 		switch (type) {
 		case MIDI_PITCH_BEND:
@@ -1425,8 +1427,10 @@ void midi_update_mpe_mapping(void) {
 	    one_chan_per_string ? mpe_zone[(u8)!zone].num_chans : (mpe_zone[(u8)!zone].num_chans + 1) >> 1;
 
 	// update boundaries
-	non_mpe_start_string = sys_params.mpe_in ? mpe_zone[0].num_strings : 0;
-	high_mpe_start_string = sys_params.mpe_in ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
+	non_mpe_start_string_in = sys_params.mpe_in ? mpe_zone[0].num_strings : 0;
+	high_mpe_start_string_in = sys_params.mpe_in ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
+	non_mpe_start_string_out = sys_params.mpe_out ? mpe_zone[0].num_strings : 0;
+	high_mpe_start_string_out = sys_params.mpe_out ? NUM_STRINGS - mpe_zone[1].num_strings : NUM_STRINGS;
 }
 
 void midi_push_preset(void) {
@@ -1475,8 +1479,9 @@ bool midi_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_num
 	if (m_string->state == MS_UNPRESSED)
 		return false;
 
-	bool using_mpe = sys_params.mpe_in && (string_id < non_mpe_start_string || string_id >= high_mpe_start_string);
-	u8 zone = string_id < non_mpe_start_string ? 0 : 1;
+	bool using_mpe =
+	    sys_params.mpe_in && (string_id < non_mpe_start_string_in || string_id >= high_mpe_start_string_in);
+	u8 zone = string_id < non_mpe_start_string_in ? 0 : 1;
 
 	// synthesize internal pressure from midi velocity and midi pressure
 	u16 midi_pressure14 = 0;
