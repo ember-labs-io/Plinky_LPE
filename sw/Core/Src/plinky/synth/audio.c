@@ -415,7 +415,7 @@ void audio_post(u32* audio_out, u32* audio_in) {
 
 		int targetdt = k_target_delaytime + 2048 - (int)wobpos;
 		wobpos += dwobpos;
-		delaytime += (targetdt - delaytime) >> 10;
+		delaytime += (targetdt - delaytime) >> 11;
 		s16 delayreturnl = LINEARINTERPDL(delay_ram_buf, delaypos, delaytime);
 		s16 delayreturnr = LINEARINTERPDL(delay_ram_buf, delaypos, ((delaytime >> 4) * delayratio) >> 4);
 		// soft clipper due to drive; reduces range to half also giving headroom on tape & output
