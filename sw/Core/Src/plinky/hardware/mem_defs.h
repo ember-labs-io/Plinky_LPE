@@ -138,6 +138,10 @@ static u16 get_layout_global(void) {
 	return sys_params.layout_global;
 }
 
+static u16 get_cv_pitch_out_format(void) {
+	return sys_params.cv_pitch_out_format;
+}
+
 typedef u16 (*SysParamGetter)(void);
 
 const SysParamGetter sys_param_getters[] = {
@@ -175,6 +179,7 @@ const SysParamGetter sys_param_getters[] = {
     [SYS_REFERENCE_PITCH] = get_reference_pitch,
     [SYS_CV_GATE_IN_IS_PRESSURE] = get_cv_gate_in_is_pressure,
     [SYS_LAYOUT_GLOBAL] = get_layout_global,
+    [SYS_CV_PITCH_OUT_FORMAT] = get_cv_pitch_out_format,
 };
 
 // sys param setters
@@ -321,6 +326,10 @@ static void set_layout_global(u16 value) {
 	sys_params.layout_global = value;
 }
 
+static void set_cv_pitch_out_format(u16 value) {
+	sys_params.cv_pitch_out_format = value;
+}
+
 typedef void (*SysParamSetter)(u16);
 
 const SysParamSetter sys_param_setters[] = {
@@ -358,6 +367,7 @@ const SysParamSetter sys_param_setters[] = {
     [SYS_REFERENCE_PITCH] = set_reference_pitch,
     [SYS_CV_GATE_IN_IS_PRESSURE] = set_cv_gate_in_is_pressure,
     [SYS_LAYOUT_GLOBAL] = set_layout_global,
+    [SYS_CV_PITCH_OUT_FORMAT] = set_cv_pitch_out_format,
 };
 
 const u8 sys_param_ranges[] = {
@@ -395,6 +405,7 @@ const u8 sys_param_ranges[] = {
     [SYS_REFERENCE_PITCH] = 16,
     [SYS_CV_GATE_IN_IS_PRESSURE] = 2,
     [SYS_LAYOUT_GLOBAL] = 2,
+    [SYS_CV_PITCH_OUT_FORMAT] = 2,
 };
 
 const static GlobalData init_global_data = {

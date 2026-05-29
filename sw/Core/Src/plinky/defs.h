@@ -283,6 +283,7 @@ typedef enum SysParam {
 	SYS_REFERENCE_PITCH,
 	SYS_CV_GATE_IN_IS_PRESSURE,
 	SYS_LAYOUT_GLOBAL,
+	SYS_CV_PITCH_OUT_FORMAT,
 	NUM_SYS_PARAM_ITEMS,
 } SysParam;
 
@@ -930,7 +931,8 @@ typedef struct SysParams {
 	// 13 bytes
 	u8 cv_gate_in_is_pressure : 1;
 	u8 reference_pitch : 4;
-	u8 pad1 : 3;
+	bool cv_pitch_out_format : 1; // 0 = V/Oct, 1 = Hz/V
+	u8 pad1 : 2;
 	// 14 bytes
 	u8 pad2;
 	// 15 bytes

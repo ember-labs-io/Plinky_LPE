@@ -259,21 +259,52 @@ bool cv_try_get_touch(u8 string_id, s16* pressure, s16* position, u8* note_numbe
 }
 
 void send_cv_pitch(bool pitch_hi, u16 pitch) {
-	// shift three octaves so 0V = C2
-	s32 pitch_4x = (pitch - 3 * PITCH_PER_OCT) << 2;
+	static bool calib_calculated = false;
+	static u16 dac_octave_size[2];
+	static float hz_v_dac_scale[2];
+	static s32 hz_v_upper_limit[2];
+	static s32 hz_v_lower_limit[2];
 
-	// apply calibration
+	// precalc calibration-based values (can't change during runtime)
+	if (!calib_calculated) {
+		for (u8 i = 0; i < 2; i++) {
+			ADC_DAC_Calib* calib = &adc_dac_calib[DAC_PITCH_CV_LO + i];
+			dac_octave_size[i] = abs((PITCH_PER_OCT << 2) * calib->scale);
+			hz_v_dac_scale[i] = dac_octave_size[i] / 8.f;
+			// pitch above which dac_value turns negative
+			hz_v_upper_limit[i] = PITCH_PER_OCT * log2f(calib->bias * 8.f / dac_octave_size[i]);
+			// pitch below which we start losing resolution
+			hz_v_lower_limit[i] = PITCH_PER_OCT * log2f(PITCH_PER_OCT * 8.f / (dac_octave_size[i] * logf(2.0f)));
+		}
+		calib_calculated = true;
+	}
+
 	ADC_DAC_Calib* calib = &adc_dac_calib[pitch_hi ? DAC_PITCH_CV_HI : DAC_PITCH_CV_LO];
-	s32 cv_pitch_4x = pitch_4x * calib->scale + calib->bias;
+	u16 dac_value;
+	// v/oct format, 0V = C2
+	if (!sys_params.cv_pitch_out_format) {
+		s32 cv_pitch_4x = ((pitch - 3 * PITCH_PER_OCT) << 2) * calib->scale + calib->bias;
 
-	// shift octave to keep pitch within bounds
-	u16 octave_size = abs((PITCH_PER_OCT << 2) * calib->scale);
-	while (cv_pitch_4x > UINT16_MAX)
-		cv_pitch_4x -= octave_size;
-	while (cv_pitch_4x < 0)
-		cv_pitch_4x += octave_size;
+		// shift octave to keep pitch within bounds
+		while (cv_pitch_4x > UINT16_MAX)
+			cv_pitch_4x -= dac_octave_size[(u8)pitch_hi];
+		while (cv_pitch_4x < 0)
+			cv_pitch_4x += dac_octave_size[(u8)pitch_hi];
+		dac_value = cv_pitch_4x;
+	}
+	// hz/v format, 1V = C2
+	else {
+		// shift octave to keep pitch within bounds
+		while (pitch > hz_v_upper_limit[(u8)pitch_hi])
+			pitch -= PITCH_PER_OCT;
+		while (pitch < hz_v_lower_limit[(u8)pitch_hi])
+			pitch += PITCH_PER_OCT;
+		// map to dac exponentially
+		dac_value = calib->bias - hz_v_dac_scale[(u8)pitch_hi] * powf(2.0f, (float)pitch / PITCH_PER_OCT);
+	}
 
-	HAL_DAC_SetValue(&hdac1, pitch_hi ? DAC_CHANNEL_2 : DAC_CHANNEL_1, DAC_ALIGN_12B_L, cv_pitch_4x);
+	// send to dac
+	HAL_DAC_SetValue(&hdac1, pitch_hi ? DAC_CHANNEL_2 : DAC_CHANNEL_1, DAC_ALIGN_12B_L, dac_value);
 }
 
 void cv_calib(void) {

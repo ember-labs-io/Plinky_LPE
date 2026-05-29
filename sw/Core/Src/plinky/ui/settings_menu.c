@@ -48,6 +48,7 @@ typedef enum Item {
 	I_CV_GATE_IN_IS_PRESSURE,
 	I_CV_PPQN_IN,
 	I_CV_PPQN_OUT,
+	I_CV_PITCH_OUT_FORMAT,
 	// actions
 	I_REBOOT = S_ACTIONS * 8,
 	I_TOUCH_CALIB,
@@ -95,6 +96,7 @@ const static SysParam item_to_sys_param[NUM_MENU_ITEMS] = {
     [I_CV_GATE_IN_IS_PRESSURE] = SYS_CV_GATE_IN_IS_PRESSURE,
     [I_CV_PPQN_IN] = SYS_CV_PPQN_IN,
     [I_CV_PPQN_OUT] = SYS_CV_PPQN_OUT,
+    [I_CV_PITCH_OUT_FORMAT] = SYS_CV_PITCH_OUT_FORMAT,
     [I_MPE_IN_CHANS] = SYS_MPE_CHANS,
     [I_MIDI_STRING_BEND_RANGE_IN] = SYS_MIDI_STRING_BEND_RANGE_IN,
     [I_MPE_OUT_CHANS] = SYS_MPE_CHANS,
@@ -133,6 +135,7 @@ const static char* item_name[NUM_MENU_ITEMS] = {
     [I_CV_GATE_IN_IS_PRESSURE] = "Gate",
     [I_CV_PPQN_IN] = "PPQN",
     [I_CV_PPQN_OUT] = "PPQN",
+    [I_CV_PITCH_OUT_FORMAT] = "Format",
     [I_REBOOT] = "Reboot",
     [I_TOUCH_CALIB] = "Touch Calib",
     [I_CV_CALIB] = "CV Calib",
@@ -438,6 +441,8 @@ static const char* get_param_str(Item item, u8 value, char* val_buf) {
 		return value == CVQ_OFF ? "Off" : value == CVQ_CHROMATIC ? "Chrom" : "Scale";
 	case I_CV_GATE_IN_IS_PRESSURE:
 		return value ? "Press" : "Gate";
+	case I_CV_PITCH_OUT_FORMAT:
+		return value ? "Hz/V" : "V/Oct";
 	// ppqns
 	case I_CV_PPQN_IN:
 	case I_CV_PPQN_OUT:
@@ -464,6 +469,7 @@ void draw_settings_menu(void) {
 	// section name
 	switch (cur_item) {
 	case I_CV_PPQN_OUT:
+	case I_CV_PITCH_OUT_FORMAT:
 		draw_str(1, 0, F_16_BOLD, "CV out");
 		break;
 	default:
