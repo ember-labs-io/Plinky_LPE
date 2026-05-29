@@ -692,14 +692,13 @@ void save_multi_param_raw(Param param_id, u8 string_id, s16 data) {
 		return;
 
 	// CCs (only track string 0)
-	if ((sys_params.midi_send_param_ccs == SP_CC && string_id == 0
-	     && raw_to_cc(data, param_id) != raw_to_cc(*target, param_id))
-	    // NRPNs
-	    || (sys_params.midi_send_param_ccs == SP_NRPN
-	        && raw_to_u14(data, param_id, SRC_BASE) != raw_to_u14(*target, param_id, SRC_BASE))) {
-		// send to midi
+	if (sys_params.midi_send_param_ccs == SP_CC && string_id == 0
+	    && raw_to_cc(data, param_id) != raw_to_cc(*target, param_id))
 		midi_send_param(param_id, SRC_BASE);
-	}
+	// NRPNs
+	else if (sys_params.midi_send_param_ccs == SP_NRPN
+	         && raw_to_u14(data, param_id, SRC_BASE) != raw_to_u14(*target, param_id, SRC_BASE))
+		midi_send_multi_param(multi_param_from_param[param_id], 1 << string_id);
 
 	// save
 	*target = data;

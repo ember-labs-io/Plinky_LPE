@@ -113,7 +113,8 @@ static u8 thru_buffer_head = 0;
 static u8 thru_buffer_tail = 0;
 static u8 thru_buffer_count = 0;
 static u8 send_param_val[NUM_PARAMS] = {};
-static Param sending_param_id = 0;
+static u8 send_multi_param_val[NUM_MULTI_PARAMS] = {};
+static Param sending_param_id = NUM_PARAMS;
 static u8 sending_param_progress = 255;
 
 // == UTILS == //
@@ -634,7 +635,8 @@ static void cue_midi_out(void) {
 			Param start_param = sending_param_id + 1;
 			for (Param i = 0; i < NUM_PARAMS; i++) {
 				Param candidate = (start_param + i) % NUM_PARAMS;
-				if (send_param_val[candidate]) {
+				if (send_param_val[candidate]
+				    || (PARAM_IS_MULTI_TIMBRAL(candidate) && send_multi_param_val[multi_param_from_param[candidate]])) {
 					send_param = candidate;
 					sending_param_progress = 0;
 					break;
@@ -658,43 +660,60 @@ static void cue_midi_out(void) {
 					midi_out_channel = sys_params.midi_out_chan;
 
 				// send param value as cc
-				if (sys_params.midi_send_param_ccs == SP_CC) {
-					if ((*send_mask & 1)
-					    && !send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param],
-					                      param_cc_value(send_param)))
+				if (sys_params.midi_send_param_ccs != SP_NRPN) {
+					u8 midi_cc = midi_cc_table_rvs[send_param];
+					// not marked to send or no valid cc => skip
+					if (!(*send_mask & 1) || midi_cc == 255)
+						continue;
+					if (!send_midi_msg(MIDI_CONTROL_CHANGE, midi_cc_table_rvs[send_param], param_cc_value(send_param)))
 						return;
 				}
 				// send nrpns
 				else {
 					// send param and modulation values (nrpn pages 0-7)
-					for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
-						// param not marked to send - skip
-						if (!(*send_mask & (1 << mod_src))) {
-							sending_param_progress++;
-							continue;
-						}
-						u14 nrpn_value;
-						// live nrpns inlude global layout values
-						get_param_nrpn_value(send_param, mod_src, true, &nrpn_value);
-						if (!send_nrpn(mod_src, send_param, nrpn_value, false))
-							return;
-						sending_param_progress++;
-					}
-					// send multi param values (nrpn pages 8-15)
-					if (PARAM_IS_MULTI_TIMBRAL(send_param) && (*send_mask & 1)) {
-						for (u8 page_id = sending_param_progress; page_id < 16; page_id++) {
+					if (*send_mask) {
+						for (ModSource mod_src = sending_param_progress; mod_src < NUM_MOD_SOURCES; mod_src++) {
 							u14 nrpn_value;
-							// live nrpns inlude global layout values
-							get_param_nrpn_value_multi(send_param, page_id - 8, true, &nrpn_value);
-							if (!send_nrpn(page_id, send_param, nrpn_value, false))
+							// param not marked to send or no valid nrpn => skip
+							if (!(*send_mask & (1 << mod_src))
+							    // live nrpns include global layout values
+							    || !get_param_nrpn_value(send_param, mod_src, true, &nrpn_value)) {
+								sending_param_progress++;
+								continue;
+							}
+							if (!send_nrpn(mod_src, send_param, nrpn_value, false))
 								return;
 							sending_param_progress++;
+						}
+					}
+					else
+						sending_param_progress = NUM_MOD_SOURCES;
+
+					// send multi param values (nrpn pages 8-15)
+					if (PARAM_IS_MULTI_TIMBRAL(send_param)) {
+						MultiParam mp_id = multi_param_from_param[send_param];
+						if (send_multi_param_val[mp_id]) {
+							for (u8 page_id = sending_param_progress; page_id < 16; page_id++) {
+								u8 string_id = page_id - 8;
+								if (!(send_multi_param_val[mp_id] & (1 << string_id))) {
+									sending_param_progress++;
+									continue;
+								}
+								u14 nrpn_value;
+								// live nrpns inlude global layout values
+								get_param_nrpn_value_multi(send_param, string_id, true, &nrpn_value);
+								if (!send_nrpn(page_id, send_param, nrpn_value, false))
+									return;
+								sending_param_progress++;
+							}
 						}
 					}
 				}
 			}
 			// done
 			send_param_val[send_param] = 0;
+			if (PARAM_IS_MULTI_TIMBRAL(send_param))
+				send_multi_param_val[multi_param_from_param[send_param]] = 0;
 			sending_param_progress = 255;
 		}
 	}
@@ -717,6 +736,7 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 		NA_NONE,
 		NA_SET_PARAM,
 		NA_SET_MOD,
+		NA_SEND_VALUES,
 	} NRPN_Action;
 
 	// value not fully received
@@ -780,6 +800,9 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 			multi = true;
 			string_id = id_msb - 8;
 		}
+		// 16-31 => send values
+		else if (id_msb < 32)
+			nrpn_action = NA_SEND_VALUES;
 		// msb invalid
 		else
 			return;
@@ -788,17 +811,43 @@ static void try_apply_n_rpn(bool is_rpn, u8 n_rpn_string, bool mpe_member) {
 	// take action
 	u8 param_id = nrpn_id[n_rpn_string].lsb;
 
-	if (param_id >= NUM_PARAMS)
-		return;
-
 	switch (nrpn_action) {
 	case NA_NONE:
 		break;
 	case NA_SET_PARAM:
-		set_param_from_nrpn(param_id, n_rpn_value[n_rpn_string], multi, string_id);
+		if (param_id < NUM_PARAMS)
+			set_param_from_nrpn(param_id, n_rpn_value[n_rpn_string], multi, string_id);
 		break;
 	case NA_SET_MOD:
-		set_mod_from_nrpn(param_id, n_rpn_value[n_rpn_string], id_msb);
+		if (param_id < NUM_PARAMS)
+			set_mod_from_nrpn(param_id, n_rpn_value[n_rpn_string], id_msb);
+		break;
+	case NA_SEND_VALUES:
+		// requires a value of 16383
+		if (n_rpn_value[n_rpn_string].value != UINT14_MAX)
+			break;
+		// pages 16-23: send param/modulation values
+		if (id_msb < 24) {
+			ModSource mod_src = id_msb - 16;
+			// send single param/modulation
+			if (param_id < NUM_PARAMS)
+				midi_send_param(param_id, mod_src);
+			// send full page
+			else if (param_id == 127)
+				for (Param p_id = 0; p_id < NUM_PARAMS; p_id++)
+					midi_send_param(p_id, mod_src);
+		}
+		// pages 24-31: send multi-param values for strings 0-7
+		else if (id_msb < 32) {
+			u8 string_id = id_msb - 24;
+			// send single multi-param
+			if (param_id < NUM_PARAMS && PARAM_IS_MULTI_TIMBRAL(param_id))
+				midi_send_multi_param(multi_param_from_param[param_id], 1 << string_id);
+			// send full page
+			else if (param_id == 127)
+				for (MultiParam mp_id = 0; mp_id < NUM_MULTI_PARAMS; mp_id++)
+					midi_send_multi_param(mp_id, 1 << string_id);
+		}
 		break;
 	}
 }
@@ -1473,6 +1522,10 @@ void midi_send_transport(MidiMessageType transport_type) {
 
 void midi_send_param(Param param_id, ModSource mod_src) {
 	send_param_val[param_id] |= 1 << mod_src;
+}
+
+void midi_send_multi_param(MultiParam mp_id, u8 mask) {
+	send_multi_param_val[mp_id] |= mask;
 }
 
 // == VISUALS == //
