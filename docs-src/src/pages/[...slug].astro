@@ -1,0 +1,70 @@
+---
+import { getCollection, render } from 'astro:content';
+import Layout from '../layouts/Layout.astro';
+
+export async function getStaticPaths() {
+  const releaseNotes = await getCollection('release-notes');
+  const references = await getCollection('references');
+  return [...releaseNotes, ...references].map(entry => ({
+    params: { slug: `${entry.collection}/${entry.id}` },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await render(entry);
+const pageHeadings = headings.filter(h => h.depth >= 3 && h.depth <= 4);
+
+const releaseNotes = await getCollection('release-notes');
+const references = await getCollection('references');
+---
+
+<Layout title="Plinky - Lucky Phoenix Edition">
+
+  <Fragment slot="topbar">
+    <a href={import.meta.env.BASE_URL} class="btn btn-ghost text-xl">Plinky - Lucky Phoenix Edition</a>
+  </Fragment>
+
+  <Fragment slot="nav">
+    <ul class="menu p-4">
+      <li class="menu-title">Release Notes</li>
+      {releaseNotes.map(e => (
+        <li>
+          <a href={`${import.meta.env.BASE_URL}${e.collection}/${e.id}`}
+             class={entry.id === e.id ? 'active' : ''}>
+            {e.id.replace(/-/g, '.')}
+          </a>
+        </li>
+      ))}
+      <li class="menu-title">References</li>
+      {references.map(e => (
+        <li>
+          <a href={`${import.meta.env.BASE_URL}${e.collection}/${e.id}`}
+             class={entry.id === e.id ? 'active' : ''}>
+            {e.body?.trim().split('\n')[0].replace(/^#+\s*/, '').trim() || e.id.replace(/_/g, ' ')}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </Fragment>
+
+  <div class="prose max-w-none">
+    <Content />
+  </div>
+
+  <Fragment slot="page-nav">
+    <div class="p-4">
+      <p class="text-sm font-semibold tracking-wide mb-2" style="color: color-mix(in oklch, var(--color-base-content) 70%, transparent)">On This Page</p>
+      <ul class="menu menu-xs gap-0.5 p-0">
+        {pageHeadings.map(h => (
+          <li style={`padding-left: ${(h.depth - 3) * 12}px`}>
+            <a href={`#${h.slug}`} class="text-sm">
+              {h.depth > 3 && <span class="mr-1 opacity-50">•</span>}{h.text}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </Fragment>
+
+</Layout>

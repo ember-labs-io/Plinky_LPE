@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@plugin "daisyui" {
+  themes: halloween --default;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/Plinky_LPE/fonts/GoogleSans-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/Plinky_LPE/fonts/GoogleSans-Italic-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+}
+
+:root {
+  --color-yellow: oklch(85% .17 75);
+  --color-yellow-dark: oklch(60% .17 75);
+  --color-heading: #f2f2f2;
+  --color-border: oklch(42% 0 0);
+  --color-accent: oklch(77% 0.204 61);
+}
+
+body {
+  font-family: 'Google Sans', sans-serif;
+}
+
+.prose {
+  font-family: 'Google Sans', sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  --tw-prose-body:        var(--color-base-content);
+  --tw-prose-headings:    var(--color-heading);
+  --tw-prose-bold:        var(--color-base-content);
+  --tw-prose-links:       var(--color-primary);
+  --tw-prose-counters:    var(--color-base-content);
+  --tw-prose-bullets:     var(--color-base-content);
+  --tw-prose-hr:          var(--color-primary);
+  --tw-prose-quotes:      var(--color-base-content);
+  --tw-prose-code:        var(--color-accent);
+  --tw-prose-th-borders:  var(--color-border);
+  --tw-prose-td-borders:  var(--color-border);
+}
+
+.prose table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  width: fit-content;
+  max-width: 100%;
+  margin-right: auto;
+  border: 1px solid var(--color-border);
+}
+
+.prose table.table-center {
+  margin-left: auto;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--color-border);
+  padding: 0.5em 0.75em;
+}
+
+.prose th {
+  border-bottom: 2px solid var(--color-border);
+}
+
+.prose table.table-rows th,
+.prose table.table-rows td {
+  border-left: none;
+  border-right: none;
+}
+
+.prose table.table-content-fixed :is(th, td):first-child {
+  white-space: nowrap;
+}
+
+.prose p {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+.prose hr {
+  margin-top: 2.25em;
+  margin-bottom: 2.25em;
+}
+
+.prose li {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.5;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  font-family: 'Montserrat', sans-serif;
+}
+
+.prose h1 { font-size: 2.75em; }
+.prose h2 { font-size: 1.85em; }
+.prose h3 { font-size: 1.55em; }
+.prose h4 { font-size: 1.25em; }
+.prose h5 { font-size: 1em;  font-weight: 600; color: var(--color-heading); font-style: italic; margin-top: 2em; }
+.prose h6 { font-size: 1em;    font-weight: 600; color: var(--color-heading); font-variant: all-small-caps; }
+
+.dinkus {
+  text-align: center;
+  color: var(--color-heading);
+  font-size: 1.25em;
+  margin: 2em 0;
+  user-select: none;
+}
+
+.drawer-side .dinkus {
+  font-size: 17px;
+  margin: 0.25em 0;
+}
+
+.param-ref {
+  position: relative;
+  display: inline-block;
+  font-variant: all-small-caps;
+  color: var(--color-primary);
+  cursor: default;
+}
+
+.param-ref:hover {
+  color: var(--color-primary);
+}
+
+.param-ref .param-img {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 48px;
+  width: 48px;
+  max-width: none;
+  margin: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.param-ref:hover .param-img {
+  display: block;
+}
+
+.fn-ref {
+  position: relative;
+  display: inline-block;
+  font-variant: all-small-caps;
+  color: var(--color-primary);
+  cursor: default;
+}
+
+.fn-ref:hover {
+  color: var(--color-primary);
+}
+
+.fn-ref .fn-img {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 48px;
+  width: 48px;
+  max-width: none;
+  margin: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.fn-ref:hover .fn-img {
+  display: block;
+}
+
+.inline-icon {
+  display: inline;
+  vertical-align: -1px;
+  height: 1em;
+  width: auto;
+  margin: 0;
+  filter: invert(1);
+}
+
+.menu-title {
+  font-size: 1rem;
+  color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+}

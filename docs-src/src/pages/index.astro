@@ -1,0 +1,43 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../layouts/Layout.astro';
+
+const releaseNotes = await getCollection('release-notes');
+const references = await getCollection('references');
+---
+
+<Layout title="Plinky LPE">
+
+  <Fragment slot="topbar">
+    <a href={import.meta.env.BASE_URL} class="btn btn-ghost text-xl">Plinky - Lucky Phoenix Edition</a>
+  </Fragment>
+
+  <Fragment slot="nav">
+    <ul class="menu p-4 gap-1">
+      <li class="menu-title">Release Notes</li>
+      {releaseNotes.map(e => (
+        <li>
+          <a href={`${import.meta.env.BASE_URL}${e.collection}/${e.id}`}>
+            {e.id.replace(/-/g, '.')}
+          </a>
+        </li>
+      ))}
+      <li class="menu-title">References</li>
+      {references.map(e => (
+        <li>
+          <a href={`${import.meta.env.BASE_URL}${e.collection}/${e.id}`}>
+            {e.body?.trim().split('\n')[0].replace(/^#+\s*/, '').trim() || e.id.replace(/_/g, ' ')}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </Fragment>
+
+  <div class="prose max-w-none">
+  </div>
+
+</Layout>
+
+<script define:vars={{ base: import.meta.env.BASE_URL }}>
+  window.location.replace(base + 'release-notes/v0-5-0');
+</script>

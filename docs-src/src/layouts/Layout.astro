@@ -1,0 +1,114 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<html lang="en" data-theme="halloween">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}favicon.svg`} />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet" />
+    <title>{title}</title>
+  </head>
+  <body class="h-screen overflow-hidden">
+
+    <div class="h-full max-w-[1440px] mx-auto flex flex-col">
+
+      <!-- Topbar -->
+      <div class="navbar bg-base-300 border-b border-base-content/10 shrink-0 z-10 px-4">
+        <label for="nav-drawer" class="btn btn-ghost btn-square lg:hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </label>
+        <slot name="topbar" />
+      </div>
+
+      <!-- Body -->
+      <div class="flex-1 overflow-hidden">
+        <div class="drawer lg:drawer-open h-full">
+          <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
+
+          <div class="drawer-content flex h-full overflow-hidden">
+
+            <!-- Main content -->
+            <main class="flex-1 overflow-y-auto p-8">
+              <slot />
+            </main>
+
+            <!-- Right page nav — hidden below xl -->
+            <aside class="hidden xl:block w-56 shrink-0 bg-base-200 border-l border-base-content/10 overflow-y-auto">
+              <slot name="page-nav" />
+            </aside>
+
+          </div>
+
+          <!-- Left nav drawer -->
+          <div class="drawer-side z-20 h-full">
+            <label for="nav-drawer" class="drawer-overlay"></label>
+            <aside class="w-64 min-h-full bg-base-200 border-r border-base-content/10 overflow-y-auto">
+              <slot name="nav" />
+            </aside>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </body>
+</html>
+
+<script>
+  document.querySelectorAll('table.table-content-fixed').forEach(table => {
+    const clone = table.cloneNode(true);
+    clone.style.cssText = 'position:absolute;visibility:hidden;width:auto;table-layout:auto;';
+    Array.from(clone.rows).forEach(row => {
+      Array.from(row.cells).forEach(cell => {
+        cell.style.whiteSpace = 'nowrap';
+        cell.style.width = 'auto';
+      });
+    });
+    document.body.appendChild(clone);
+    let maxFirstWidth = 0;
+    let maxOtherWidth = 0;
+    Array.from(clone.rows).forEach(row => {
+      if (row.cells[0]) maxFirstWidth = Math.max(maxFirstWidth, row.cells[0].offsetWidth);
+      for (let i = 1; i < row.cells.length; i++)
+        maxOtherWidth = Math.max(maxOtherWidth, row.cells[i].offsetWidth);
+    });
+    const numCols = Math.max(...Array.from(clone.rows).map(r => r.cells.length));
+    document.body.removeChild(clone);
+    const totalWidth = maxFirstWidth + (numCols - 1) * maxOtherWidth;
+    table.style.tableLayout = 'fixed';
+    table.style.width = totalWidth + 'px';
+    Array.from(table.rows).forEach(row => {
+      if (row.cells[0]) row.cells[0].style.width = maxFirstWidth + 'px';
+      for (let i = 1; i < row.cells.length; i++)
+        row.cells[i].style.width = maxOtherWidth + 'px';
+    });
+  });
+
+  document.addEventListener('click', e => {
+    const anchor = e.target.closest('a');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    if (!href?.startsWith('#')) return;
+    const target = document.getElementById(href.slice(1));
+    if (!target) return;
+    e.preventDefault();
+    const main = document.querySelector('main');
+    if (!main) return;
+    const offset = target.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
+    main.scrollTo({ top: offset, behavior: 'smooth' });
+  });
+</script>

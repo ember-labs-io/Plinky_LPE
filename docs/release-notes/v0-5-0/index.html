@@ -1,0 +1,253 @@
+<!DOCTYPE html><html lang="en" data-theme="halloween"> <head><meta charset="utf-8"><link rel="icon" type="image/svg+xml" href="/Plinky_LPE/favicon.svg"><meta name="viewport" content="width=device-width"><meta name="generator" content="Astro v6.4.2"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet"><title>Plinky - Lucky Phoenix Edition</title><link rel="stylesheet" href="/Plinky_LPE/_astro/Layout.DB7Mtg_t.css"></head> <body class="h-screen overflow-hidden"> <div class="h-full max-w-[1440px] mx-auto flex flex-col"> <!-- Topbar --> <div class="navbar bg-base-300 border-b border-base-content/10 shrink-0 z-10 px-4"> <label for="nav-drawer" class="btn btn-ghost btn-square lg:hidden"> <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path> </svg> </label>  <a href="/Plinky_LPE/" class="btn btn-ghost text-xl">Plinky - Lucky Phoenix Edition</a>  </div> <!-- Body --> <div class="flex-1 overflow-hidden"> <div class="drawer lg:drawer-open h-full"> <input id="nav-drawer" type="checkbox" class="drawer-toggle"> <div class="drawer-content flex h-full overflow-hidden"> <!-- Main content --> <main class="flex-1 overflow-y-auto p-8">    <div class="prose max-w-none"> <h2 id="lpe-v050---the-one-with-the-multi-timbral-mpe">LPE v0.5.0 - The one with the multi-timbral MPE</h2>
+<ol>
+<li><a href="#1-breaking-changes">Breaking changes</a></li>
+<li><a href="#2-new-features">New Features</a>
+<ul>
+<li><a href="#multi-timbral-parameters">Multi-timbral parameters</a></li>
+<li><a href="#midi">Midi</a></li>
+<li><a href="#cv">CV</a></li>
+<li><a href="#playing-surface">Playing Surface</a></li>
+<li><a href="#settings-menu">Settings Menu</a></li>
+</ul>
+</li>
+<li><a href="#3-upgrades">Upgrades</a>
+<ul>
+<li><a href="#pitch-restriction">Pitch restriction</a></li>
+<li><a href="#external-gear">External gear</a></li>
+<li><a href="#ui">UI</a></li>
+<li><a href="#various">Various</a></li>
+</ul>
+</li>
+<li><a href="#4-fixes">Fixes</a></li>
+</ol>
+<hr>
+<h3 id="1-breaking-changes">1. Breaking changes</h3>
+<ul>
+<li>The “relative” CV input functionality has been removed to make place for a more common way of processing CV input</li>
+<li>The midi CC number for Latch Toggle was moved from 101 (which is reserved for RPN MSB) to CC 69</li>
+<li>The <span class="param-ref">microtone<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_MICROTONE" class="param-img"></span> parameter no longer modifies pitchspread for incoming midi notes</li>
+</ul>
+<hr>
+<h3 id="2-new-features">2. New Features</h3>
+<h4 id="multi-timbral-parameters">Multi-timbral parameters</h4>
+<p>Plinky now has 33 per-string multi-timbral parameters:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><tbody><tr><td><span class="param-ref">shape<img src="/Plinky_LPE/img/params/P_SHAPE.svg" alt="P_SHAPE" class="param-img"></span></td><td><span class="param-ref">distortion<img src="/Plinky_LPE/img/params/P_DISTORTION.svg" alt="P_DISTORTION" class="param-img"></span></td><td><span class="param-ref">pitch<img src="/Plinky_LPE/img/params/P_PITCH.svg" alt="P_PITCH" class="param-img"></span></td><td><span class="param-ref">octave<img src="/Plinky_LPE/img/params/P_OCT.svg" alt="P_OCT" class="param-img"></span></td><td><span class="param-ref">glide<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_GLIDE" class="param-img"></span></td><td><span class="param-ref">osc interval<img src="/Plinky_LPE/img/params/P_INTERVAL.svg" alt="P_INTERVAL" class="param-img"></span></td></tr><tr><td><span class="param-ref">noise<img src="/Plinky_LPE/img/params/P_NOISE.svg" alt="P_NOISE" class="param-img"></span></td><td><span class="param-ref">resonance<img src="/Plinky_LPE/img/params/P_DISTORTION.svg" alt="P_RESO" class="param-img"></span></td><td><span class="param-ref">degree<img src="/Plinky_LPE/img/params/P_DEGREE.svg" alt="P_DEGREE" class="param-img"></span></td><td><span class="param-ref">scale<img src="/Plinky_LPE/img/params/P_OCT.svg" alt="P_SCALE" class="param-img"></span></td><td><span class="param-ref">microtone<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_MICROTONE" class="param-img"></span></td><td><span class="param-ref">column<img src="/Plinky_LPE/img/params/P_INTERVAL.svg" alt="P_COLUMN" class="param-img"></span></td></tr><tr><td><span class="param-ref">sensitivity<img src="/Plinky_LPE/img/params/P_ENV_LVL1.svg" alt="P_ENV_LVL1" class="param-img"></span></td><td><span class="param-ref">env 1 attack<img src="/Plinky_LPE/img/params/P_ATTACK1.svg" alt="P_ATTACK1" class="param-img"></span></td><td><span class="param-ref">env 1 decay<img src="/Plinky_LPE/img/params/P_DECAY1.svg" alt="P_DECAY1" class="param-img"></span></td><td><span class="param-ref">env 1 sustain<img src="/Plinky_LPE/img/params/P_SUSTAIN1.svg" alt="P_SUSTAIN1" class="param-img"></span></td><td><span class="param-ref">env 1 release<img src="/Plinky_LPE/img/params/P_RELEASE1.svg" alt="P_RELEASE1" class="param-img"></span></td><td><span class="param-ref">root<img src="/Plinky_LPE/img/params/P_ROOT.svg" alt="P_ROOT" class="param-img"></span></td></tr><tr><td><span class="param-ref">env 2 level<img src="/Plinky_LPE/img/params/P_ENV_LVL1.svg" alt="P_ENV_LVL2" class="param-img"></span></td><td><span class="param-ref">env 2 attack<img src="/Plinky_LPE/img/params/P_ATTACK1.svg" alt="P_ATTACK2" class="param-img"></span></td><td><span class="param-ref">env 2 decay<img src="/Plinky_LPE/img/params/P_DECAY1.svg" alt="P_DECAY2" class="param-img"></span></td><td><span class="param-ref">env 2 sustain<img src="/Plinky_LPE/img/params/P_SUSTAIN1.svg" alt="P_SUSTAIN2" class="param-img"></span></td><td><span class="param-ref">env 2 release<img src="/Plinky_LPE/img/params/P_RELEASE1.svg" alt="P_RELEASE2" class="param-img"></span></td><td></td></tr><tr><td><span class="param-ref">arp toggle<img src="/Plinky_LPE/img/params/P_ARP_TGL.svg" alt="P_ARP_TGL" class="param-img"></span></td><td><span class="param-ref">latch toggle<img src="/Plinky_LPE/img/params/P_ARP_TGL.svg" alt="P_LATCH_TGL" class="param-img"></span></td><td></td><td></td><td></td><td><span class="param-ref">seq gate len<img src="/Plinky_LPE/img/params/P_GATE_LENGTH.svg" alt="P_GATE_LENGTH" class="param-img"></span></td></tr><tr><td><span class="param-ref">sample scrub<img src="/Plinky_LPE/img/params/P_SCRUB.svg" alt="P_SCRUB" class="param-img"></span></td><td><span class="param-ref">sample grain size<img src="/Plinky_LPE/img/params/P_GR_SIZE.svg" alt="P_GR_SIZE" class="param-img"></span></td><td><span class="param-ref">sample play spd<img src="/Plinky_LPE/img/params/P_PLAY_SPD.svg" alt="P_PLAY_SPD" class="param-img"></span></td><td><span class="param-ref">sample stretch<img src="/Plinky_LPE/img/params/P_SMP_STRETCH.svg" alt="P_SMP_STRETCH" class="param-img"></span></td><td></td><td></td></tr><tr><td><span class="param-ref">sample scrub jitt<img src="/Plinky_LPE/img/params/P_SCRUB.svg" alt="P_SCRUB_JIT" class="param-img"></span></td><td><span class="param-ref">sample size jitt<img src="/Plinky_LPE/img/params/P_GR_SIZE.svg" alt="P_GR_SIZE_JIT" class="param-img"></span></td><td><span class="param-ref">sample speed jitt<img src="/Plinky_LPE/img/params/P_PLAY_SPD.svg" alt="P_PLAY_SPD_JIT" class="param-img"></span></td><td></td><td></td><td></td></tr></tbody></table>
+<h5 id="usage">Usage</h5>
+<ul>
+<li>While holding <span class="fn-ref">shift a<img src="/Plinky_LPE/img/function/FN_SHIFT_A.svg" alt="FN_SHIFT_A" class="fn-img"></span> or <span class="fn-ref">shift b<img src="/Plinky_LPE/img/function/FN_SHIFT_B.svg" alt="FN_SHIFT_B" class="fn-img"></span>, a small ‘M’ next to the parameter name indicates whether this parameter is multi-timbral</li>
+<li>Hold <span class="fn-ref">shift a<img src="/Plinky_LPE/img/function/FN_SHIFT_A.svg" alt="FN_SHIFT_A" class="fn-img"></span> or <span class="fn-ref">shift b<img src="/Plinky_LPE/img/function/FN_SHIFT_B.svg" alt="FN_SHIFT_B" class="fn-img"></span> plus one of these parameters to toggle between mono-timbral and multi-timbral parameter editing</li>
+<li>When multi-timbral editing is active:
+<ul>
+<li>A small number on screen indicates which string is selected</li>
+<li>All eight touchstrips will show edit-strips on their leds, the selected strip is brighter than the others</li>
+<li>Touching an edit-strip or pressing <span class="fn-ref">left<img src="/Plinky_LPE/img/function/FN_LEFT.svg" alt="FN_LEFT" class="fn-img"></span> and <span class="fn-ref">right<img src="/Plinky_LPE/img/function/FN_RIGHT.svg" alt="FN_RIGHT" class="fn-img"></span> will change which string is selected</li>
+<li>Each per-string value can be modified as usual by sliding on the edit strip and rotation/pressing the encoder</li>
+</ul>
+</li>
+</ul>
+<p>To reset all strings to the same value, toggle back to mono-timbral editing and change the parameter value. This will update the parameter on all strings</p>
+<p><em>The multi-timbral parameters always operate in multi-timbral mode behind the scenes. Changing the value of a multi-timbral parameter’s value in mono-timbral editing mode just sets the parameter to the same value on all strings</em></p>
+<h4 id="midi">Midi</h4>
+<ul>
+<li>Full <a href="/Plinky_LPE/references/midi_implementation#4-mpe-implementation">MPE support</a></li>
+<li>Full 14bit control over all parameters and modulation (<a href="/Plinky_LPE/references/nrpn_implementation">NRPN</a>)</li>
+<li><a href="/Plinky_LPE/references/midi_implementation#2-midi-tuning-standard">Midi Tuning Standard</a> support for microtonal scales</li>
+<li>Global <a href="/Plinky_LPE/references/midi_implementation#1-receiving-pressure-and-modwheel-data">pressure control</a> with the modwheel</li>
+<li>Sostenuto support (<a href="/Plinky_LPE/references/midi_implementation#6-cc-lookup-table">CC66</a>)</li>
+<li>A range of system settings which give users granular control over what to send and receive:
+<ul>
+<li><a href="/Plinky_LPE/references/settings_menu#velocity-pressure-in-balance">Velocity/pressure balance</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#aftertouch-type-voice-bend-range">Aftertouch type</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#channel-bend-range">Channel and voice bend range</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#map-to-scale">Map Midi to scale</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#clock-multiplier">Incoming clock multiplier</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#filter">Filter clock, transport, CC, NRPN, LFO, Y/Z controller messages</a></li>
+<li><a href="/Plinky_LPE/references/midi_implementation#7-channel-mode-messages">System Common messages 120-123</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#enable-soft-thru">Soft thru</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#enable-trs-out">Disable TRS midi out</a></li>
+</ul>
+</li>
+<li>New Settings Menu actions:
+<ul>
+<li><a href="/Plinky_LPE/references/settings_menu#push-preset">Push preset parameters over midi</a></li>
+<li><a href="/Plinky_LPE/references/settings_menu#midi-panic">Midi Panic</a></li>
+</ul>
+</li>
+</ul>
+<p>Plinky now has perfect roundtrip-support for notes (pressure, pitch) and parameters. This means a performance on the Plinky can be recorded in a DAW and will sound exactly the same when playing it back on the Plinky, especially when using high resolution values. (Loss of accuracy due to the low resolution of Midi CCs sadly can’t be accounted for.)</p>
+<p>Consult the <a href="/Plinky_LPE/references/midi_implementation">Midi implementation</a>, <a href="/Plinky_LPE/references/nrpn_implementation">NRPN implementation</a> and <a href="/Plinky_LPE/references/settings_menu">Settings Menu</a> reference guides for more details.</p>
+<h4 id="cv">CV</h4>
+<ul>
+<li>Plinky now generates a new touch on a rising CV Gate, using the CV Pitch voltage as its pitch, as is common in eurorack</li>
+<li>When <a href="/Plinky_LPE/references/settings_menu#cv-in-quantization">CV quantize</a> is active, the strength of the quantization can now be tweaked with the <span class="param-ref">microtone<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_MICROTONE" class="param-img"></span> parameter</li>
+<li>The CV Gate can be configured as a binary input (Gate) or a continuous value (Pressure) in the <a href="/Plinky_LPE/references/settings_menu#gate-in-pressuregate">Settings Menu</a></li>
+<li>The PPQN for both incoming and outgoing clock can be configured in the <a href="/Plinky_LPE/references/settings_menu#clock-in-ppqn">Settings Menu</a></li>
+<li>CV Gate output is now a true binary +5V/0V gate (it previously generated a continuous voltage based on the max pressure)</li>
+<li>When playing an arp which plays one note at a time, the Pitch Lo CV output will continuously output the pitch of the lowest touched string (pedal tone)</li>
+</ul>
+<h4 id="playing-surface">Playing Surface</h4>
+<p>Some small but important changes have been made to the playing surface:</p>
+<ul>
+<li>A <span class="param-ref">root<img src="/Plinky_LPE/img/params/P_ROOT.svg" alt="P_ROOT" class="param-img"></span> parameter has been added on the empty pad to the right of the <span class="param-ref">env 1 release<img src="/Plinky_LPE/img/params/P_RELEASE1.svg" alt="P_RELEASE1" class="param-img"></span> pad. This allows for intuitive transposition with a range of 0 (C) to +11 (B) semitones</li>
+<li>The value of the <span class="param-ref">degree<img src="/Plinky_LPE/img/params/P_DEGREE.svg" alt="P_DEGREE" class="param-img"></span> parameter no longer affects the mapping of root LEDs on the pads. The bottom-left pad is now always lit up as a root note, making the layout more stable and easier to navigate</li>
+<li>In some cases, root notes on the higher strings are mapped in a way that is a clearer repetition of the root notes pattern on the lower strings</li>
+<li>There is now a <a href="/Plinky_LPE/references/settings_menu#global-pad-layout">setting</a> which makes the pad layout persist across presets</li>
+</ul>
+<h4 id="settings-menu">Settings Menu</h4>
+<p>New options in the Settings Menu:</p>
+<ul>
+<li><a href="/Plinky_LPE/references/settings_menu#a4-reference-pitch">A4 reference pitch</a>: 430-445Hz</li>
+<li><a href="/Plinky_LPE/references/settings_menu#enable-local-control">Local control on/off</a></li>
+</ul>
+<p>Find a full overview of all items in the Settings Menu in its <a href="/Plinky_LPE/references/settings_menu">reference guide</a></p>
+<hr>
+<h3 id="3-upgrades">3. Upgrades</h3>
+<h4 id="pitch-restriction">Pitch restriction</h4>
+<ul>
+<li>Internal pitch mapping now has a clearly defined valid range (C-1 through C7) and is well implemented within this range. This fixes a bunch of bugs where note names wouldn’t show on screen, high/low touches would result in an incorrect pitch, or strings would even stop playing altogether</li>
+<li>Pitches outside the valid range are muted or rounded to fall within the valid range</li>
+<li>Pads outside the valid range show a dim led and do not produce sound at all</li>
+</ul>
+<h5 id="pitch-overview">Pitch overview</h5>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Note name</th><th>Midi note</th><th>CV voltage</th><th>Frequency</th><th>Notes</th></tr></thead><tbody><tr><td>C-1</td><td>0</td><td>-3V</td><td>8.18 Hz</td><td>Bottom Boundary</td></tr><tr><td>C2</td><td>36</td><td>0V</td><td>65.41 Hz</td><td>CV Pitch Center</td></tr><tr><td>A4</td><td>69</td><td>+2.75V</td><td>440 Hz</td><td><a href="/Plinky_LPE/references/settings_menu#a4-reference-pitch">Reference Pitch</a></td></tr><tr><td>C7</td><td>96</td><td>+5V</td><td>2093 Hz</td><td>Top Boundary</td></tr></tbody></table>
+<p><em>Pitch CV in/outputs reach from just over +5V down to roughly -2.7V (inputs) or -3V (outputs)</em></p>
+<h4 id="external-gear">External gear</h4>
+<p>Internal and external touches (physical versus Midi/CV touches) are now processed in a much more centralized way. In practice this means internal and external signals are much easier to combine, especially when using additional external gear. For example:</p>
+<ul>
+<li>Triggering an internal envelope happens at the exact same frame as generating the Midi Note On message and turning CV Gate high</li>
+<li>Touch, Midi and CV all generate MPE Pitchbend values</li>
+<li>The internal pitch, outgoing Midi Note + Pitchbend and outgoing CV pitch are identical at all times (with one exception, see below)</li>
+<li>The <span class="param-ref">microtone<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_MICROTONE" class="param-img"></span> parameter consistently defines the level of detuning for physical touches and quantized CV touches (Midi’s detuning is defined by Midi Pitchbend)</li>
+<li>When controlling external gear with Plinky, there is a chance that pitch and glide modulation is better applied on the external device itself. For that reason, <span class="param-ref">pitch<img src="/Plinky_LPE/img/params/P_PITCH.svg" alt="P_PITCH" class="param-img"></span> and <span class="param-ref">glide<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_GLIDE" class="param-img"></span> are ignored by default when generating MPE Pitchbend messages. Enabling MPE Fine Tuning in the <a href="/Plinky_LPE/references/settings_menu#filter-2">Settings Menu</a> adds <span class="param-ref">pitch<img src="/Plinky_LPE/img/params/P_PITCH.svg" alt="P_PITCH" class="param-img"></span> and <span class="param-ref">glide<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_GLIDE" class="param-img"></span> modulation back in. CV Pitch output always includes <span class="param-ref">pitch<img src="/Plinky_LPE/img/params/P_PITCH.svg" alt="P_PITCH" class="param-img"></span> and <span class="param-ref">glide<img src="/Plinky_LPE/img/params/P_GLIDE.svg" alt="P_GLIDE" class="param-img"></span> modulation</li>
+</ul>
+<h4 id="ui">UI</h4>
+<ul>
+<li>Clearing a preset or sequence in the Load UI now only clears the floating preset/sequence, without overwriting any of the preset/sequence slots.</li>
+<li>When clearing a preset or sequence, it no longer matters which pad you press exactly. Holding <span class="fn-ref">cross<img src="/Plinky_LPE/img/function/FN_CLEAR.svg" alt="FN_CLEAR" class="fn-img"></span> plus any preset pad will clear the floating preset, holding <span class="fn-ref">cross<img src="/Plinky_LPE/img/function/FN_CLEAR.svg" alt="FN_CLEAR" class="fn-img"></span> plus any sequence pad will clear the floating sequence</li>
+<li>Loading a sample now happens instantly</li>
+<li>If no changes have been made to the currently loaded Preset/Sequence, loading a new Preset/Sequence now happens instantly</li>
+<li>The A/B knobs now have a small deadzone in the center, making it easier to set them to exactly zero</li>
+<li>Non-synth presses, especially on function-pads, have had responsiveness issues since the Loopop review. The noise filtering process for non-synth presses has been refined to both be more responsive and have identical responsiveness on all pads</li>
+<li>A ”#” sign has been added to all system fonts. Yes, you read that right: we have an actual sharp sign now!</li>
+<li>Opening the Settings Menu always resets the cursor to the menu item (as opposed to the item value)</li>
+<li>Small cleanups in the layout of the Settings Menu</li>
+</ul>
+<h4 id="various">Various</h4>
+<ul>
+<li>There is now a <a href="/Plinky_LPE/references/settings_menu#system-reset">Settings Menu</a> action for resetting al system settings to default values</li>
+<li>The “Max Pressure” mod source, meter on screen and CV output now follow Envelope 1</li>
+<li>CV Gate is how high during the CV calibration process, making it easier to tune with a eurorack oscillator</li>
+<li>Midi out over USB is no longer throttled</li>
+<li>Removed yet another source of undesired pitch sliding at the start of new notes</li>
+<li>Generally a bunch of work has been done on making code more efficient and organized</li>
+</ul>
+<hr>
+<h3 id="4-fixes">4. Fixes</h3>
+<ul>
+<li>A bug was fixed where it was impossible to open the sample editor</li>
+<li>A bug was fixed where opening the sample editor would move the position of the last slice marker</li>
+<li>A bug was fixed where the envelope would use the release parameter instead of the decay parameter, when sustain was set to zero</li>
+<li>The <span class="param-ref">synth level<img src="/Plinky_LPE/img/params/P_SYN_LVL.svg" alt="P_SYN_LVL" class="param-img"></span>, <span class="param-ref">synth wet/dry<img src="/Plinky_LPE/img/params/P_SYN_WET_DRY.svg" alt="P_SYN_WET_DRY" class="param-img"></span>, <span class="param-ref">input level<img src="/Plinky_LPE/img/params/P_IN_LVL.svg" alt="P_IN_LVL" class="param-img"></span> and <span class="param-ref">input wet/dry<img src="/Plinky_LPE/img/params/P_SYN_WET_DRY.svg" alt="P_IN_WET_DRY" class="param-img"></span> parameters now work as expected. Previously there were several undesired interactions between the Synth Level parameter and how the external signal and effects were mixed</li>
+<li>The scope now always shows the correct amplitude of the outgoing audio</li>
+</ul> </div>   </main> <!-- Right page nav — hidden below xl --> <aside class="hidden xl:block w-56 shrink-0 bg-base-200 border-l border-base-content/10 overflow-y-auto">  <div class="p-4"> <p class="text-sm font-semibold tracking-wide mb-2" style="color: color-mix(in oklch, var(--color-base-content) 70%, transparent)">On This Page</p> <ul class="menu menu-xs gap-0.5 p-0"> <li style="padding-left: 0px"> <a href="#1-breaking-changes" class="text-sm"> 1. Breaking changes </a> </li><li style="padding-left: 0px"> <a href="#2-new-features" class="text-sm"> 2. New Features </a> </li><li style="padding-left: 12px"> <a href="#multi-timbral-parameters" class="text-sm"> <span class="mr-1 opacity-50">•</span>Multi-timbral parameters </a> </li><li style="padding-left: 12px"> <a href="#midi" class="text-sm"> <span class="mr-1 opacity-50">•</span>Midi </a> </li><li style="padding-left: 12px"> <a href="#cv" class="text-sm"> <span class="mr-1 opacity-50">•</span>CV </a> </li><li style="padding-left: 12px"> <a href="#playing-surface" class="text-sm"> <span class="mr-1 opacity-50">•</span>Playing Surface </a> </li><li style="padding-left: 12px"> <a href="#settings-menu" class="text-sm"> <span class="mr-1 opacity-50">•</span>Settings Menu </a> </li><li style="padding-left: 0px"> <a href="#3-upgrades" class="text-sm"> 3. Upgrades </a> </li><li style="padding-left: 12px"> <a href="#pitch-restriction" class="text-sm"> <span class="mr-1 opacity-50">•</span>Pitch restriction </a> </li><li style="padding-left: 12px"> <a href="#external-gear" class="text-sm"> <span class="mr-1 opacity-50">•</span>External gear </a> </li><li style="padding-left: 12px"> <a href="#ui" class="text-sm"> <span class="mr-1 opacity-50">•</span>UI </a> </li><li style="padding-left: 12px"> <a href="#various" class="text-sm"> <span class="mr-1 opacity-50">•</span>Various </a> </li><li style="padding-left: 0px"> <a href="#4-fixes" class="text-sm"> 4. Fixes </a> </li> </ul> </div>  </aside> </div> <!-- Left nav drawer --> <div class="drawer-side z-20 h-full"> <label for="nav-drawer" class="drawer-overlay"></label> <aside class="w-64 min-h-full bg-base-200 border-r border-base-content/10 overflow-y-auto">  <ul class="menu p-4"> <li class="menu-title">Release Notes</li> <li> <a href="/Plinky_LPE/release-notes/v0-5-0" class="active"> v0.5.0 </a> </li> <li class="menu-title">References</li> <li> <a href="/Plinky_LPE/references/midi_implementation" class> Midi implementation </a> </li><li> <a href="/Plinky_LPE/references/nrpn_implementation" class> NRPN implementation </a> </li><li> <a href="/Plinky_LPE/references/settings_menu" class> Settings Menu </a> </li> </ul>  </aside> </div> </div> </div> </div> <script type="module">document.querySelectorAll("table.table-content-fixed").forEach(l=>{const o=l.cloneNode(!0);o.style.cssText="position:absolute;visibility:hidden;width:auto;table-layout:auto;",Array.from(o.rows).forEach(t=>{Array.from(t.cells).forEach(e=>{e.style.whiteSpace="nowrap",e.style.width="auto"})}),document.body.appendChild(o);let r=0,s=0;Array.from(o.rows).forEach(t=>{t.cells[0]&&(r=Math.max(r,t.cells[0].offsetWidth));for(let e=1;e<t.cells.length;e++)s=Math.max(s,t.cells[e].offsetWidth)});const c=Math.max(...Array.from(o.rows).map(t=>t.cells.length));document.body.removeChild(o);const i=r+(c-1)*s;l.style.tableLayout="fixed",l.style.width=i+"px",Array.from(l.rows).forEach(t=>{t.cells[0]&&(t.cells[0].style.width=r+"px");for(let e=1;e<t.cells.length;e++)t.cells[e].style.width=s+"px"})});document.addEventListener("click",l=>{const o=l.target.closest("a");if(!o)return;const r=o.getAttribute("href");if(!r?.startsWith("#"))return;const s=document.getElementById(r.slice(1));if(!s)return;l.preventDefault();const c=document.querySelector("main");if(!c)return;const i=s.getBoundingClientRect().top-c.getBoundingClientRect().top+c.scrollTop;c.scrollTo({top:i,behavior:"smooth"})});</script></body></html>
