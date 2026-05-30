@@ -1345,7 +1345,8 @@ static void run_voice(u8 voice_id, u32* dst) {
 			env_goal = 0.f;
 		env_goal *= env_goal;
 		// filter cutoff pitch tracking
-		env_goal *= 1.f + ((voice->osc[2].pitch - (43000 + OCTS_TO_PITCH(2))) * (1.f / 65536.f));
+		if (!USING_SAMPLER)
+			env_goal *= 1.f + ((voice->osc[2].pitch - (43000 + OCTS_TO_PITCH(2))) * (1.f / 65536.f));
 	}
 
 	// retrieve envelope params
@@ -1363,14 +1364,19 @@ static void run_voice(u8 voice_id, u32* dst) {
 		cv_trig_out_high = true; // send cv trigger
 	}
 
-	if (env_goal <= 0.f) // no pressure => release phase (aka not decaying)
+	float down_slope = decay;
+	// no pressure => release phase (aka not decaying)
+	if (env_goal <= 0.f) {
 		voice->env1_decaying = false;
-	else if (voice->env1_decaying) // in decay phase => aim for sustain level
+		down_slope = release;
+	}
+	// in decay phase => aim for sustain level
+	else if (voice->env1_decaying)
 		env_goal *= sustain;
 
 	// apply envelope
 	float lpg_diff = env_goal - env_lvl;
-	lpg_diff *= (lpg_diff > 0.f) ? attack : env_goal ? decay : release;
+	lpg_diff *= (lpg_diff > 0.f) ? attack : down_slope;
 	env_lvl += lpg_diff;
 
 	// release phase
